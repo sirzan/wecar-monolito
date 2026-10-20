@@ -1,0 +1,2 @@
+# No añade PostgreSQL: usa DB_REMOTE_HOST/DB_REMOTE_PORT de .env.
+services: {}

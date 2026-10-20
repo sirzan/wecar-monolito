@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+
+Disallow: /admin
+Disallow: /panel
+Disallow: /login
+Disallow: /registro
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /email/verify
+Disallow: /user/
+Disallow: /api/
+
+Sitemap: https://wecar.mx/sitemap.xml

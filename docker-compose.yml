@@ -1,0 +1,75 @@
+name: wecar
+
+x-app-environment: &app-environment
+  DB_HOST: postgres
+  REDIS_HOST: redis
+  INERTIA_SSR_ENABLED: "false"
+  WAIT_FOR_DB: "true"
+  RUN_MIGRATIONS: "false"
+
+x-app-volumes: &app-volumes
+  - ./:/var/www/html
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+      target: development
+    image: wecar-app:dev
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      <<: *app-environment
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+    working_dir: /var/www/html
+    volumes: *app-volumes
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "php -v >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  queue:
+    image: wecar-app:dev
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      <<: *app-environment
+    working_dir: /var/www/html
+    command: php artisan queue:work --queue=emails,notifications,payments,credits,external-search,default --sleep=3 --tries=3 --max-time=3600
+    volumes: *app-volumes
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  scheduler:
+    image: wecar-app:dev
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      <<: *app-environment
+    working_dir: /var/www/html
+    command: php artisan schedule:work
+    volumes: *app-volumes
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  redis_data:

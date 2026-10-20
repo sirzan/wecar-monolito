@@ -1,0 +1,82 @@
+services:
+  app:
+    build:
+      target: production
+    image: wecar-app:latest
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      INERTIA_SSR_ENABLED: "true"
+      INERTIA_SSR_URL: http://ssr:13714
+      RUN_MIGRATIONS: "false"
+    volumes:
+      - storage:/var/www/html/storage
+
+  queue:
+    image: wecar-app:latest
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      INERTIA_SSR_ENABLED: "true"
+      INERTIA_SSR_URL: http://ssr:13714
+      RUN_MIGRATIONS: "false"
+    command: php artisan horizon
+    volumes:
+      - storage:/var/www/html/storage
+
+  scheduler:
+    image: wecar-app:latest
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      INERTIA_SSR_ENABLED: "true"
+      INERTIA_SSR_URL: http://ssr:13714
+      RUN_MIGRATIONS: "false"
+    volumes:
+      - storage:/var/www/html/storage
+
+  nginx:
+    build:
+      context: .
+      dockerfile: docker/nginx/Dockerfile
+    image: wecar-nginx:latest
+    restart: unless-stopped
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN is required}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+      - storage:/var/www/html/storage:ro
+    depends_on:
+      app:
+        condition: service_healthy
+
+  ssr:
+    build:
+      context: .
+      dockerfile: docker/ssr/Dockerfile
+    image: wecar-ssr:latest
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+    expose:
+      - "13714"
+    depends_on:
+      app:
+        condition: service_healthy
+
+  certbot:
+    image: certbot/certbot:latest
+    restart: unless-stopped
+    volumes:
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    entrypoint: /bin/sh -c "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done"
+
+volumes:
+  storage:
+  certbot_conf:
+  certbot_www:

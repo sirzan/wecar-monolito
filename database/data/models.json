@@ -1,0 +1,1042 @@
+[
+  {
+    "id": 24,
+    "name": "Corolla",
+    "brand_id": 16,
+    "status": 1,
+    "created_at": "2025-03-18 11:33:54",
+    "updated_at": "2025-03-18 11:33:54"
+  },
+  {
+    "id": 25,
+    "name": "Camry",
+    "brand_id": 16,
+    "status": 1,
+    "created_at": "2025-03-18 11:34:11",
+    "updated_at": "2025-03-18 11:34:11"
+  },
+  {
+    "id": 26,
+    "name": "Mustang",
+    "brand_id": 17,
+    "status": 1,
+    "created_at": "2025-03-18 11:34:26",
+    "updated_at": "2025-03-18 11:34:26"
+  },
+  {
+    "id": 27,
+    "name": "Explorer",
+    "brand_id": 17,
+    "status": 1,
+    "created_at": "2025-03-18 11:34:40",
+    "updated_at": "2025-03-18 11:34:40"
+  },
+  {
+    "id": 28,
+    "name": "Civic",
+    "brand_id": 18,
+    "status": 1,
+    "created_at": "2025-03-18 11:34:57",
+    "updated_at": "2025-03-18 11:34:57"
+  },
+  {
+    "id": 29,
+    "name": "Accord",
+    "brand_id": 18,
+    "status": 1,
+    "created_at": "2025-03-18 11:35:09",
+    "updated_at": "2025-03-18 11:35:09"
+  },
+  {
+    "id": 30,
+    "name": "Altima",
+    "brand_id": 19,
+    "status": 1,
+    "created_at": "2025-03-18 11:35:22",
+    "updated_at": "2025-03-18 11:35:22"
+  },
+  {
+    "id": 31,
+    "name": "Sentra",
+    "brand_id": 19,
+    "status": 1,
+    "created_at": "2025-03-18 11:35:44",
+    "updated_at": "2025-03-18 11:35:44"
+  },
+  {
+    "id": 32,
+    "name": "3 Series",
+    "brand_id": 20,
+    "status": 1,
+    "created_at": "2025-03-18 11:36:02",
+    "updated_at": "2025-03-18 11:36:02"
+  },
+  {
+    "id": 33,
+    "name": "4 Series",
+    "brand_id": 20,
+    "status": 1,
+    "created_at": "2025-03-18 11:36:10",
+    "updated_at": "2025-03-18 11:36:10"
+  },
+  {
+    "id": 34,
+    "name": "A3",
+    "brand_id": 21,
+    "status": 1,
+    "created_at": "2025-03-18 11:36:22",
+    "updated_at": "2025-03-18 11:36:22"
+  },
+  {
+    "id": 35,
+    "name": "A5",
+    "brand_id": 21,
+    "status": 1,
+    "created_at": "2025-03-18 11:36:31",
+    "updated_at": "2025-03-18 11:36:31"
+  },
+  {
+    "id": 36,
+    "name": "Accent",
+    "brand_id": 22,
+    "status": 1,
+    "created_at": "2025-03-18 11:36:44",
+    "updated_at": "2025-03-18 11:36:44"
+  },
+  {
+    "id": 37,
+    "name": "Cooper S",
+    "brand_id": 23,
+    "status": 1,
+    "created_at": "2025-03-18 11:37:01",
+    "updated_at": "2025-03-18 11:37:01"
+  },
+  {
+    "id": 38,
+    "name": "Range Rover Sport HSE Dynamic",
+    "brand_id": 24,
+    "status": 1,
+    "created_at": "2025-03-18 11:37:53",
+    "updated_at": "2025-03-18 11:37:53"
+  },
+  {
+    "id": 39,
+    "name": "City",
+    "brand_id": 18,
+    "status": 1,
+    "created_at": "2025-03-18 11:38:19",
+    "updated_at": "2025-03-18 11:38:19"
+  },
+  {
+    "id": 40,
+    "name": "Yaris",
+    "brand_id": 16,
+    "status": 1,
+    "created_at": "2025-03-18 11:38:30",
+    "updated_at": "2025-03-18 11:38:30"
+  },
+  {
+    "id": 41,
+    "name": "March",
+    "brand_id": 19,
+    "status": 1,
+    "created_at": "2025-03-18 11:38:49",
+    "updated_at": "2025-03-18 11:38:49"
+  },
+  {
+    "id": 42,
+    "name": "Versa",
+    "brand_id": 19,
+    "status": 1,
+    "created_at": "2025-03-18 11:38:58",
+    "updated_at": "2025-03-18 11:38:58"
+  },
+  {
+    "id": 43,
+    "name": "Focus",
+    "brand_id": 17,
+    "status": 1,
+    "created_at": "2025-03-18 11:39:24",
+    "updated_at": "2025-03-18 11:39:24"
+  },
+  {
+    "id": 44,
+    "name": "Fiesta",
+    "brand_id": 17,
+    "status": 1,
+    "created_at": "2025-03-18 11:39:31",
+    "updated_at": "2025-03-18 11:39:31"
+  },
+  {
+    "id": 45,
+    "name": "Onix",
+    "brand_id": 26,
+    "status": 1,
+    "created_at": "2025-03-18 11:40:12",
+    "updated_at": "2025-03-18 11:40:12"
+  },
+  {
+    "id": 46,
+    "name": "Aveo",
+    "brand_id": 26,
+    "status": 1,
+    "created_at": "2025-03-18 11:40:28",
+    "updated_at": "2025-03-18 11:40:28"
+  },
+  {
+    "id": 47,
+    "name": "Spark",
+    "brand_id": 26,
+    "status": 1,
+    "created_at": "2025-03-18 11:40:37",
+    "updated_at": "2025-03-18 11:40:37"
+  },
+  {
+    "id": 48,
+    "name": "Jetta",
+    "brand_id": 25,
+    "status": 1,
+    "created_at": "2025-03-18 11:40:51",
+    "updated_at": "2025-03-18 11:40:51"
+  },
+  {
+    "id": 49,
+    "name": "Gol",
+    "brand_id": 25,
+    "status": 1,
+    "created_at": "2025-03-18 11:41:02",
+    "updated_at": "2025-03-18 11:41:02"
+  },
+  {
+    "id": 50,
+    "name": "Ibiza",
+    "brand_id": 27,
+    "status": 1,
+    "created_at": "2025-03-18 11:41:18",
+    "updated_at": "2025-03-18 11:41:18"
+  },
+  {
+    "id": 51,
+    "name": "Toledo",
+    "brand_id": 27,
+    "status": 1,
+    "created_at": "2025-03-18 11:41:31",
+    "updated_at": "2025-03-18 11:41:31"
+  },
+  {
+    "id": 52,
+    "name": "Rio",
+    "brand_id": 28,
+    "status": 1,
+    "created_at": "2025-03-18 11:43:15",
+    "updated_at": "2025-03-18 11:43:15"
+  },
+  {
+    "id": 53,
+    "name": "Forte",
+    "brand_id": 28,
+    "status": 1,
+    "created_at": "2025-03-18 11:43:23",
+    "updated_at": "2025-03-18 11:43:23"
+  },
+  {
+    "id": 54,
+    "name": "Vento",
+    "brand_id": 25,
+    "status": 1,
+    "created_at": "2025-03-18 11:43:40",
+    "updated_at": "2025-03-18 11:43:40"
+  },
+  {
+    "id": 55,
+    "name": "Passant",
+    "brand_id": 25,
+    "status": 1,
+    "created_at": "2025-03-18 11:43:49",
+    "updated_at": "2025-03-18 11:43:49"
+  },
+  {
+    "id": 56,
+    "name": "Charger",
+    "brand_id": 30,
+    "status": 1,
+    "created_at": "2025-03-18 11:44:19",
+    "updated_at": "2025-03-18 11:44:19"
+  },
+  {
+    "id": 57,
+    "name": "Atitude",
+    "brand_id": 30,
+    "status": 1,
+    "created_at": "2025-03-18 11:44:29",
+    "updated_at": "2025-03-18 11:44:29"
+  },
+  {
+    "id": 58,
+    "name": "Rav4",
+    "brand_id": 16,
+    "status": 1,
+    "created_at": "2025-03-18 11:44:42",
+    "updated_at": "2025-03-18 11:44:42"
+  },
+  {
+    "id": 59,
+    "name": "Higlander",
+    "brand_id": 16,
+    "status": 1,
+    "created_at": "2025-03-18 11:44:51",
+    "updated_at": "2025-03-18 11:44:51"
+  },
+  {
+    "id": 60,
+    "name": "4Runner",
+    "brand_id": 16,
+    "status": 1,
+    "created_at": "2025-03-18 11:44:59",
+    "updated_at": "2025-03-18 11:44:59"
+  },
+  {
+    "id": 61,
+    "name": "Captiva",
+    "brand_id": 26,
+    "status": 1,
+    "created_at": "2025-03-18 11:45:16",
+    "updated_at": "2025-03-18 11:45:16"
+  },
+  {
+    "id": 62,
+    "name": "Tracker",
+    "brand_id": 26,
+    "status": 1,
+    "created_at": "2025-03-18 11:45:26",
+    "updated_at": "2025-03-18 11:45:26"
+  },
+  {
+    "id": 63,
+    "name": "Blazer",
+    "brand_id": 26,
+    "status": 1,
+    "created_at": "2025-03-18 11:45:35",
+    "updated_at": "2025-03-18 11:45:35"
+  },
+  {
+    "id": 64,
+    "name": "Tahoe",
+    "brand_id": 26,
+    "status": 1,
+    "created_at": "2025-03-18 11:45:43",
+    "updated_at": "2025-03-18 11:45:43"
+  },
+  {
+    "id": 65,
+    "name": "Suburban",
+    "brand_id": 26,
+    "status": 1,
+    "created_at": "2025-03-18 11:45:51",
+    "updated_at": "2025-03-18 11:45:51"
+  },
+  {
+    "id": 66,
+    "name": "Teramont",
+    "brand_id": 25,
+    "status": 1,
+    "created_at": "2025-03-18 11:46:28",
+    "updated_at": "2025-03-18 11:46:28"
+  },
+  {
+    "id": 67,
+    "name": "Taos",
+    "brand_id": 25,
+    "status": 1,
+    "created_at": "2025-03-18 11:46:37",
+    "updated_at": "2025-03-18 11:46:37"
+  },
+  {
+    "id": 68,
+    "name": "Nivus",
+    "brand_id": 25,
+    "status": 1,
+    "created_at": "2025-03-18 11:46:51",
+    "updated_at": "2025-03-18 11:46:51"
+  },
+  {
+    "id": 69,
+    "name": "A1",
+    "brand_id": 21,
+    "status": 1,
+    "created_at": "2025-03-18 11:47:10",
+    "updated_at": "2025-03-18 11:47:10"
+  },
+  {
+    "id": 70,
+    "name": "Hilux",
+    "brand_id": 16,
+    "status": 1,
+    "created_at": "2025-03-18 11:47:18",
+    "updated_at": "2025-03-18 11:47:18"
+  },
+  {
+    "id": 71,
+    "name": "Colorado",
+    "brand_id": 26,
+    "status": 1,
+    "created_at": "2025-03-18 11:47:41",
+    "updated_at": "2025-03-18 11:47:41"
+  },
+  {
+    "id": 72,
+    "name": "Tacoma",
+    "brand_id": 16,
+    "status": 1,
+    "created_at": "2025-03-18 11:48:13",
+    "updated_at": "2025-03-18 11:48:13"
+  },
+  {
+    "id": 73,
+    "name": "Silverado",
+    "brand_id": 26,
+    "status": 1,
+    "created_at": "2025-03-18 11:48:26",
+    "updated_at": "2025-03-18 11:48:26"
+  },
+  {
+    "id": 74,
+    "name": "Frontier",
+    "brand_id": 19,
+    "status": 1,
+    "created_at": "2025-03-18 11:48:45",
+    "updated_at": "2025-03-18 11:48:45"
+  },
+  {
+    "id": 75,
+    "name": "NP300",
+    "brand_id": 19,
+    "status": 1,
+    "created_at": "2025-03-18 11:49:22",
+    "updated_at": "2025-03-18 11:49:22"
+  },
+  {
+    "id": 76,
+    "name": "MX-5 Miata",
+    "brand_id": 29,
+    "status": 1,
+    "created_at": "2025-03-18 11:49:44",
+    "updated_at": "2025-03-18 11:49:44"
+  },
+  {
+    "id": 77,
+    "name": "Bleetle",
+    "brand_id": 25,
+    "status": 1,
+    "created_at": "2025-03-18 11:49:59",
+    "updated_at": "2025-03-18 11:49:59"
+  },
+  {
+    "id": 78,
+    "name": "Z4",
+    "brand_id": 20,
+    "status": 1,
+    "created_at": "2025-03-18 11:50:14",
+    "updated_at": "2025-03-18 11:50:14"
+  },
+  {
+    "id": 79,
+    "name": "Slc-class",
+    "brand_id": 31,
+    "status": 1,
+    "created_at": "2025-03-18 11:50:31",
+    "updated_at": "2025-03-18 11:50:31"
+  },
+  {
+    "id": 80,
+    "name": "Boxster",
+    "brand_id": 32,
+    "status": 1,
+    "created_at": "2025-03-18 11:50:44",
+    "updated_at": "2025-03-18 11:50:44"
+  },
+  {
+    "id": 81,
+    "name": "Kicks",
+    "brand_id": 19,
+    "status": 1,
+    "created_at": "2025-03-18 11:50:59",
+    "updated_at": "2025-03-18 11:50:59"
+  },
+  {
+    "id": 82,
+    "name": "Polo",
+    "brand_id": 25,
+    "status": 1,
+    "created_at": "2025-03-18 11:51:13",
+    "updated_at": "2025-03-18 11:51:13"
+  },
+  {
+    "id": 83,
+    "name": "BR-V",
+    "brand_id": 18,
+    "status": 1,
+    "created_at": "2025-03-18 11:51:29",
+    "updated_at": "2025-03-18 11:51:29"
+  },
+  {
+    "id": 84,
+    "name": "HR-V",
+    "brand_id": 18,
+    "status": 1,
+    "created_at": "2025-03-18 11:51:39",
+    "updated_at": "2025-03-18 11:51:39"
+  },
+  {
+    "id": 85,
+    "name": "swift",
+    "brand_id": 33,
+    "status": 1,
+    "created_at": "2025-03-18 11:52:02",
+    "updated_at": "2025-03-18 11:52:02"
+  },
+  {
+    "id": 86,
+    "name": "virtus",
+    "brand_id": 25,
+    "status": 1,
+    "created_at": "2025-03-18 11:52:19",
+    "updated_at": "2025-03-18 11:52:19"
+  },
+  {
+    "id": 87,
+    "name": "Figo",
+    "brand_id": 17,
+    "status": 1,
+    "created_at": "2025-03-18 11:52:47",
+    "updated_at": "2025-03-18 11:52:47"
+  },
+  {
+    "id": 88,
+    "name": "Gran i10",
+    "brand_id": 22,
+    "status": 1,
+    "created_at": "2025-03-18 11:53:01",
+    "updated_at": "2025-03-18 11:53:01"
+  },
+  {
+    "id": 89,
+    "name": "Q3",
+    "brand_id": 21,
+    "status": 1,
+    "created_at": "2025-03-18 11:53:39",
+    "updated_at": "2025-03-18 11:53:39"
+  },
+  {
+    "id": 90,
+    "name": "Sorento",
+    "brand_id": 28,
+    "status": 1,
+    "created_at": "2025-03-18 11:53:57",
+    "updated_at": "2025-03-18 11:53:57"
+  },
+  {
+    "id": 91,
+    "name": "Trax",
+    "brand_id": 26,
+    "status": 1,
+    "created_at": "2025-03-18 11:54:14",
+    "updated_at": "2025-03-18 11:54:14"
+  },
+  {
+    "id": 92,
+    "name": "Ecosport",
+    "brand_id": 17,
+    "status": 1,
+    "created_at": "2025-03-18 11:55:39",
+    "updated_at": "2025-03-18 11:55:39"
+  },
+  {
+    "id": 93,
+    "name": "Elantra",
+    "brand_id": 22,
+    "status": 1,
+    "created_at": "2025-03-18 11:55:51",
+    "updated_at": "2025-03-18 11:55:51"
+  },
+  {
+    "id": 94,
+    "name": "X-trail",
+    "brand_id": 19,
+    "status": 1,
+    "created_at": "2025-03-18 11:56:06",
+    "updated_at": "2025-03-18 11:56:06"
+  },
+  {
+    "id": 95,
+    "name": "Outlander",
+    "brand_id": 34,
+    "status": 1,
+    "created_at": "2025-03-18 11:56:36",
+    "updated_at": "2025-03-18 11:56:36"
+  },
+  {
+    "id": 96,
+    "name": "Koleos",
+    "brand_id": 35,
+    "status": 1,
+    "created_at": "2025-03-18 11:56:47",
+    "updated_at": "2025-03-18 11:56:47"
+  },
+  {
+    "id": 97,
+    "name": "Compass",
+    "brand_id": 36,
+    "status": 1,
+    "created_at": "2025-03-18 11:57:15",
+    "updated_at": "2025-03-18 11:57:15"
+  },
+  {
+    "id": 98,
+    "name": "Grand Cherokee",
+    "brand_id": 36,
+    "status": 1,
+    "created_at": "2025-03-18 11:57:26",
+    "updated_at": "2025-03-18 11:57:26"
+  },
+  {
+    "id": 99,
+    "name": "Tiguan",
+    "brand_id": 25,
+    "status": 1,
+    "created_at": "2025-03-18 11:57:42",
+    "updated_at": "2025-03-18 11:57:42"
+  },
+  {
+    "id": 100,
+    "name": "Serie 1",
+    "brand_id": 20,
+    "status": 1,
+    "created_at": "2025-03-18 11:57:57",
+    "updated_at": "2025-03-18 11:57:57"
+  },
+  {
+    "id": 101,
+    "name": "Gla 200",
+    "brand_id": 31,
+    "status": 1,
+    "created_at": "2025-03-18 11:58:10",
+    "updated_at": "2025-03-18 11:58:10"
+  },
+  {
+    "id": 102,
+    "name": "Beat",
+    "brand_id": 26,
+    "status": 1,
+    "created_at": "2025-03-18 11:58:36",
+    "updated_at": "2025-03-18 11:58:36"
+  },
+  {
+    "id": 103,
+    "name": "Xc-60",
+    "brand_id": 37,
+    "status": 1,
+    "created_at": "2025-03-18 11:59:15",
+    "updated_at": "2025-03-18 11:59:15"
+  },
+  {
+    "id": 104,
+    "name": "C200",
+    "brand_id": 31,
+    "status": 1,
+    "created_at": "2025-03-18 11:59:28",
+    "updated_at": "2025-03-18 11:59:28"
+  },
+  {
+    "id": 105,
+    "name": "X3",
+    "brand_id": 20,
+    "status": 1,
+    "created_at": "2025-03-18 11:59:48",
+    "updated_at": "2025-03-18 11:59:48"
+  },
+  {
+    "id": 106,
+    "name": "X5",
+    "brand_id": 20,
+    "status": 1,
+    "created_at": "2025-03-18 11:59:58",
+    "updated_at": "2025-03-18 11:59:58"
+  },
+  {
+    "id": 107,
+    "name": "Glc",
+    "brand_id": 31,
+    "status": 1,
+    "created_at": "2025-03-18 12:00:29",
+    "updated_at": "2025-03-18 12:00:29"
+  },
+  {
+    "id": 108,
+    "name": "Gle",
+    "brand_id": 31,
+    "status": 1,
+    "created_at": "2025-03-18 12:00:38",
+    "updated_at": "2025-03-18 12:00:38"
+  },
+  {
+    "id": 109,
+    "name": "Q5",
+    "brand_id": 21,
+    "status": 1,
+    "created_at": "2025-03-18 12:00:53",
+    "updated_at": "2025-03-18 12:00:53"
+  },
+  {
+    "id": 110,
+    "name": "A4",
+    "brand_id": 21,
+    "status": 1,
+    "created_at": "2025-03-18 12:01:04",
+    "updated_at": "2025-03-18 12:01:04"
+  },
+  {
+    "id": 111,
+    "name": "Xc-40",
+    "brand_id": 37,
+    "status": 1,
+    "created_at": "2025-03-18 12:01:21",
+    "updated_at": "2025-03-18 12:01:21"
+  },
+  {
+    "id": 112,
+    "name": "S60",
+    "brand_id": 37,
+    "status": 1,
+    "created_at": "2025-03-18 12:01:31",
+    "updated_at": "2025-03-18 12:01:31"
+  },
+  {
+    "id": 113,
+    "name": "Evoque",
+    "brand_id": 24,
+    "status": 1,
+    "created_at": "2025-03-18 12:01:49",
+    "updated_at": "2025-03-18 12:01:49"
+  },
+  {
+    "id": 114,
+    "name": "Corsair",
+    "brand_id": 38,
+    "status": 1,
+    "created_at": "2025-03-18 12:02:05",
+    "updated_at": "2025-03-18 12:02:05"
+  },
+  {
+    "id": 115,
+    "name": "RDX",
+    "brand_id": 40,
+    "status": 1,
+    "created_at": "2025-03-18 12:02:17",
+    "updated_at": "2025-03-18 12:02:17"
+  },
+  {
+    "id": 116,
+    "name": "MDX",
+    "brand_id": 40,
+    "status": 1,
+    "created_at": "2025-03-18 12:02:26",
+    "updated_at": "2025-03-18 12:02:26"
+  },
+  {
+    "id": 117,
+    "name": "TLX",
+    "brand_id": 40,
+    "status": 1,
+    "created_at": "2025-03-18 12:02:34",
+    "updated_at": "2025-03-18 12:02:34"
+  },
+  {
+    "id": 118,
+    "name": "Q50",
+    "brand_id": 41,
+    "status": 1,
+    "created_at": "2025-03-18 12:02:45",
+    "updated_at": "2025-03-18 12:02:45"
+  },
+  {
+    "id": 119,
+    "name": "Qx50",
+    "brand_id": 41,
+    "status": 1,
+    "created_at": "2025-03-18 12:02:56",
+    "updated_at": "2025-03-18 12:02:56"
+  },
+  {
+    "id": 120,
+    "name": "Macan",
+    "brand_id": 32,
+    "status": 1,
+    "created_at": "2025-03-18 12:03:26",
+    "updated_at": "2025-03-18 12:03:26"
+  },
+  {
+    "id": 121,
+    "name": "RX",
+    "brand_id": 39,
+    "status": 1,
+    "created_at": "2025-03-18 12:03:46",
+    "updated_at": "2025-03-18 12:03:46"
+  },
+  {
+    "id": 122,
+    "name": "NX",
+    "brand_id": 39,
+    "status": 1,
+    "created_at": "2025-03-18 12:03:54",
+    "updated_at": "2025-03-18 12:03:54"
+  },
+  {
+    "id": 123,
+    "name": "ES",
+    "brand_id": 39,
+    "status": 1,
+    "created_at": "2025-03-18 12:04:04",
+    "updated_at": "2025-03-18 12:04:04"
+  },
+  {
+    "id": 124,
+    "name": "Velar",
+    "brand_id": 24,
+    "status": 1,
+    "created_at": "2025-03-18 12:04:18",
+    "updated_at": "2025-03-18 12:04:18"
+  },
+  {
+    "id": 125,
+    "name": "Cr-v",
+    "brand_id": 18,
+    "status": 1,
+    "created_at": "2025-03-18 12:04:53",
+    "updated_at": "2025-03-18 12:04:53"
+  },
+  {
+    "id": 126,
+    "name": "Prius",
+    "brand_id": 16,
+    "status": 1,
+    "created_at": "2025-03-18 12:05:05",
+    "updated_at": "2025-03-18 12:05:05"
+  },
+  {
+    "id": 127,
+    "name": "Cx-3",
+    "brand_id": 29,
+    "status": 1,
+    "created_at": "2025-03-18 12:05:25",
+    "updated_at": "2025-03-18 12:05:25"
+  },
+  {
+    "id": 128,
+    "name": "X4",
+    "brand_id": 20,
+    "status": 1,
+    "created_at": "2025-03-18 12:05:37",
+    "updated_at": "2025-03-18 12:05:37"
+  },
+  {
+    "id": 129,
+    "name": "X2",
+    "brand_id": 20,
+    "status": 1,
+    "created_at": "2025-03-18 12:05:47",
+    "updated_at": "2025-03-18 12:05:47"
+  },
+  {
+    "id": 130,
+    "name": "Cybertruck",
+    "brand_id": 42,
+    "status": 1,
+    "created_at": "2025-03-18 12:06:18",
+    "updated_at": "2025-03-18 12:06:18"
+  },
+  {
+    "id": 131,
+    "name": "Roadster",
+    "brand_id": 42,
+    "status": 1,
+    "created_at": "2025-03-18 12:06:28",
+    "updated_at": "2025-03-18 12:06:28"
+  },
+  {
+    "id": 132,
+    "name": "Q2",
+    "brand_id": 21,
+    "status": 1,
+    "created_at": "2025-03-18 12:06:48",
+    "updated_at": "2025-03-18 12:06:48"
+  },
+  {
+    "id": 133,
+    "name": "Optima",
+    "brand_id": 28,
+    "status": 1,
+    "created_at": "2025-03-18 12:07:01",
+    "updated_at": "2025-03-18 12:07:01"
+  },
+  {
+    "id": 134,
+    "name": "Ranger",
+    "brand_id": 17,
+    "status": 1,
+    "created_at": "2025-03-18 12:07:11",
+    "updated_at": "2025-03-18 12:07:11"
+  },
+  {
+    "id": 135,
+    "name": "220ia",
+    "brand_id": 20,
+    "status": 1,
+    "created_at": "2025-03-18 12:07:21",
+    "updated_at": "2025-03-18 12:07:21"
+  },
+  {
+    "id": 136,
+    "name": "Gran touring",
+    "brand_id": 29,
+    "status": 1,
+    "created_at": "2025-03-25 10:37:16",
+    "updated_at": "2025-03-25 10:37:16"
+  },
+  {
+    "id": 137,
+    "name": "Ka",
+    "brand_id": 17,
+    "status": 1,
+    "created_at": "2025-03-25 10:48:17",
+    "updated_at": "2025-03-25 10:48:17"
+  },
+  {
+    "id": 138,
+    "name": "430ia",
+    "brand_id": 20,
+    "status": 1,
+    "created_at": "2025-04-07 20:46:39",
+    "updated_at": "2025-04-07 20:46:39"
+  },
+  {
+    "id": 139,
+    "name": "c250",
+    "brand_id": 31,
+    "status": 1,
+    "created_at": "2025-04-07 22:03:09",
+    "updated_at": "2025-04-07 22:03:09"
+  },
+  {
+    "id": 141,
+    "name": "Challenger",
+    "brand_id": 30,
+    "status": 1,
+    "created_at": "2025-04-07 22:16:09",
+    "updated_at": "2025-04-07 22:16:09"
+  },
+  {
+    "id": 142,
+    "name": "330E",
+    "brand_id": 20,
+    "status": 1,
+    "created_at": "2025-04-07 22:28:30",
+    "updated_at": "2025-04-07 22:28:30"
+  },
+  {
+    "id": 143,
+    "name": "GLC 300",
+    "brand_id": 31,
+    "status": 1,
+    "created_at": "2025-04-07 22:57:46",
+    "updated_at": "2025-04-07 22:57:46"
+  },
+  {
+    "id": 144,
+    "name": "King",
+    "brand_id": 43,
+    "status": 1,
+    "created_at": "2025-04-08 20:02:23",
+    "updated_at": "2025-04-08 20:02:23"
+  },
+  {
+    "id": 145,
+    "name": "RAM",
+    "brand_id": 30,
+    "status": 1,
+    "created_at": "2025-04-10 21:37:50",
+    "updated_at": "2025-04-10 21:37:50"
+  },
+  {
+    "id": 146,
+    "name": "Saveiro",
+    "brand_id": 25,
+    "status": 1,
+    "created_at": "2025-04-14 20:31:13",
+    "updated_at": "2025-04-14 20:31:13"
+  },
+  {
+    "id": 147,
+    "name": "sonic",
+    "brand_id": 26,
+    "status": 1,
+    "created_at": "2025-04-23 01:01:38",
+    "updated_at": "2025-04-23 01:01:38"
+  },
+  {
+    "id": 148,
+    "name": "GT",
+    "brand_id": 45,
+    "status": 1,
+    "created_at": "2025-04-23 21:33:52",
+    "updated_at": "2025-04-23 21:33:52"
+  },
+  {
+    "id": 149,
+    "name": "Sierra",
+    "brand_id": 46,
+    "status": 1,
+    "created_at": "2025-04-29 21:42:01",
+    "updated_at": "2025-04-29 21:42:01"
+  },
+  {
+    "id": 150,
+    "name": "Malibu",
+    "brand_id": 26,
+    "status": 1,
+    "created_at": "2025-04-29 21:46:13",
+    "updated_at": "2025-04-29 21:46:13"
+  },
+  {
+    "id": 151,
+    "name": "A200",
+    "brand_id": 31,
+    "status": 1,
+    "created_at": "2025-05-05 21:13:47",
+    "updated_at": "2025-05-05 21:13:47"
+  },
+  {
+    "id": 152,
+    "name": "318i",
+    "brand_id": 20,
+    "status": 1,
+    "created_at": "2025-05-05 21:22:31",
+    "updated_at": "2025-05-05 21:22:31"
+  },
+  {
+    "id": 153,
+    "name": "320i",
+    "brand_id": 20,
+    "status": 1,
+    "created_at": "2025-05-08 21:26:33",
+    "updated_at": "2025-05-08 21:26:33"
+  },
+  {
+    "id": 154,
+    "name": "model 3",
+    "brand_id": 42,
+    "status": 1,
+    "created_at": "2025-05-14 21:44:29",
+    "updated_at": "2025-05-14 21:44:29"
+  }
+]
