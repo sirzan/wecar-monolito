@@ -47,9 +47,12 @@ services:
     working_dir: /var/www/html
     volumes:
       - ./:/var/www/html
+      - vite_node_modules:/var/www/html/node_modules
     ports:
       - "${VITE_PORT:-5173}:5173"
     environment:
       - NODE_ENV=development
     command: sh -c "rm -f public/hot && if [ ! -f node_modules/.bin/vite ]; then npm install --legacy-peer-deps; fi && exec npm run dev"
 
+volumes:
+  vite_node_modules:
