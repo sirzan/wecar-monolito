@@ -17,7 +17,7 @@ compose up -d --build --remove-orphans
 if [ "$COMPOSE_ENV" = "dev" ]; then
     echo "App:     http://localhost:$(env_value APP_PORT 8000)"
     echo "Mailpit: http://localhost:$(env_value MAILPIT_PORT 8025)"
-    echo "Vite:    ejecuta 'npm run dev' en el host"
+    echo "Vite:    http://localhost:$(env_value VITE_PORT 5173)"
 else
     echo "Producción levantada. Si es la primera vez, ejecuta scripts/init-ssl.sh"
 fi

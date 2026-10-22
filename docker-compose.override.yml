@@ -51,6 +51,19 @@ services:
       MP_SMTP_AUTH_ACCEPT_ANY: "1"
       MP_SMTP_AUTH_ALLOW_INSECURE: "1"
 
+  vite:
+    image: node:22-alpine
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - ./:/var/www/html
+    ports:
+      - "${VITE_PORT:-5173}:5173"
+    environment:
+      - NODE_ENV=development
+    command: sh -c "rm -f public/hot && if [ ! -f node_modules/.bin/vite ]; then npm install --legacy-peer-deps; fi && exec npm run dev"
+
+
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped

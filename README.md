@@ -13,15 +13,15 @@ Aplicación Laravel + Inertia + Vue para el marketplace de autos WeCar.
 cp .env.example .env
 # Configura APP_KEY con: php artisan key:generate
 ./scripts/docker-up.sh dev
-npm run dev
 ```
 
 - App: http://localhost:8000
+- Vite (HMR): http://localhost:5173
 - Mailpit: http://localhost:8025
 - PostgreSQL: `127.0.0.1:5432`
 - Redis: `127.0.0.1:6379`
 
-El contenedor `app` ejecuta migraciones si `RUN_MIGRATIONS=true`. El worker y el scheduler usan Redis y se levantan automáticamente.
+El contenedor `app` ejecuta migraciones si `RUN_MIGRATIONS=true`. El contenedor `vite` levanta el servidor de desarrollo con Hot Module Replacement (HMR) automáticamente. El worker y el scheduler usan Redis y se levantan automáticamente.
 
 ## Producción
 
