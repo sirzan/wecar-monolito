@@ -57,12 +57,24 @@ services:
     working_dir: /var/www/html
     volumes:
       - ./:/var/www/html
-      - vite_node_modules:/var/www/html/node_modules
     ports:
       - "${VITE_PORT:-5173}:5173"
     environment:
       - NODE_ENV=development
-    command: sh -c "rm -f public/hot && if [ ! -f node_modules/.bin/vite ]; then npm install --legacy-peer-deps; fi && exec npm run dev"
+    command: >
+      sh -c "
+        if ! ./node_modules/.bin/vite --version >/dev/null 2>&1; then
+          echo '==> Instalando dependencias en node_modules...' &&
+          npm install --legacy-peer-deps;
+        fi &&
+        if [ ! -f public/build/manifest.json ]; then
+          echo '==> Generando build inicial de seguridad...' &&
+          npm run build;
+        fi &&
+        echo '==> Iniciando Vite en modo desarrollo...' &&
+        exec npm run dev
+      "
+
 
   postgres:
     image: postgres:16-alpine
@@ -83,4 +95,4 @@ services:
 
 volumes:
   postgres_data:
-  vite_node_modules:
+
