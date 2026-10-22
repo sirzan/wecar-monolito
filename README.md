@@ -23,6 +23,23 @@ cp .env.example .env
 
 El contenedor `app` ejecuta migraciones si `RUN_MIGRATIONS=true`. El contenedor `vite` levanta el servidor de desarrollo con Hot Module Replacement (HMR) automáticamente. El worker y el scheduler usan Redis y se levantan automáticamente.
 
+### Acceso desde otro dispositivo de la red local
+
+Si abres la app por la IP de tu máquina (p. ej. `http://192.168.100.172:8000`) y no desde `localhost`, define el origen público del dev server para que los assets y el HMR apunten a esa IP:
+
+```dotenv
+VITE_DEV_SERVER_ORIGIN=http://192.168.100.172:5173
+```
+
+Cualquier host extra que consuma el dev server se puede permitir con `VITE_DEV_ALLOWED_ORIGINS` (separado por comas). Sin estas variables, Vite solo acepta peticiones desde `localhost`.
+
+El `node_modules` del contenedor `vite` vive en el volumen `vite_node_modules` (no en el bind mount del proyecto), así que sus binarios nativos Linux/musl nunca sobrescriben los de tu host. La primera vez instala dependencias y genera `public/build/manifest.json`; después reutiliza el volumen. El build se escribe en `public/build` del host, por lo que Nginx/PHP lo ven al instante. Para reinstalar dependencias desde cero:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.db-local.yml rm -sfv vite
+./scripts/docker-up.sh dev
+```
+
 ## Producción
 
 ```bash

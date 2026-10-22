@@ -56,7 +56,11 @@ services:
     restart: unless-stopped
     working_dir: /var/www/html
     volumes:
+      # Código bind-mounted, pero node_modules vive en un volumen propio del
+      # contenedor para no mezclar binarios nativos Linux/musl con los del host.
       - ./:/var/www/html
+      - vite_node_modules:/var/www/html/node_modules
+      - vite_npm_cache:/root/.npm
     ports:
       - "${VITE_PORT:-5173}:5173"
     environment:
@@ -64,7 +68,7 @@ services:
     command: >
       sh -c "
         if ! ./node_modules/.bin/vite --version >/dev/null 2>&1; then
-          echo '==> Instalando dependencias en node_modules...' &&
+          echo '==> Instalando dependencias en el volumen node_modules del contenedor...' &&
           npm install --legacy-peer-deps;
         fi &&
         if [ ! -f public/build/manifest.json ]; then
@@ -95,4 +99,6 @@ services:
 
 volumes:
   postgres_data:
+  vite_node_modules:
+  vite_npm_cache:
 
