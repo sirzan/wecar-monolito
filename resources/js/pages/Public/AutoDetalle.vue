@@ -433,14 +433,14 @@ const jsonLd = computed(() => [
                             <span class="text-xs font-bold text-muted-foreground">/mes</span>
                         </p>
                         <p class="mt-0.5 text-[11px] text-muted-foreground">
-                            Calculado a 72 meses con 20% de enganche · Tasa referencial 17.2%
+                            Cotizado a 72 meses con 20% de enganche · Tasa referencial 17.2%
                         </p>
                         <button
                             type="button"
                             class="mt-2 text-xs font-bold text-primary hover:underline"
                             @click="financiarOpen = true"
                         >
-                            Ver opciones y calcular con mi perfil &gt;
+                            Ver opciones y cotizar con mi perfil &gt;
                         </button>
                     </div>
 

@@ -140,7 +140,7 @@ const clear = () => {
 <template>
     <SeoHead :title="seo.title" :description="seo.description" :canonical="seo.canonical" :noindex="seo.noindex ?? false" />
 
-    <section class="bg-gradient-hero px-4 pb-3 pt-6 sm:px-6 sm:pb-4 sm:pt-8">
+    <section class="bg-gradient-hero px-4 pb-2 pt-5 sm:px-6 sm:pb-3 sm:pt-6">
         <div class="mx-auto flex max-w-7xl items-start justify-between gap-3">
             <div>
                 <h1 class="section-title whitespace-nowrap text-secondary">Catálogo de autos</h1>
@@ -159,19 +159,19 @@ const clear = () => {
 
     <section class="mx-auto max-w-7xl px-4 pt-2 sm:px-6">
         <form
-            class="mt-2 flex flex-col gap-2 rounded-3xl border border-border bg-card p-1.5 shadow-soft sm:mt-5 sm:flex-row sm:items-center sm:rounded-full sm:p-2"
+            class="mt-1 flex flex-col gap-1.5 rounded-2xl border border-border bg-card p-1 shadow-soft sm:mt-3 sm:flex-row sm:items-center sm:rounded-full sm:p-1.5"
             @submit.prevent="applyAiFilters"
         >
-            <div class="flex min-w-0 flex-1 items-center gap-2 px-3">
-                <Search class="h-5 w-5 shrink-0 text-primary" />
+            <div class="flex min-w-0 flex-1 items-center gap-1.5 px-2.5">
+                <Search class="h-4 w-4 shrink-0 text-primary" />
                 <input
                     v-model="form.q"
                     placeholder="Quiero una SUV familiar, automática, de menos de $350,000 y bajo kilometraje…"
-                    class="h-10 min-w-0 flex-1 bg-transparent text-xs text-secondary outline-none placeholder:text-muted-foreground sm:h-12 sm:text-base"
+                    class="h-9 min-w-0 flex-1 bg-transparent text-[13px] text-secondary outline-none placeholder:text-muted-foreground sm:h-10 sm:text-sm"
                 />
             </div>
             <div class="flex flex-wrap items-center gap-2">
-                <Button type="submit" variant="hero" size="pill" :disabled="aiLoading || !form.q.trim()" class="h-10 shrink-0 gap-1 px-4 text-xs sm:h-12 sm:gap-1.5 sm:px-6 sm:text-sm">
+                <Button type="submit" variant="hero" size="pill" :disabled="aiLoading || !form.q.trim()" class="h-9 shrink-0 gap-1 px-3 text-[11px] sm:h-10 sm:gap-1.5 sm:px-4 sm:text-xs">
                     <LoaderCircle v-if="aiLoading" class="h-4 w-4 animate-spin" />
                     Buscar con IA <Sparkles class="h-4 w-4" />
                 </Button>
@@ -181,17 +181,17 @@ const clear = () => {
                     variant="outline"
                     size="pill"
                     :disabled="externalSearch.loading.value"
-                    class="h-10 shrink-0 text-xs sm:h-12"
+                    class="h-9 shrink-0 px-3 text-[11px] sm:h-10 sm:px-4 sm:text-xs"
                     @click="searchExternal"
                 >
                     <LoaderCircle v-if="externalSearch.loading.value" class="h-4 w-4 animate-spin" />
                     <Globe v-else class="h-4 w-4" />
                     Otras plataformas
                 </Button>
-                <Button type="button" variant="outline" size="pill" class="h-10 shrink-0 text-xs lg:hidden" @click="showFilters = !showFilters">
+                <Button type="button" variant="outline" size="pill" class="h-9 shrink-0 px-3 text-[11px] sm:h-10 sm:px-4 sm:text-xs lg:hidden" @click="showFilters = !showFilters">
                     <SlidersHorizontal class="h-4 w-4" /> Filtros
                 </Button>
-                <select v-model="form.sort" class="h-10 rounded-lg border border-input bg-background px-3 text-sm">
+                <select v-model="form.sort" class="h-9 rounded-lg border border-input bg-background px-2.5 text-xs sm:h-10 sm:px-3 sm:text-sm">
                     <option value="recent">Más recientes</option>
                     <option value="price-asc">Precio: menor a mayor</option>
                     <option value="price-desc">Precio: mayor a menor</option>

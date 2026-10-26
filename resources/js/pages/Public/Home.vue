@@ -6,6 +6,7 @@ import PublicLayout from '@/layouts/PublicLayout.vue';
 import SeoHead from '@/components/site/SeoHead.vue';
 import CarCard, { type CarCardData } from '@/components/site/CarCard.vue';
 import Button from '@/components/ui/Button.vue';
+import HomeBuySellSection from '@/components/site/HomeBuySellSection.vue';
 import HomeSections from '@/components/site/HomeSections.vue';
 import FinanciarAutoDialog from '@/components/credito/FinanciarAutoDialog.vue';
 import FinancialPartnersCarousel from '@/components/site/FinancialPartnersCarousel.vue';
@@ -23,9 +24,16 @@ defineOptions({ layout: PublicLayout });
 const props = defineProps<{
     featuredCars: CarCardData[];
     externalCars: ExternalCar[];
-    brands: { id: string; name: string; slug: string; logo: string | null }[];
-    plans: { id: string; key_name: string; name: string; price: number; max_cars: number; highlight: boolean }[];
     financieras: { id: string; slug: string; nombre: string; logo: string | null; color: string | null }[];
+    plans: {
+        id: string;
+        key_name: string;
+        name: string;
+        price: number | string;
+        duration: string | null;
+        max_cars: number;
+        highlight: boolean;
+    }[];
     seo: { title: string; description: string; canonical: string };
 }>();
 
@@ -185,42 +193,8 @@ const jsonLd = [
     <!-- 4. Garantía teaser, Publica2Min, Beneficios y Marcas (paridad original) -->
     <HomeSections />
 
-    <!-- 5. Explorar por marca -->
-    <section v-if="brands.length" class="border-y border-border bg-muted/40 px-4 py-14 sm:px-6">
-        <div class="mx-auto max-w-7xl">
-            <h2 class="section-title text-secondary">Explora por marca</h2>
-            <div class="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-                <Link
-                    v-for="brand in brands"
-                    :key="brand.id"
-                    :href="`/comprar/marca/${brand.slug}`"
-                    class="flex h-20 items-center justify-center rounded-2xl border border-border bg-card text-sm font-bold text-secondary transition hover:border-primary/40 hover:text-primary"
-                >
-                    {{ brand.name }}
-                </Link>
-            </div>
-        </div>
-    </section>
-
-    <!-- 6. Planes para vender -->
-    <section v-if="plans.length" class="mx-auto max-w-7xl px-4 py-14 sm:px-6">
-        <h2 class="section-title text-secondary">Planes para vender tu auto</h2>
-        <div class="mt-8 grid gap-5 md:grid-cols-3">
-            <div v-for="plan in plans.filter(p => !p.key_name.startsWith('search_') && !p.key_name.startsWith('membresia_'))" :key="plan.id" class="rounded-3xl border bg-card p-6 shadow-soft" :class="plan.highlight ? 'border-primary ring-2 ring-primary/20' : 'border-border'">
-                <p class="text-sm font-bold uppercase tracking-wide text-primary">{{ plan.name }}</p>
-                <p class="mt-3 text-3xl font-black text-secondary">{{ plan.price === 0 ? 'Gratis' : `$${plan.price.toLocaleString('es-MX')}` }}</p>
-                <p class="mt-2 text-sm text-muted-foreground">Hasta {{ plan.max_cars }} {{ plan.max_cars === 1 ? 'auto' : 'autos' }}</p>
-                <Button as="a" href="/vende" class="mt-5 w-full" :variant="plan.highlight ? 'hero' : 'outline'">Publicar ahora</Button>
-            </div>
-        </div>
-    </section>
-
-    <!-- 7. Banner inferior CTA -->
-    <section class="bg-secondary px-4 py-16 text-center text-white sm:px-6">
-        <h2 class="section-title text-white">¿Tienes un auto para vender?</h2>
-        <p class="mx-auto mt-4 max-w-xl text-white/70">Publícalo en minutos, recibe ofertas de compradores reales y cobra seguro.</p>
-        <Button as="a" href="/vende" size="lg" variant="hero" class="mt-8">Publica gratis <ArrowRight class="h-4 w-4" /></Button>
-    </section>
+    <!-- 5. Compra y vende con Wecar: beneficios, paquetes y CTA -->
+    <HomeBuySellSection :plans="plans" />
 
     <!-- Modal global de financiamiento -->
     <FinanciarAutoDialog :open="financiarOpen" @close="financiarOpen = false" />

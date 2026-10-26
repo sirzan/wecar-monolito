@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use Database\Seeders\PlanSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -10,6 +11,20 @@ it('renders the public home page', function () {
     $this->get('/')
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page->component('Public/Home'));
+});
+
+it('renders the public home page with the three publication plans', function () {
+    $this->seed(PlanSeeder::class);
+
+    $this->get('/')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Public/Home')
+            ->has('plans', 3)
+            ->where('plans.0.key_name', 'basico')
+            ->where('plans.1.key_name', 'destacado')
+            ->where('plans.2.key_name', 'premium')
+        );
 });
 
 it('renders the login page for guests', function () {
