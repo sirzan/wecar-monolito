@@ -138,7 +138,7 @@ const benefits = [
                         Completar perfil y comparar
                     </Button>
                     <p class="mt-2.5 text-center text-[11px] text-secondary-foreground/70">
-                        Cargo por servicio desde 2.5% · Cálculo referencial sujeto a evaluación.
+                        Cargo por servicio desde 2.5% · Cotización referencial sujeta a evaluación.
                     </p>
                 </div>
             </div>
@@ -156,8 +156,7 @@ const benefits = [
         </div>
 
         <div class="mt-8 rounded-2xl border border-white/15 bg-secondary/90 px-4 py-5 shadow-soft backdrop-blur">
-            <p class="text-center text-[10px] font-bold uppercase tracking-[0.18em] text-white/90 sm:text-xs">Bancos y financieras aliadas</p>
-            <FinancialPartnersCarousel class="mt-3" :inverse="true" />
+            <FinancialPartnersCarousel :inverse="true" />
         </div>
     </section>
 

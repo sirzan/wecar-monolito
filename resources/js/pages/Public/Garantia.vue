@@ -88,7 +88,7 @@ const faqs = [
         a: '¡Sí! Puedes contratar nuestro servicio de Compra Segura para cualquier auto seminuevo en las ciudades donde operamos. Nosotros contactamos al vendedor, revisamos el auto y te entregamos el reporte.',
     },
     {
-        q: '¿Cómo se calcula el costo del servicio de Compra Segura?',
+        q: '¿Cómo se cotiza el costo del servicio de Compra Segura?',
         a: 'El cargo por servicio parte desde el 2.5% sobre el valor acordado del vehículo, lo cual cubre todo el diagnóstico, gestoría y acompañamiento legal.',
     },
     {
@@ -153,7 +153,7 @@ const faqJsonLd = {
                         Cargo por servicio desde 2.5%
                     </span>
                     <span class="text-xs text-muted-foreground">
-                        Calculado sobre el valor del auto. Incluye validación de 160 puntos y acompañamiento legal.
+                        Cotizado sobre el valor del auto. Incluye validación de 160 puntos y acompañamiento legal.
                     </span>
                 </div>
 
@@ -226,7 +226,7 @@ const faqJsonLd = {
                 <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary uppercase">
                     <Sparkles class="h-3.5 w-3.5" /> Cotizador transparente
                 </span>
-                <h2 class="text-2xl font-black text-secondary mt-3">Calcula el costo de tu Compra Segura</h2>
+                <h2 class="text-2xl font-black text-secondary mt-3">Cotiza el costo de tu Compra Segura</h2>
                 <p class="text-xs text-muted-foreground mt-1">Conoce el cargo exacto de inspección y acompañamiento legal según el precio del auto.</p>
             </div>
 

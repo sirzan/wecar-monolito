@@ -30,18 +30,6 @@ class PublicController extends Controller
             ->limit(8)
             ->get();
 
-        $brands = CarBrand::query()
-            ->withCount(['models'])
-            ->orderBy('name')
-            ->limit(16)
-            ->get(['id', 'name', 'slug', 'logo']);
-
-        $plans = Plan::query()
-            ->where('is_active', true)
-            ->where('type', 'publication')
-            ->orderBy('sort_order')
-            ->get();
-
         $financieras = Financiera::query()
             ->where('activo', true)
             ->orderByDesc('destacado')
@@ -49,12 +37,18 @@ class PublicController extends Controller
             ->limit(8)
             ->get();
 
+        $plans = Plan::query()
+            ->where('is_active', true)
+            ->where('type', 'publication')
+            ->orderBy('sort_order')
+            ->limit(3)
+            ->get(['id', 'key_name', 'name', 'price', 'duration', 'max_cars', 'highlight']);
+
         return Inertia::render('Public/Home', [
             'featuredCars' => CarResource::collection($featured)->resolve(request()),
             'externalCars' => $this->externalSearch->cached($request->user(), 8)['results'],
-            'brands' => $brands,
-            'plans' => $plans,
             'financieras' => $financieras,
+            'plans' => $plans,
             'seo' => [
                 'title' => 'Wecar — Compra y vende autos seminuevos en México',
                 'description' => 'Wecar: compra, vende y financia autos seminuevos en México. Búsqueda inteligente, certificación de 160 puntos y compra segura garantizada.',
