@@ -7,9 +7,9 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 
 #[Fillable([
-    'slug', 'nombre', 'tipo', 'logo', 'color', 'tasa_min', 'tasa_max', 'cat_min', 'cat_max',
-    'enganche_pct', 'plazo_max', 'score_min', 'destacado', 'aplica_para', 'contacto', 'notas',
-    'orden', 'activo',
+    'slug', 'nombre', 'tipo', 'logo', 'color', 'vehicle_condition', 'brand_scope', 'max_vehicle_age',
+    'requires_membership', 'tasa_min', 'tasa_max', 'cat_min', 'cat_max', 'enganche_pct', 'plazo_max',
+    'score_min', 'destacado', 'aplica_para', 'contacto', 'notas', 'orden', 'activo',
 ])]
 class Financiera extends Model
 {
@@ -20,6 +20,9 @@ class Financiera extends Model
         return [
             'destacado' => 'boolean',
             'activo' => 'boolean',
+            'brand_scope' => 'array',
+            'requires_membership' => 'boolean',
+            'max_vehicle_age' => 'integer',
             'tasa_min' => 'decimal:2',
             'tasa_max' => 'decimal:2',
             'cat_min' => 'decimal:2',

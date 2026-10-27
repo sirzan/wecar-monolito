@@ -13,6 +13,7 @@ interface PlanItem {
     id: string;
     key_name: string;
     type: 'publication' | 'membership' | 'tokens';
+    audience: 'user' | 'agency' | 'both';
     name: string;
     price: number;
     duration: string;
@@ -31,6 +32,7 @@ const editingId = ref<string | null>(null);
 const form = reactive({
     key_name: '',
     type: 'publication' as 'publication' | 'membership' | 'tokens',
+    audience: 'user' as 'user' | 'agency' | 'both',
     name: '',
     price: 0,
     duration: '30 días',
@@ -46,7 +48,7 @@ const form = reactive({
 const reset = () => {
     editingId.value = null;
     Object.assign(form, {
-        key_name: '', type: 'publication', name: '', price: 0, duration: '30 días', duration_weeks: 4,
+        key_name: '', type: 'publication', audience: 'user', name: '', price: 0, duration: '30 días', duration_weeks: 4,
         max_cars: 1, token_amount: 0, highlight: false, features: '', sort_order: 0, is_active: true,
     });
 };
@@ -56,6 +58,7 @@ const edit = (plan: PlanItem) => {
     Object.assign(form, {
         key_name: plan.key_name,
         type: plan.type,
+        audience: plan.audience ?? 'user',
         name: plan.name,
         price: plan.price,
         duration: plan.duration,
@@ -106,6 +109,14 @@ const destroy = (plan: PlanItem) => {
                             <option value="tokens">Tokens</option>
                         </select>
                     </div>
+                    <div v-if="form.type === 'publication'">
+                        <Label>Audiencia</Label>
+                        <select v-model="form.audience" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                            <option value="user">Usuarios</option>
+                            <option value="agency">Agencias</option>
+                            <option value="both">Usuarios y agencias</option>
+                        </select>
+                    </div>
                     <div><Label>Nombre</Label><Input v-model="form.name" class="mt-1.5" /></div>
                     <div class="grid grid-cols-2 gap-3">
                         <div><Label>Precio</Label><Input v-model.number="form.price" type="number" min="0" class="mt-1.5" /></div>
@@ -133,7 +144,7 @@ const destroy = (plan: PlanItem) => {
             <div class="overflow-x-auto rounded-2xl border border-border bg-card/50">
                 <table class="w-full min-w-[700px] text-sm">
                     <thead class="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                        <tr><th class="p-4">Plan</th><th class="p-4">Tipo</th><th class="p-4">Precio</th><th class="p-4">Duración</th><th class="p-4">Autos / Tokens</th><th class="p-4">Estado</th><th class="p-4 text-right">Acciones</th></tr>
+                        <tr><th class="p-4">Plan</th><th class="p-4">Tipo</th><th class="p-4">Audiencia</th><th class="p-4">Precio</th><th class="p-4">Duración</th><th class="p-4">Autos / Tokens</th><th class="p-4">Estado</th><th class="p-4 text-right">Acciones</th></tr>
                     </thead>
                     <tbody class="divide-y divide-border">
                         <tr v-for="plan in plans" :key="plan.id">
@@ -142,6 +153,7 @@ const destroy = (plan: PlanItem) => {
                                 <p class="text-xs text-muted-foreground">{{ plan.key_name }}</p>
                             </td>
                             <td class="p-4"><span class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase">{{ plan.type }}</span></td>
+                            <td class="p-4 text-xs uppercase text-muted-foreground">{{ plan.audience ?? 'user' }}</td>
                             <td class="p-4 tabular-nums">${{ plan.price.toLocaleString('es-MX') }}</td>
                             <td class="p-4 text-muted-foreground">{{ plan.duration }}</td>
                             <td class="p-4 text-muted-foreground">{{ plan.type === 'tokens' ? `${plan.token_amount ?? 0} tokens` : plan.max_cars }}</td>

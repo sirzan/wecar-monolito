@@ -9,6 +9,8 @@ use App\Models\AgencyMember;
 use App\Models\Car;
 use App\Models\CarLead;
 use App\Models\CarStatus;
+use App\Models\Subscription;
+use App\Services\PublicationPlanService;
 use App\Support\AgencyContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -53,13 +55,17 @@ class AgencyController extends Controller
         $baseSlug = Str::slug($validated['name']) ?: 'agencia';
         $slug = $baseSlug.'-'.Str::lower(Str::random(6));
 
+        $plan = app(PublicationPlanService::class)->defaultAgencyPlan();
+        $weeks = max((int) ($plan?->duration_weeks ?? 4), 1);
+
         $agency = Agency::query()->create([
             ...$validated,
             'owner_id' => $request->user()->getKey(),
             'slug' => $slug,
-            'plan' => 'agencia',
-            'plan_expires_at' => now()->addDays(30),
-            'max_cars' => 30,
+            'plan' => $plan?->key_name ?? 'agencia',
+            'plan_id' => $plan?->getKey(),
+            'plan_expires_at' => now()->addWeeks($weeks),
+            'max_cars' => max((int) ($plan?->max_cars ?? 30), 1),
             'is_active' => true,
         ]);
 
@@ -278,9 +284,57 @@ class AgencyController extends Controller
     {
         $this->authorize('view', $agency);
 
+        $subscription = Subscription::query()
+            ->with('plan')
+            ->where('agency_id', $agency->getKey())
+            ->where('kind', 'agency')
+            ->where('status', 'active')
+            ->latest('ends_at')
+            ->first();
+
+        $plan = app(PublicationPlanService::class)->planForAgency($agency);
+
         return Inertia::render('Panel/Agency/Billing', [
             'agency' => $this->agencyData($agency),
+            'subscription' => $subscription ? [
+                'id' => $subscription->getKey(),
+                'ends_at' => $subscription->ends_at?->toIso8601String(),
+                'amount' => (float) $subscription->amount,
+            ] : null,
+            'renewalPlan' => $plan ? [
+                'id' => $plan->getKey(),
+                'name' => $plan->name,
+                'price' => (float) $plan->price,
+                'duration_weeks' => (int) $plan->duration_weeks,
+            ] : null,
         ]);
+    }
+
+    public function renew(Request $request, Agency $agency, PublicationPlanService $publicationPlans): RedirectResponse
+    {
+        $this->authorize('view', $agency);
+        abort_unless($request->user()->agencyRole($agency) === 'owner', 403);
+
+        $plan = $publicationPlans->planForAgency($agency);
+
+        if (! $plan || ! $plan->is_active) {
+            return back()->with('error', 'No hay un plan de agencia disponible para renovar.');
+        }
+
+        $pending = Subscription::query()->create([
+            'user_id' => $request->user()->getKey(),
+            'kind' => 'agency',
+            'agency_id' => $agency->getKey(),
+            'plan_id' => $plan->getKey(),
+            'status' => 'pending',
+            'billing_cycle' => 'total',
+            'amount' => (float) $plan->price,
+            'metadata' => array_merge($publicationPlans->snapshot($plan), [
+                'agency_id' => $agency->getKey(),
+            ]),
+        ]);
+
+        return redirect()->route('checkout.show', $pending);
     }
 
     public function settings(Request $request, Agency $agency): Response
@@ -352,6 +406,8 @@ class AgencyController extends Controller
             'legal_name' => $agency->legal_name,
             'rfc' => $agency->rfc,
             'plan' => $agency->plan,
+            'plan_id' => $agency->plan_id,
+            'plan_name' => $agency->planRelation?->name,
             'plan_expires_at' => $agency->plan_expires_at?->toIso8601String(),
             'max_cars' => $agency->max_cars,
             'cars_count' => $agency->cars()->count(),

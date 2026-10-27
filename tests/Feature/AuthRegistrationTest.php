@@ -3,8 +3,28 @@
 use App\Models\Agency;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia as Assert;
 
 uses(RefreshDatabase::class);
+
+it('renders the registration form on the spanish route', function () {
+    $this->get('/registro')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->component('Auth/Register'));
+
+    $this->get('/register')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->component('Auth/Register'));
+});
+
+it('redirects authenticated users away from the registration form', function () {
+    $this->seed();
+    $user = User::factory()->create(['email_verified_at' => now()]);
+
+    $this->actingAs($user)
+        ->get('/registro')
+        ->assertRedirect('/');
+});
 
 it('registers a personal user with profile and seller role', function () {
     $this->seed();

@@ -22,6 +22,9 @@ compose up -d --remove-orphans --wait --wait-timeout 180
 echo "==> Migraciones"
 compose exec -T app php artisan migrate --force
 
+echo "==> Generando sitemap"
+compose exec -T app php artisan seo:generate-sitemap
+
 echo "==> Cache de producción"
 compose exec -T app php artisan optimize:clear
 compose exec -T app php artisan config:cache

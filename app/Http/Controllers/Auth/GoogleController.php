@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\LoginRedirector;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -12,6 +13,8 @@ use Laravel\Socialite\Facades\Socialite;
 
 class GoogleController extends Controller
 {
+    public function __construct(private readonly LoginRedirector $redirector) {}
+
     public function redirect(): RedirectResponse
     {
         return Socialite::driver('google')->redirect();
@@ -32,6 +35,6 @@ class GoogleController extends Controller
 
         Auth::login($user, remember: true);
 
-        return redirect()->intended(route('panel.dashboard'));
+        return redirect()->to($this->redirector->path(request()));
     }
 }

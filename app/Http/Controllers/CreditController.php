@@ -8,9 +8,12 @@ use App\Models\Financiera;
 use App\Services\CreditApplicationService;
 use App\Services\CreditDocumentService;
 use App\Services\CreditEvaluationService;
+use App\Services\CreditOfferService;
+use App\Services\CreditScoringService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class CreditController extends Controller
@@ -19,6 +22,8 @@ class CreditController extends Controller
         private readonly CreditEvaluationService $evaluation,
         private readonly CreditApplicationService $applications,
         private readonly CreditDocumentService $documents,
+        private readonly CreditScoringService $scoring,
+        private readonly CreditOfferService $offers,
     ) {}
 
     public function financieras(): JsonResponse
@@ -114,7 +119,14 @@ class CreditController extends Controller
             'car_year' => ['required', 'integer', 'min:1990', 'max:'.(date('Y') + 2)],
             'car_price' => ['required', 'numeric', 'min:1'],
             'car_km' => ['nullable', 'integer', 'min:0'],
+            'financiera_id' => ['required', 'uuid', 'exists:financieras,id'],
             'financiera_name' => ['required', 'string', 'max:160'],
+            'car_id' => ['nullable', 'uuid', 'exists:cars,id'],
+            'car_condition' => ['nullable', Rule::in(['new', 'used'])],
+            'bureau' => ['nullable', Rule::in(['excelente', 'bueno', 'regular', 'sin-historial', 'malo'])],
+            'employment' => ['nullable', Rule::in(['fijo', 'honorarios', 'negocio', 'eventual'])],
+            'tenure' => ['nullable', 'numeric', 'min:0'],
+            'age' => ['nullable', 'integer', 'min:18', 'max:99'],
             'score' => ['nullable', 'integer', 'min:0', 'max:1000'],
             'risk_level' => ['nullable', 'string', 'max:40'],
             'down_payment' => ['required', 'numeric', 'min:0'],
@@ -133,6 +145,35 @@ class CreditController extends Controller
             'reuse_estado_cuenta' => ['nullable', 'boolean'],
         ]);
 
+        $financiera = Financiera::query()
+            ->whereKey($validated['financiera_id'])
+            ->where('activo', true)
+            ->firstOrFail();
+
+        $input = [
+            'ingreso' => (float) $validated['ingreso_mensual'],
+            'edad' => (int) ($validated['age'] ?? 30),
+            'antiguedad' => (float) ($validated['tenure'] ?? 0),
+            'empleo' => (string) ($validated['employment'] ?? 'fijo'),
+            'historial' => (string) ($validated['bureau'] ?? 'bueno'),
+            'deudas' => (float) ($validated['deuda_mensual'] ?? 0),
+            'precio' => (float) $validated['car_price'],
+            'enganche' => (float) $validated['down_payment'],
+            'plazo' => (int) $validated['term_months'],
+            'car_year' => (int) $validated['car_year'],
+            'brand' => (string) $validated['car_brand'],
+            'vehicle_condition' => (string) ($validated['car_condition'] ?? 'used'),
+        ];
+
+        $score = $this->scoring->calculate($input);
+        $offer = collect($this->offers->generate($input, $score['score'], collect([$financiera])))->first();
+
+        if (! $offer || ! $offer['elegible']) {
+            throw ValidationException::withMessages([
+                'financiera_id' => $offer['motivo'] ?? 'La financiera seleccionada no es elegible para este perfil.',
+            ]);
+        }
+
         $files = collect(['ine', 'domicilio', 'estado_cuenta'])
             ->mapWithKeys(fn (string $slot) => [$slot => $request->file($slot)])
             ->filter();
@@ -142,12 +183,41 @@ class CreditController extends Controller
             ->values()
             ->all();
 
+        $data = collect($validated)->except([
+            'ine', 'domicilio', 'estado_cuenta',
+            'reuse_ine', 'reuse_domicilio', 'reuse_estado_cuenta',
+            'car_condition', 'bureau', 'employment', 'tenure', 'age',
+        ])->all();
+
+        $data = [
+            ...$data,
+            'financiera_id' => $financiera->getKey(),
+            'financiera_name' => $financiera->nombre,
+            'score' => $score['score'],
+            'risk_level' => $this->scoring->riskLevel($score['score'], $score['dti']),
+            'monthly_payment' => $offer['mensualidad'],
+            'rate' => $offer['tasa'],
+            'cat' => $offer['cat'],
+            'total_to_pay' => $offer['total'],
+            'term_months' => $offer['plazo_efectivo'],
+            'service_fee' => $offer['cargo_servicio'],
+            'inputs' => [
+                ...($validated['inputs'] ?? []),
+                'quote' => [
+                    'financiera_id' => $financiera->getKey(),
+                    'tasa' => $offer['tasa'],
+                    'cat' => $offer['cat'],
+                    'mensualidad' => $offer['mensualidad'],
+                    'plazo_efectivo' => $offer['plazo_efectivo'],
+                    'cargo_servicio' => $offer['cargo_servicio'],
+                    'total' => $offer['total'],
+                ],
+            ],
+        ];
+
         $application = $this->applications->submit(
             $request->user(),
-            collect($validated)->except([
-                'ine', 'domicilio', 'estado_cuenta',
-                'reuse_ine', 'reuse_domicilio', 'reuse_estado_cuenta',
-            ])->all(),
+            $data,
             $files->all(),
             $reuse,
         );

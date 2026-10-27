@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\AiSearchController;
 use App\Http\Controllers\Auth\GoogleController;
+use App\Http\Controllers\CarPriceSuggestionController;
+use App\Http\Controllers\CarVersionController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\CreditController;
@@ -13,6 +15,7 @@ use App\Http\Controllers\PushController;
 use App\Http\Controllers\SitemapController;
 use App\Http\Controllers\VendeController;
 use Illuminate\Support\Facades\Route;
+use Laravel\Fortify\Http\Controllers\RegisteredUserController;
 
 Route::get('/', [PublicController::class, 'home'])->name('home');
 Route::get('/comprar', [PublicController::class, 'comprar'])->name('comprar');
@@ -26,6 +29,10 @@ Route::get('/vende', [PublicController::class, 'vende'])->name('vende');
 Route::post('/vende', [VendeController::class, 'store'])
     ->middleware(['auth', 'verified'])
     ->name('vende.store');
+
+Route::get('/registro', [RegisteredUserController::class, 'create'])
+    ->middleware('guest:'.config('fortify.guard'))
+    ->name('registro');
 Route::get('/credito', [PublicController::class, 'credito'])->name('credito');
 Route::get('/garantia', [PublicController::class, 'garantia'])->name('garantia');
 Route::get('/certificaciones', [PublicController::class, 'certificaciones'])->name('certificaciones');
@@ -57,6 +64,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
 Route::post('/webhooks/stripe', [CheckoutController::class, 'stripeWebhook'])->name('webhooks.stripe');
 Route::post('/webhooks/didit', [DiditController::class, 'webhook'])->name('webhooks.didit');
+Route::post('/api/webhooks/didit', [DiditController::class, 'webhook'])->name('webhooks.didit.api');
 
 Route::post('/api/ai-search', AiSearchController::class)->middleware('throttle:20,1')->name('ai-search');
 Route::get('/api/credito/financieras', [CreditController::class, 'financieras'])->name('credit.financieras');
@@ -65,8 +73,14 @@ Route::get('/api/external-search/status', [ExternalSearchController::class, 'sta
 Route::get('/api/external-search/cached', [ExternalSearchController::class, 'cached'])->middleware('throttle:60,1')->name('external-search.cached');
 Route::post('/api/external-search/resolve', [ExternalSearchController::class, 'resolve'])->middleware('throttle:30,1')->name('external-search.resolve');
 Route::post('/api/external-search', [ExternalSearchController::class, 'search'])->middleware('throttle:10,1')->name('external-search');
+Route::get('/api/car-versions', CarVersionController::class)->middleware('throttle:30,1')->name('car-versions');
+Route::get('/api/car-price-suggestions/comparables', [CarPriceSuggestionController::class, 'comparables'])->middleware('throttle:30,1')->name('price-suggestions.comparables');
+Route::get('/api/car-price-suggestions/market', [CarPriceSuggestionController::class, 'market'])->middleware('throttle:20,1')->name('price-suggestions.market');
 
 Route::get('/sitemap.xml', SitemapController::class)->name('sitemap');
+Route::get('/sitemaps/{file}', [SitemapController::class, 'show'])
+    ->where('file', '^(pages|cars-\d{1,5})\.xml$')
+    ->name('sitemap.file');
 
 Route::get('/auth/google/redirect', [GoogleController::class, 'redirect'])->name('auth.google.redirect');
 Route::get('/auth/google/callback', [GoogleController::class, 'callback'])->name('auth.google.callback');

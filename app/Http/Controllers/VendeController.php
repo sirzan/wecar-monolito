@@ -8,6 +8,8 @@ use App\Models\CarModel;
 use App\Models\CarStatus;
 use App\Models\Plan;
 use App\Models\Subscription;
+use App\Services\CarCatalog\CarVersionService;
+use App\Services\PublicationPlanService;
 use App\Support\AgencyContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,13 +20,12 @@ use Illuminate\Validation\ValidationException;
 
 class VendeController extends Controller
 {
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, CarVersionService $carVersions, PublicationPlanService $publicationPlans): RedirectResponse
     {
         $validated = $request->validate([
             'brand_id' => ['required', 'uuid', 'exists:car_brands,id'],
-            'model_id' => ['nullable', 'uuid', 'exists:car_models,id'],
-            'version_id' => ['nullable', 'uuid', 'exists:car_versions,id'],
-            'version' => ['nullable', 'string', 'max:120'],
+            'model_id' => ['required', 'uuid', 'exists:car_models,id'],
+            'version_id' => ['required', 'uuid', 'exists:car_versions,id'],
             'year' => ['required', 'integer', 'min:1990', 'max:'.(date('Y') + 1)],
             'km' => ['required', 'integer', 'min:0', 'max:2000000'],
             'price' => ['required', 'numeric', 'min:1000', 'max:100000000'],
@@ -45,32 +46,98 @@ class VendeController extends Controller
             'images.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:8192'],
         ]);
 
+        $isAdmin = $request->user()->hasAdminPrivileges();
+
         $agency = app(AgencyContext::class)->current($request);
         $agency = $agency && $request->user()->belongsToAgency($agency) ? $agency : null;
 
-        if ($agency && $agency->cars()->count() >= $agency->max_cars) {
-            throw ValidationException::withMessages([
-                'plan_key' => 'La agencia alcanzó su límite de autos. Actualiza el plan para publicar más.',
-            ]);
+        $plan = null;
+        $requiresPayment = false;
+        $activeSubscription = null;
+
+        if (! $isAdmin && $agency) {
+            if (! $agency->is_active || ($agency->plan_expires_at && $agency->plan_expires_at->isPast())) {
+                throw ValidationException::withMessages([
+                    'plan_key' => 'El plan de la agencia venció. Renueva el plan para publicar autos.',
+                ]);
+            }
+
+            $plan = $publicationPlans->planForAgency($agency);
+
+            if (! $plan || ! $plan->is_active) {
+                throw ValidationException::withMessages([
+                    'plan_key' => 'La agencia no tiene un plan de publicación activo.',
+                ]);
+            }
+
+            if ($publicationPlans->activeAgencyCarsCount($agency) >= max((int) $agency->max_cars, 1)) {
+                throw ValidationException::withMessages([
+                    'plan_key' => 'La agencia alcanzó su límite de autos. Actualiza el plan para publicar más.',
+                ]);
+            }
+        } elseif (! $isAdmin) {
+            $activeSubscription = $publicationPlans->activeForUser($request->user());
+
+            if ($activeSubscription) {
+                $plan = $publicationPlans->planFor($activeSubscription);
+
+                if (! $plan) {
+                    throw ValidationException::withMessages([
+                        'plan_key' => 'Tu plan activo ya no está disponible. Contacta a soporte.',
+                    ]);
+                }
+
+                if ($publicationPlans->activeCarsCount($request->user()) >= $publicationPlans->maxCars($activeSubscription)) {
+                    throw ValidationException::withMessages([
+                        'plan_key' => 'Alcanzaste el límite de autos de tu plan. Renueva o cambia de plan para publicar más.',
+                    ]);
+                }
+            } else {
+                if (! isset($validated['plan_key'])) {
+                    throw ValidationException::withMessages([
+                        'plan_key' => 'Selecciona un plan para publicar un auto.',
+                    ]);
+                }
+
+                $plan = Plan::query()
+                    ->where('key_name', $validated['plan_key'])
+                    ->where('type', 'publication')
+                    ->where('is_active', true)
+                    ->whereIn('audience', ['user', 'both'])
+                    ->first();
+
+                if (! $plan) {
+                    throw ValidationException::withMessages([
+                        'plan_key' => 'El plan seleccionado no está disponible para publicar un auto.',
+                    ]);
+                }
+
+                $requiresPayment = (float) $plan->price > 0;
+            }
+        } else {
+            $plan = isset($validated['plan_key'])
+                ? Plan::query()->where('key_name', $validated['plan_key'])->where('type', 'publication')->first()
+                : null;
         }
 
-        $plan = isset($validated['plan_key'])
-            ? Plan::query()->where('key_name', $validated['plan_key'])->where('type', 'publication')->first()
-            : null;
-
-        if (isset($validated['plan_key']) && ! $plan) {
-            throw ValidationException::withMessages([
-                'plan_key' => 'El plan seleccionado no es válido para publicar un auto.',
-            ]);
-        }
-
-        $requiresPayment = $plan !== null && (float) $plan->price > 0;
         $status = CarStatus::query()->where('name', $requiresPayment ? 'pendiente' : 'en_venta')->first();
 
         $brand = CarBrand::query()->find($validated['brand_id']);
-        $model = isset($validated['model_id'])
-            ? CarModel::query()->find($validated['model_id'])
-            : null;
+        $model = CarModel::query()->find($validated['model_id']);
+
+        if (! $model || $model->brand_id !== $brand?->getKey()) {
+            throw ValidationException::withMessages([
+                'model_id' => 'El modelo no pertenece a la marca seleccionada.',
+            ]);
+        }
+
+        $version = $carVersions->validateForModel($model, $validated['version_id'], (int) $validated['year']);
+
+        if (! $version) {
+            throw ValidationException::withMessages([
+                'version_id' => 'La versión no pertenece al modelo o año seleccionado.',
+            ]);
+        }
 
         $baseSlug = Str::slug(implode('-', array_filter([
             $validated['year'],
@@ -79,7 +146,8 @@ class VendeController extends Controller
         ])));
 
         $car = Car::query()->create([
-            ...collect($validated)->except(['images', 'plan_key', 'version'])->all(),
+            ...collect($validated)->except(['images', 'plan_key', 'version_id'])->all(),
+            'version_id' => $version->getKey(),
             'owner_id' => $request->user()->getKey(),
             'agency_id' => $agency?->getKey(),
             'seller_id' => $agency ? $request->user()->getKey() : null,
@@ -106,7 +174,7 @@ class VendeController extends Controller
 
         $subscription = null;
 
-        if ($plan) {
+        if ($plan && ! $isAdmin && ! $agency && ! $activeSubscription) {
             $subscription = Subscription::query()->create([
                 'user_id' => $request->user()->getKey(),
                 'kind' => 'publication',
@@ -117,7 +185,14 @@ class VendeController extends Controller
                 'amount' => (float) $plan->price,
                 'starts_at' => $requiresPayment ? null : now(),
                 'ends_at' => $requiresPayment ? null : now()->addWeeks((int) $plan->duration_weeks),
+                'metadata' => $publicationPlans->snapshot($plan),
             ]);
+        }
+
+        if ($request->routeIs('admin.cars.store')) {
+            return redirect()
+                ->route('admin.cars')
+                ->with('success', 'Auto publicado correctamente desde el panel administrativo.');
         }
 
         if ($requiresPayment && $subscription) {

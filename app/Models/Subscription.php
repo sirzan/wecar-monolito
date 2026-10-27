@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
-    'user_id', 'kind', 'plan_id', 'car_id', 'status', 'billing_cycle', 'payment_method',
+    'user_id', 'kind', 'plan_id', 'car_id', 'agency_id', 'status', 'billing_cycle', 'payment_method',
     'amount', 'starts_at', 'ends_at', 'metadata',
 ])]
 class Subscription extends Model
@@ -39,6 +39,11 @@ class Subscription extends Model
     public function car(): BelongsTo
     {
         return $this->belongsTo(Car::class);
+    }
+
+    public function agency(): BelongsTo
+    {
+        return $this->belongsTo(Agency::class);
     }
 
     public function payments(): HasMany

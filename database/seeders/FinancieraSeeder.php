@@ -795,5 +795,42 @@ class FinancieraSeeder extends Seeder
         foreach ($financieras as $financiera) {
             Financiera::query()->updateOrCreate(['slug' => $financiera['slug']], $financiera);
         }
+
+        $brandRules = [
+            'vwfs' => ['volkswagen', 'audi', 'seat', 'porsche', 'bentley'],
+            'nissan' => ['nissan'],
+            'toyota' => ['toyota'],
+            'gmfinancial' => ['chevrolet', 'gmc', 'buick', 'cadillac'],
+            'ford' => ['ford', 'lincoln'],
+            'rci' => ['renault', 'dacia'],
+            'stellantis' => ['chrysler', 'jeep', 'dodge', 'ram'],
+            'hyundai' => ['hyundai', 'kia'],
+            'honda' => ['honda'],
+            'mazda' => ['mazda'],
+            'acura' => ['acura'],
+        ];
+
+        foreach (Financiera::query()->get() as $financiera) {
+            $condition = match (true) {
+                str_contains($financiera->aplica_para ?? '', 'solo Autos nuevos') => 'new',
+                str_contains($financiera->aplica_para ?? '', 'Autos nuevos') && ! str_contains($financiera->aplica_para ?? '', 'seminuevos') => 'new',
+                str_contains($financiera->aplica_para ?? '', 'Autos seminuevos') && ! str_contains($financiera->aplica_para ?? '', 'nuevos') => 'used',
+                default => 'any',
+            };
+
+            $maxAge = match (true) {
+                $financiera->slug === 'afirme' => 10,
+                $financiera->tipo === 'banco' => 8,
+                $financiera->tipo === 'fintech' => 10,
+                default => null,
+            };
+
+            $financiera->update([
+                'vehicle_condition' => $condition,
+                'brand_scope' => $brandRules[$financiera->slug] ?? null,
+                'max_vehicle_age' => $maxAge,
+                'requires_membership' => $financiera->slug === 'cajapopular',
+            ]);
+        }
     }
 }
