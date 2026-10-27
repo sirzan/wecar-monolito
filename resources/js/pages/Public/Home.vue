@@ -1,29 +1,19 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { ref } from 'vue';
 import { Link, router } from '@inertiajs/vue3';
 import { ArrowRight, Landmark, Search, Sparkles } from '@lucide/vue';
 import PublicLayout from '@/layouts/PublicLayout.vue';
 import SeoHead from '@/components/site/SeoHead.vue';
 import CarCard, { type CarCardData } from '@/components/site/CarCard.vue';
 import Button from '@/components/ui/Button.vue';
-import HomeBuySellSection from '@/components/site/HomeBuySellSection.vue';
 import HomeSections from '@/components/site/HomeSections.vue';
 import FinanciarAutoDialog from '@/components/credito/FinanciarAutoDialog.vue';
 import FinancialPartnersCarousel from '@/components/site/FinancialPartnersCarousel.vue';
-import ExternalCarCard from '@/components/external/ExternalCarCard.vue';
-import ExternalSearchModal from '@/components/external/ExternalSearchModal.vue';
-import ExternalSearchLimitModal from '@/components/external/ExternalSearchLimitModal.vue';
-import ExternalAdModal from '@/components/external/ExternalAdModal.vue';
-import SearchTokensCard from '@/components/external/SearchTokensCard.vue';
-import SearchRewardAdDialog from '@/components/external/SearchRewardAdDialog.vue';
-import { useExternalSearch } from '@/composables/useExternalSearch';
-import type { ExternalCar } from '@/types/external';
 
 defineOptions({ layout: PublicLayout });
 
 const props = defineProps<{
     featuredCars: CarCardData[];
-    externalCars: ExternalCar[];
     financieras: { id: string; slug: string; nombre: string; logo: string | null; color: string | null }[];
     plans: {
         id: string;
@@ -39,16 +29,6 @@ const props = defineProps<{
 
 const localQuery = ref('');
 const financiarOpen = ref(false);
-const rewardOpen = ref(false);
-const externalSearch = useExternalSearch();
-
-onMounted(() => {
-    void externalSearch.refreshStatus();
-});
-
-const searchExternal = () => {
-    void externalSearch.search(localQuery.value.trim() || 'autos seminuevos en México');
-};
 
 const submit = () => {
     router.get('/comprar', localQuery.value ? { q: localQuery.value } : {}, { preserveScroll: true });
@@ -92,7 +72,7 @@ const jsonLd = [
         />
         <div class="absolute inset-0 -z-10 bg-gradient-to-b from-secondary/40 via-secondary/20 to-secondary/70" />
         <div class="mx-auto flex w-full flex-col items-center px-3 py-12 text-white sm:px-5 sm:py-24 md:py-32 lg:py-40">
-            <h1 class="page-title text-shadow-hero-soft animate-fade-in text-center text-white">
+            <h1 class="hero-title page-title text-shadow-hero-soft animate-fade-in text-center text-white">
                 Encuentra tu <span class="text-white">auto ideal</span>
             </h1>
 
@@ -104,16 +84,13 @@ const jsonLd = [
                     <input
                         v-model="localQuery"
                         placeholder="Buscar marca, modelo…"
-                        class="min-w-0 flex-1 bg-transparent px-0.5 text-[11px] text-secondary outline-none placeholder:text-muted-foreground sm:px-1.5 sm:text-sm"
+                        class="min-w-0 flex-1 bg-transparent px-0.5 text-[10px] text-secondary outline-none placeholder:text-muted-foreground sm:px-1.5 sm:text-xs"
                     />
-                    <Button type="submit" variant="hero" size="pill" class="h-5 shrink-0 gap-1 px-2 text-[10px] sm:h-7 sm:gap-1 sm:px-3.5 sm:text-[11px]">
+                    <Button type="submit" variant="hero" size="pill" class="h-5 shrink-0 gap-1 px-2 text-[9px] sm:h-7 sm:gap-1 sm:px-3.5 sm:text-[10px]">
                         <Sparkles class="h-3 w-3" />
                         Buscar
                     </Button>
                 </div>
-                <p class="mt-2 flex items-center justify-center gap-1 text-[11px] text-white/60">
-                    <Sparkles class="h-3 w-3" /> Búsqueda inteligente
-                </p>
             </form>
         </div>
     </section>
@@ -130,10 +107,10 @@ const jsonLd = [
                         Financia tu próximo seminuevo ahora
                     </h2>
                 </div>
-                <div class="grid min-w-0 grid-cols-2 gap-x-4 gap-y-2 text-xs font-semibold text-secondary-foreground/80 lg:flex lg:flex-1 lg:gap-x-6">
-                    <span v-for="text in ['+35 bancos y financieras', 'Desde 10% de enganche', 'Trámite 100% digital', 'Aprobación de 24 a 48 hrs']" :key="text" class="flex min-w-0 items-center gap-1.5">
-                        <span class="h-1 w-1 shrink-0 rounded-full bg-primary" />
-                        <span class="truncate">{{ text }}</span>
+                <div class="grid min-w-0 grid-cols-[repeat(2,minmax(0,1fr))] gap-x-6 gap-y-3 text-xs font-semibold text-secondary-foreground/80 lg:flex-1 lg:gap-x-8">
+                    <span v-for="text in ['+35 bancos y financieras', 'Desde 10% de enganche', 'Trámite 100% digital', 'Aprobación de 24 a 48 hrs']" :key="text" class="flex min-w-0 items-start gap-2">
+                        <span class="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-primary" />
+                        <span class="leading-snug">{{ text }}</span>
                     </span>
                 </div>
                 <Button variant="hero" class="w-full shrink-0 gap-2 lg:w-auto" @click="financiarOpen = true">
@@ -167,62 +144,19 @@ const jsonLd = [
         </div>
     </section>
 
-    <!-- 3b. Autos externos y buscador inteligente -->
-    <section v-if="props.externalCars.length || externalSearch.enabled.value" class="border-y border-border bg-muted/30 px-4 py-12 sm:px-6">
-        <div class="mx-auto max-w-7xl">
-            <div class="flex flex-wrap items-end justify-between gap-4">
-                <div>
-                    <p class="text-xs font-bold uppercase tracking-wider text-primary">Búsqueda inteligente</p>
-                    <h2 class="section-title mt-2 text-secondary">También encontramos autos en otras plataformas</h2>
-                </div>
-                <Button variant="outline" class="gap-2" @click="searchExternal">
-                    Buscar en otras plataformas
-                </Button>
-            </div>
-
-            <div v-if="props.externalCars.length" class="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-                <ExternalCarCard v-for="car in props.externalCars" :key="car.id" :car="car" @open="externalSearch.openExternal" />
-            </div>
-
-            <div class="mt-8">
-                <SearchTokensCard :status="externalSearch.status.value" :on-search="searchExternal" />
-            </div>
-        </div>
-    </section>
-
-    <!-- 4. Garantía teaser, Publica2Min, Beneficios y Marcas (paridad original) -->
-    <HomeSections />
-
-    <!-- 5. Compra y vende con Wecar: beneficios, paquetes y CTA -->
-    <HomeBuySellSection :plans="plans" />
+    <!-- 4. Garantía, beneficios, publica y planes, aliados -->
+    <HomeSections :plans="plans" />
 
     <!-- Modal global de financiamiento -->
     <FinanciarAutoDialog :open="financiarOpen" @close="financiarOpen = false" />
 
-    <ExternalSearchModal
-        :open="externalSearch.showModal.value"
-        :loading="externalSearch.loading.value"
-        :results="externalSearch.results.value"
-        :error="externalSearch.error.value"
-        :query="externalSearch.lastQuery.value"
-        @close="externalSearch.closeModal"
-        @open="externalSearch.openExternal"
-        @retry="searchExternal"
-    />
-
-    <ExternalSearchLimitModal
-        :open="externalSearch.showLimitModal.value"
-        :status="externalSearch.status.value"
-        @close="externalSearch.closeLimitModal"
-        @reward="externalSearch.closeLimitModal(); rewardOpen = true"
-    />
-
-    <ExternalAdModal
-        :open="Boolean(externalSearch.externalAd.value)"
-        :car="externalSearch.externalAd.value?.car ?? null"
-        :source-url="externalSearch.externalAd.value?.sourceUrl ?? null"
-        @close="externalSearch.closeExternalAd"
-    />
-
-    <SearchRewardAdDialog :open="rewardOpen" @close="rewardOpen = false" @reward="externalSearch.refreshStatus" />
 </template>
+
+<style scoped>
+@media (max-width: 639px) {
+    .hero-title {
+        font-size: clamp(1.25rem, 7vw, 1.875rem);
+        white-space: nowrap;
+    }
+}
+</style>

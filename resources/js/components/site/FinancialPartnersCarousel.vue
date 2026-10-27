@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { ref } from 'vue';
 import { cn } from '@/lib/utils';
 
 interface Partner {
@@ -31,75 +31,149 @@ const partners: Partner[] = [
     { name: 'CrediClub', logo: '/images/financial-partners/crediclub.png' },
 ];
 
-// Duplicamos para un marquee continuo sin saltos visuales
-const duplicatedPartners = computed(() => [...partners, ...partners, ...partners]);
 const isPaused = ref(false);
-const failedPartners = ref<Record<number, boolean>>({});
+const failedPartners = ref<Record<string, boolean>>({});
 </script>
 
 <template>
     <div
-        :class="cn('group relative w-full overflow-hidden', props.class)"
+        :class="cn('partners-viewport relative w-full overflow-hidden', props.class)"
         aria-label="Bancos y financieras participantes"
         @mouseenter="isPaused = true"
         @mouseleave="isPaused = false"
     >
-        <!-- Degradados en los bordes para suavizar la entrada/salida -->
-        <div
-            class="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r sm:w-16"
-            :class="inverse ? 'from-secondary to-transparent' : 'from-background to-transparent'"
-        />
-        <div
-            class="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l sm:w-16"
-            :class="inverse ? 'from-secondary to-transparent' : 'from-background to-transparent'"
-        />
-
-        <!-- Contenedor del marquee deslizante continuo -->
-        <div
-            class="flex w-max items-center gap-3 py-1 will-change-transform animate-partners-marquee"
-            :style="{ animationPlayState: isPaused ? 'paused' : 'running' }"
-        >
+        <div class="partners-track" :style="{ animationPlayState: isPaused ? 'paused' : 'running' }">
             <div
-                v-for="(partner, idx) in duplicatedPartners"
-                :key="`${partner.name}-${idx}`"
-                class="flex h-12 w-36 shrink-0 items-center justify-center rounded-xl border px-3 transition-transform hover:scale-[1.02] sm:h-14 sm:w-44"
-                :class="
-                    inverse
-                        ? 'border-white/15 bg-white/95 text-secondary shadow-sm backdrop-blur-xs'
-                        : 'border-border bg-card text-secondary shadow-soft'
-                "
+                v-for="groupIndex in 2"
+                :key="groupIndex"
+                class="partners-group"
+                :aria-hidden="groupIndex === 2 ? 'true' : undefined"
             >
-                <img
-                    v-if="!failedPartners[idx]"
-                    :src="partner.logo"
-                    :alt="partner.name"
-                    class="h-7 w-full object-contain sm:h-8"
-                    loading="lazy"
-                    @error="failedPartners[idx] = true"
-                />
-                <span v-else class="text-xs font-black text-secondary">{{ partner.name }}</span>
+                <div
+                    v-for="(partner, idx) in partners"
+                    :key="`${groupIndex}-${partner.name}-${idx}`"
+                    class="partner-slot"
+                >
+                    <div
+                        class="flex h-12 w-full items-center justify-center rounded-xl border px-3 transition-transform hover:scale-[1.02] sm:h-14"
+                        :class="
+                            inverse
+                                ? 'border-white/15 bg-white/95 text-secondary shadow-sm backdrop-blur-xs'
+                                : 'border-border bg-card text-secondary shadow-soft'
+                        "
+                    >
+                        <img
+                            v-if="!failedPartners[`${groupIndex}-${idx}`]"
+                            :src="partner.logo"
+                            :alt="partner.name"
+                            class="h-8 w-full object-contain sm:h-9"
+                            loading="lazy"
+                            @error="failedPartners[`${groupIndex}-${idx}`] = true"
+                        />
+                        <span v-else class="text-sm font-black text-secondary">{{ partner.name }}</span>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </template>
 
 <style scoped>
-@keyframes partners-marquee {
-    0% {
+.partners-viewport {
+    --visible: 2;
+    --gap: 0.75rem;
+    --card-width: calc(100cqw / var(--visible));
+    container-type: inline-size;
+}
+
+.partners-track {
+    display: flex;
+    width: calc(var(--card-width) * 20);
+    animation: partners-step 30s ease-in-out infinite;
+    will-change: transform;
+}
+
+.partners-group {
+    display: flex;
+}
+
+.partner-slot {
+    flex: 0 0 var(--card-width);
+    padding: 0 calc(var(--gap) / 2);
+}
+
+@keyframes partners-step {
+    0%,
+    8% {
         transform: translateX(0);
     }
+
+    10%,
+    18% {
+        transform: translateX(calc(var(--card-width) * -1));
+    }
+
+    20%,
+    28% {
+        transform: translateX(calc(var(--card-width) * -2));
+    }
+
+    30%,
+    38% {
+        transform: translateX(calc(var(--card-width) * -3));
+    }
+
+    40%,
+    48% {
+        transform: translateX(calc(var(--card-width) * -4));
+    }
+
+    50%,
+    58% {
+        transform: translateX(calc(var(--card-width) * -5));
+    }
+
+    60%,
+    68% {
+        transform: translateX(calc(var(--card-width) * -6));
+    }
+
+    70%,
+    78% {
+        transform: translateX(calc(var(--card-width) * -7));
+    }
+
+    80%,
+    88% {
+        transform: translateX(calc(var(--card-width) * -8));
+    }
+
+    90%,
+    98% {
+        transform: translateX(calc(var(--card-width) * -9));
+    }
+
     100% {
-        transform: translateX(calc(-100% / 3));
+        transform: translateX(calc(var(--card-width) * -10));
     }
 }
 
-.animate-partners-marquee {
-    animation: partners-marquee 24s linear infinite;
+@media (min-width: 640px) {
+    .partners-viewport {
+        --visible: 3;
+        --gap: 1rem;
+    }
 }
 
-@media (max-width: 640px) {
-    .animate-partners-marquee {
-        animation-duration: 18s;
+@media (min-width: 1024px) {
+    .partners-viewport {
+        --visible: 5;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .partners-track {
+        animation: none;
     }
 }
 </style>
