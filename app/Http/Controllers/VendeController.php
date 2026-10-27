@@ -45,10 +45,12 @@ class VendeController extends Controller
             'images.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:8192'],
         ]);
 
+        $isAdmin = $request->user()->hasAdminPrivileges();
+
         $agency = app(AgencyContext::class)->current($request);
         $agency = $agency && $request->user()->belongsToAgency($agency) ? $agency : null;
 
-        if ($agency && $agency->cars()->count() >= $agency->max_cars) {
+        if (! $isAdmin && $agency && $agency->cars()->count() >= $agency->max_cars) {
             throw ValidationException::withMessages([
                 'plan_key' => 'La agencia alcanzó su límite de autos. Actualiza el plan para publicar más.',
             ]);
@@ -64,7 +66,7 @@ class VendeController extends Controller
             ]);
         }
 
-        $requiresPayment = $plan !== null && (float) $plan->price > 0;
+        $requiresPayment = ! $isAdmin && $plan !== null && (float) $plan->price > 0;
         $status = CarStatus::query()->where('name', $requiresPayment ? 'pendiente' : 'en_venta')->first();
 
         $brand = CarBrand::query()->find($validated['brand_id']);
@@ -119,7 +121,7 @@ class VendeController extends Controller
 
         $subscription = null;
 
-        if ($plan) {
+        if ($plan && ! $isAdmin) {
             $subscription = Subscription::query()->create([
                 'user_id' => $request->user()->getKey(),
                 'kind' => 'publication',

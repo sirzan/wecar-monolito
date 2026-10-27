@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AiSearchController;
 use App\Http\Controllers\Auth\GoogleController;
+use App\Http\Controllers\CarPriceSuggestionController;
 use App\Http\Controllers\CarVersionController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\ContactController;
@@ -67,6 +68,8 @@ Route::get('/api/external-search/cached', [ExternalSearchController::class, 'cac
 Route::post('/api/external-search/resolve', [ExternalSearchController::class, 'resolve'])->middleware('throttle:30,1')->name('external-search.resolve');
 Route::post('/api/external-search', [ExternalSearchController::class, 'search'])->middleware('throttle:10,1')->name('external-search');
 Route::get('/api/car-versions', CarVersionController::class)->middleware('throttle:30,1')->name('car-versions');
+Route::get('/api/car-price-suggestions/comparables', [CarPriceSuggestionController::class, 'comparables'])->middleware('throttle:30,1')->name('price-suggestions.comparables');
+Route::get('/api/car-price-suggestions/market', [CarPriceSuggestionController::class, 'market'])->middleware('throttle:20,1')->name('price-suggestions.market');
 
 Route::get('/sitemap.xml', SitemapController::class)->name('sitemap');
 

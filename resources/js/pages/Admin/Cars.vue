@@ -67,6 +67,7 @@ const destroy = (car: AdminCar) => {
                 <h1 class="text-3xl font-semibold tracking-tight">Autos</h1>
                 <p class="mt-1 text-sm text-muted-foreground">{{ cars.total }} autos registrados.</p>
             </div>
+            <Button as="a" href="/vende">Publicar auto</Button>
         </div>
 
         <div class="mt-6 grid gap-3 rounded-2xl border border-border bg-card/50 p-4 md:grid-cols-[1fr_180px_140px_200px_auto]">

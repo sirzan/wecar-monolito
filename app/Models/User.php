@@ -48,6 +48,11 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasMany(Car::class, 'owner_id');
     }
 
+    public function hasAdminPrivileges(): bool
+    {
+        return $this->hasAnyRole(['superadmin', 'manager']);
+    }
+
     public function tokenWallet(): HasOne
     {
         return $this->hasOne(SearchTokenWallet::class, 'user_id');
