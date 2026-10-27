@@ -7,6 +7,7 @@ use App\Models\CarBrand;
 use App\Models\CarModel;
 use App\Models\CarStatus;
 use App\Models\CarVersion;
+use App\Services\CarCatalog\CarVersionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -22,9 +23,12 @@ class CatalogController extends Controller
     {
         abort_unless(in_array($resource, self::RESOURCES, true), 404);
 
+        $filters = $request->only(['brand_id', 'model_id']);
+
         return Inertia::render('Admin/Catalogs', [
             'resource' => $resource,
-            'items' => $this->items($resource),
+            'filters' => $filters,
+            'items' => $this->items($resource, $filters),
             'options' => [
                 'brands' => CarBrand::query()->orderBy('name')->get(['id', 'name']),
                 'models' => CarModel::query()->with('brand:id,name')->orderBy('name')->get(['id', 'brand_id', 'name']),
@@ -38,12 +42,16 @@ class CatalogController extends Controller
 
         $data = $this->validated($request, $resource);
 
-        match ($resource) {
+        $record = match ($resource) {
             'brands' => CarBrand::query()->create($data),
             'models' => CarModel::query()->create($data),
             'versions' => CarVersion::query()->create($data),
             'statuses' => CarStatus::query()->create($data),
         };
+
+        if ($record instanceof CarVersion) {
+            app(CarVersionService::class)->forgetCache($record->model_id, $record->year);
+        }
 
         return back()->with('success', 'Registro creado.');
     }
@@ -53,7 +61,17 @@ class CatalogController extends Controller
         abort_unless(in_array($resource, self::RESOURCES, true), 404);
 
         $model = $this->find($resource, $id);
+        $oldVersionData = $model instanceof CarVersion
+            ? ['model_id' => $model->model_id, 'year' => $model->year]
+            : null;
+
         $model->update($this->validated($request, $resource, $id));
+
+        if ($model instanceof CarVersion) {
+            $service = app(CarVersionService::class);
+            $service->forgetCache($oldVersionData['model_id'], $oldVersionData['year']);
+            $service->forgetCache($model->model_id, $model->year);
+        }
 
         return back()->with('success', 'Registro actualizado.');
     }
@@ -62,7 +80,13 @@ class CatalogController extends Controller
     {
         abort_unless(in_array($resource, self::RESOURCES, true), 404);
 
-        $this->find($resource, $id)->delete();
+        $model = $this->find($resource, $id);
+
+        if ($model instanceof CarVersion) {
+            app(CarVersionService::class)->forgetCache($model->model_id, $model->year);
+        }
+
+        $model->delete();
 
         return back()->with('success', 'Registro eliminado.');
     }
@@ -70,7 +94,7 @@ class CatalogController extends Controller
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function items(string $resource): array
+    private function items(string $resource, array $filters = []): array
     {
         return match ($resource) {
             'brands' => CarBrand::query()->withCount('models')->orderBy('name')->get()
@@ -90,7 +114,12 @@ class CatalogController extends Controller
                     'name' => $model->name,
                     'slug' => $model->slug,
                 ])->all(),
-            'versions' => CarVersion::query()->with('model.brand')->orderBy('name')->get()
+            'versions' => CarVersion::query()
+                ->with('model.brand')
+                ->when($filters['brand_id'] ?? null, fn ($query, string $brandId) => $query->whereHas('model', fn ($modelQuery) => $modelQuery->where('brand_id', $brandId)))
+                ->when($filters['model_id'] ?? null, fn ($query, string $modelId) => $query->where('model_id', $modelId))
+                ->orderBy('name')
+                ->get()
                 ->map(fn (CarVersion $version) => [
                     'id' => $version->getKey(),
                     'model_id' => $version->model_id,
@@ -134,7 +163,7 @@ class CatalogController extends Controller
             'versions' => $request->validate([
                 'model_id' => ['required', 'uuid', 'exists:car_models,id'],
                 'name' => ['required', 'string', 'max:160'],
-                'year' => ['nullable', 'string', 'max:20'],
+                'year' => ['required', 'string', 'max:60'],
             ]),
             'statuses' => tap($request->validate([
                 'name' => ['required', 'string', 'max:60', Rule::unique('car_statuses', 'name')->ignore($id)],

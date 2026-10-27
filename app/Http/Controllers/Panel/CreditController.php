@@ -31,6 +31,7 @@ class CreditController extends Controller
                 'down_payment' => (float) $application->down_payment,
                 'term_months' => $application->term_months,
                 'monthly_payment' => (float) $application->monthly_payment,
+                'service_fee' => (float) $application->service_fee,
                 'created_at' => $application->created_at?->toIso8601String(),
                 'documents' => $application->documents->map(fn (CreditDocument $document) => [
                     'slot' => $document->slot,

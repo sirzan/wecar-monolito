@@ -78,7 +78,9 @@ const props = defineProps<{
         url: string;
     };
     similar: CarCardData[];
-    seo: { title: string; description: string; canonical: string; image: string | null };
+    priceReference: { samples: number; min: number | null; p25: number | null; median: number | null; p75: number | null; max: number | null; confidence: string; scope: string };
+    financing: { min_rate: number; max_term: number; service_fee_rate: number };
+    seo: { title: string; description: string; canonical: string; image: string | null; images: string[]; noindex: boolean; robots: string; availability: string };
 }>();
 
 const images = computed(() => (props.car.gallery.length ? props.car.gallery : props.car.image ? [props.car.image] : []));
@@ -88,8 +90,13 @@ const fav = ref(false);
 const financiarOpen = ref(false);
 const showFullDescription = ref(false);
 
-const formatPrice = (value: number) =>
-    new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(value);
+const formatPrice = (value: number) => {
+    const amount = Number(value);
+
+    if (!Number.isFinite(amount)) return '—';
+
+    return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(amount);
+};
 
 const formatKm = (value: number) =>
     new Intl.NumberFormat('es-MX').format(value) + ' km';
@@ -97,7 +104,17 @@ const formatKm = (value: number) =>
 // Finance Calculator State
 const downPaymentPct = ref(20);
 const termMonths = ref(48);
-const annualInterestRate = ref(12.99);
+const effectiveMinRate = computed(() => {
+    const rate = Number(props.financing.min_rate);
+
+    return Number.isFinite(rate) && rate > 0 ? rate : 12.5;
+});
+const effectiveMaxTerm = computed(() => {
+    const term = Number(props.financing.max_term);
+
+    return Number.isFinite(term) && term >= 12 ? term : 72;
+});
+const annualInterestRate = ref(effectiveMinRate.value);
 
 const financedAmount = computed(() => {
     return Math.max(0, props.car.price * (1 - downPaymentPct.value / 100));
@@ -110,17 +127,25 @@ const calculatedMonthlyPayment = computed(() => {
     return Math.round((amount * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -termMonths.value)));
 });
 
-// Fast teaser calculation (72 months, standard rate)
+// Fast teaser calculation using the lowest active financing rate.
 const teaserMonthly = computed(() => {
-    const financed = props.car.price * 0.8;
-    const rate = 0.172 / 12;
-    return Math.round((financed * rate) / (1 - Math.pow(1 + rate, -72)));
+    const price = Number(props.car.price);
+    const rate = effectiveMinRate.value / 100 / 12;
+    const term = Math.min(72, effectiveMaxTerm.value);
+
+    if (!Number.isFinite(price) || price <= 0 || rate <= 0 || term <= 0) {
+        return 0;
+    }
+
+    const financed = price * 0.8;
+
+    return Math.round((financed * rate) / (1 - Math.pow(1 + rate, -term)));
 });
 
-// Reference price distribution
-const refMin = computed(() => Math.round(props.car.price * 0.86));
-const refAvg = computed(() => Math.round(props.car.price * 1.02));
-const refMax = computed(() => Math.round(props.car.price * 1.18));
+// Reference price distribution from real WeCar comparables.
+const refMin = computed(() => props.priceReference.p25 ?? Math.round(props.car.price * 0.86));
+const refAvg = computed(() => props.priceReference.median ?? Math.round(props.car.price * 1.02));
+const refMax = computed(() => props.priceReference.p75 ?? Math.round(props.car.price * 1.18));
 const bars = [0.45, 0.6, 0.78, 0.92, 1.0, 0.88, 0.72, 0.6, 0.5];
 const highlightedBar = 4;
 
@@ -133,7 +158,7 @@ const productSpecs = computed(() => [
     { icon: DoorOpen, label: 'Puertas', value: '4' },
     { icon: Gauge, label: 'Kilometraje', value: formatKm(props.car.km) },
     { icon: Snowflake, label: 'Aire', value: 'Acondicionado' },
-    { icon: Tag, label: 'Versión', value: props.car.version || 'Advance' },
+    { icon: Tag, label: 'Versión', value: props.car.version || 'No especificada' },
     { icon: Palette, label: 'Color', value: props.car.color || 'Plata' },
 ]);
 
@@ -197,34 +222,58 @@ const whatsappUrl = computed(() => {
     return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
 });
 
+const siteOrigin = computed(() => {
+    try {
+        return new URL(props.seo.canonical).origin;
+    } catch {
+        return '';
+    }
+});
+
 const jsonLd = computed(() => [
     {
         '@context': 'https://schema.org',
         '@type': 'Vehicle',
+        '@id': `${props.seo.canonical}#vehicle`,
+        url: props.seo.canonical,
+        sku: props.car.slug,
         name: props.car.title,
-        brand: props.car.brand,
+        brand: props.car.brand ? { '@type': 'Brand', name: props.car.brand } : undefined,
         model: props.car.model,
+        vehicleConfiguration: props.car.version,
         vehicleModelDate: props.car.year,
         mileageFromOdometer: { '@type': 'QuantitativeValue', value: props.car.km, unitCode: 'KMT' },
         bodyType: props.car.body,
         fuelType: props.car.fuel,
         vehicleTransmission: props.car.transmission,
         color: props.car.color,
-        image: images.value,
+        image: props.seo.images.length ? props.seo.images : images.value,
+        itemCondition: 'https://schema.org/UsedCondition',
         offers: {
             '@type': 'Offer',
             price: props.car.price,
             priceCurrency: 'MXN',
-            availability: props.car.status === 'vendido' ? 'https://schema.org/SoldOut' : 'https://schema.org/InStock',
+            availability: props.seo.availability,
             url: props.seo.canonical,
+            seller: props.car.agency
+                ? {
+                      '@type': 'Organization',
+                      name: props.car.agency.name,
+                      url: `${siteOrigin.value}/agencia/${props.car.agency.slug}`,
+                  }
+                : {
+                      '@type': 'Organization',
+                      name: 'Wecar',
+                      url: siteOrigin.value,
+                  },
         },
     },
     {
         '@context': 'https://schema.org',
         '@type': 'BreadcrumbList',
         itemListElement: [
-            { '@type': 'ListItem', position: 1, name: 'Inicio', item: '/' },
-            { '@type': 'ListItem', position: 2, name: 'Comprar', item: '/comprar' },
+            { '@type': 'ListItem', position: 1, name: 'Inicio', item: `${siteOrigin.value}/` },
+            { '@type': 'ListItem', position: 2, name: 'Comprar', item: `${siteOrigin.value}/comprar` },
             { '@type': 'ListItem', position: 3, name: props.car.title, item: props.seo.canonical },
         ],
     },
@@ -232,7 +281,19 @@ const jsonLd = computed(() => [
 </script>
 
 <template>
-    <SeoHead :title="seo.title" :description="seo.description" :canonical="seo.canonical" :image="seo.image" type="product" />
+    <SeoHead
+        :title="seo.title"
+        :description="seo.description"
+        :canonical="seo.canonical"
+        :image="seo.image"
+        :image-alt="car.title"
+        type="product"
+        :noindex="seo.noindex"
+        :robots="seo.robots"
+        :price="car.price"
+        currency="MXN"
+        :availability="seo.availability"
+    />
     <component :is="'script'" type="application/ld+json" v-text="JSON.stringify(jsonLd)" />
 
     <section class="mx-auto max-w-7xl px-4 py-6 sm:px-6 pb-24 lg:pb-12">
@@ -433,7 +494,7 @@ const jsonLd = computed(() => [
                             <span class="text-xs font-bold text-muted-foreground">/mes</span>
                         </p>
                         <p class="mt-0.5 text-[11px] text-muted-foreground">
-                            Calculado a 72 meses con 20% de enganche · Tasa referencial 17.2%
+                            Calculado con 20% de enganche · Tasa desde {{ effectiveMinRate }}% anual
                         </p>
                         <button
                             type="button"
@@ -527,7 +588,7 @@ const jsonLd = computed(() => [
                 <!-- Precio de referencia (histograma) -->
                 <div class="rounded-3xl border border-border bg-card p-6 shadow-soft">
                     <h3 class="font-black text-secondary text-base">Precio de referencia de mercado</h3>
-                    <p class="text-xs text-muted-foreground mt-0.5">Basado en tendencias de ventas en México</p>
+                    <p class="text-xs text-muted-foreground mt-0.5">Basado en autos similares publicados en WeCar</p>
 
                     <div class="relative mt-6 h-28 flex items-end justify-between gap-1.5">
                         <div
@@ -695,6 +756,7 @@ const jsonLd = computed(() => [
                 price: car.price,
                 km: car.km,
                 title: car.title,
+                condition: car.status_label === 'Nuevo' ? 'new' : 'used',
             }"
             :initial="{
                 downPayment: downPaymentPct,

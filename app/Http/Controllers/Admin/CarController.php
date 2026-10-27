@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Agency;
 use App\Models\Car;
+use App\Models\CarBrand;
 use App\Models\CarStatus;
+use App\Models\Plan;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -13,6 +15,26 @@ use Inertia\Response;
 
 class CarController extends Controller
 {
+    public function create(): Response
+    {
+        return Inertia::render('Public/Vende', [
+            'adminMode' => true,
+            'brands' => CarBrand::query()->with('models:id,brand_id,name')->orderBy('name')->get(['id', 'name', 'slug']),
+            'plans' => Plan::query()->where('is_active', true)->where('type', 'publication')->orderBy('sort_order')->get(),
+            'filters' => [
+                'bodies' => ['Sedán', 'SUV', 'Hatchback', 'Pickup', 'Coupé', 'Van'],
+                'transmissions' => ['Automática', 'Manual', 'CVT'],
+                'fuels' => ['Gasolina', 'Diésel', 'Híbrido', 'Eléctrico'],
+                'colors' => ['Blanco', 'Negro', 'Gris', 'Plata', 'Rojo', 'Azul', 'Verde'],
+            ],
+            'seo' => [
+                'title' => 'Publicar auto — Admin Wecar',
+                'description' => 'Publica un auto desde el panel administrativo.',
+                'canonical' => route('admin.cars'),
+            ],
+        ]);
+    }
+
     public function index(Request $request): Response
     {
         $filters = $request->only(['q', 'status', 'featured', 'agency_id']);

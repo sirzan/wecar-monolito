@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['key_name', 'type', 'name', 'price', 'duration', 'duration_weeks', 'max_cars', 'token_amount', 'highlight', 'features', 'sort_order', 'is_active'])]
+#[Fillable(['key_name', 'type', 'audience', 'name', 'price', 'duration', 'duration_weeks', 'max_cars', 'token_amount', 'highlight', 'features', 'sort_order', 'is_active'])]
 class Plan extends Model
 {
     use HasUuids;
@@ -28,6 +28,11 @@ class Plan extends Model
         return $this->hasMany(Subscription::class);
     }
 
+    public function agencies(): HasMany
+    {
+        return $this->hasMany(Agency::class);
+    }
+
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);
@@ -46,6 +51,26 @@ class Plan extends Model
     public function isTokens(): bool
     {
         return $this->type === 'tokens';
+    }
+
+    public function isForUser(): bool
+    {
+        return in_array($this->audience, ['user', 'both'], true);
+    }
+
+    public function isForAgency(): bool
+    {
+        return in_array($this->audience, ['agency', 'both'], true);
+    }
+
+    public function scopeForUsers($query)
+    {
+        return $query->whereIn('audience', ['user', 'both']);
+    }
+
+    public function scopeForAgencies($query)
+    {
+        return $query->whereIn('audience', ['agency', 'both']);
     }
 
     public function getRouteKeyName(): string

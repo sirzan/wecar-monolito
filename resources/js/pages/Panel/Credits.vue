@@ -39,6 +39,7 @@ interface Application {
     down_payment: number;
     term_months: number | null;
     monthly_payment: number;
+    service_fee?: number | null;
     rate?: number | null;
     cat?: number | null;
     total_to_pay?: number | null;
@@ -100,14 +101,14 @@ const loadUserDocuments = async () => {
         const res = await fetch('/api/credito/documentos');
         if (res.ok) {
             const data = await res.json();
-            const savedList = data.saved || [];
-            const urls = data.urls || {};
+            const documents = (data.documents ?? []) as { slot: string; name: string | null; available: boolean }[];
+
             for (const item of docSlots) {
-                const isSaved = savedList.includes(item.slot);
+                const document = documents.find((doc) => doc.slot === item.slot);
                 savedDocs.value[item.slot] = {
-                    saved: isSaved,
-                    name: isSaved ? `${item.label}.pdf` : null,
-                    url: urls[item.slot] || null,
+                    saved: Boolean(document?.available),
+                    name: document?.name ?? null,
+                    url: null,
                 };
             }
         }

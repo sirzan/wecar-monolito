@@ -9,6 +9,7 @@ const props = defineProps<{ open: boolean; status: ExternalSearchStatus | null }
 const emit = defineEmits<{ close: []; reward: [] }>();
 
 const subscribed = computed(() => props.status?.subscribed ?? false);
+const unlimited = computed(() => props.status?.unlimited ?? false);
 const balance = computed(() => props.status?.token_balance ?? 0);
 const hasCoupon = computed(() => props.status?.has_coupon ?? false);
 const price = 499;
@@ -29,14 +30,18 @@ const tokenPackages = [
                     </div>
                     <h2 class="mt-4 text-xl font-black text-secondary">Obtén más búsquedas</h2>
                     <p class="mt-2 text-sm text-muted-foreground">
-                        Usaste tus búsquedas o vistas gratuitas de hoy. Compra tokens o activa la membresía para continuar.
+                        {{ unlimited ? 'Tu cuenta tiene acceso ilimitado a búsquedas y anuncios externos.' : 'Usaste tus búsquedas o vistas gratuitas de hoy. Compra tokens o activa la membresía para continuar.' }}
                     </p>
                     <p v-if="subscribed" class="mt-2 text-xs font-bold text-emerald-600">Tu membresía está activa.</p>
                     <p v-else class="mt-2 text-xs font-semibold text-secondary">Saldo actual: {{ balance }} tokens</p>
                     <p v-if="hasCoupon" class="mt-1 text-xs font-bold text-primary">Cupón TKNS50 disponible: 50% en tokens.</p>
                 </div>
 
-                <div class="mt-5 rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/5 via-card to-accent/20 p-4">
+                <div v-if="unlimited" class="mt-5 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-center text-sm font-bold text-emerald-700">
+                    No necesitas tokens ni membresía. Puedes buscar y abrir anuncios sin límite.
+                </div>
+
+                <div v-if="!unlimited" class="mt-5 rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/5 via-card to-accent/20 p-4">
                     <div class="flex items-center justify-between border-b border-border/60 pb-3">
                         <div>
                             <p class="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Membresía</p>
@@ -53,7 +58,7 @@ const tokenPackages = [
                     </ul>
                 </div>
 
-                <div class="mt-4 grid grid-cols-2 gap-2">
+                <div v-if="!unlimited" class="mt-4 grid grid-cols-2 gap-2">
                     <Link
                         v-for="pack in tokenPackages"
                         :key="pack.key"
@@ -69,10 +74,10 @@ const tokenPackages = [
                 </div>
 
                 <div class="mt-4 space-y-2">
-                    <Button variant="outline" class="w-full gap-2" @click="emit('reward')">
+                    <Button v-if="!unlimited" variant="outline" class="w-full gap-2" @click="emit('reward')">
                         <PlayCircle class="h-4 w-4" /> Ver anuncio y recibir 1 token gratis
                     </Button>
-                    <Button as="a" href="/panel/membresia" variant="hero" class="w-full gap-2" @click="emit('close')">
+                    <Button v-if="!unlimited" as="a" href="/panel/membresia" variant="hero" class="w-full gap-2" @click="emit('close')">
                         <Sparkles class="h-4 w-4" /> Obtener membresía por ${{ price }} MXN
                     </Button>
                     <Button variant="ghost" class="w-full text-xs" @click="emit('close')">Continuar viendo el catálogo</Button>

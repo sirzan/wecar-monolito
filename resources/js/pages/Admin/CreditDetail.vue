@@ -21,7 +21,7 @@ const props = defineProps<{
         address: { calle: string | null; colonia: string | null; cp: string | null; alcaldia: string | null; ciudad: string | null; pais: string | null };
         employment: { ocupacion: string | null; empresa: string | null; antiguedad: string | null; ingreso_mensual: number; deuda_mensual: number; banco: string | null; tipo_cuenta: string | null };
         vehicle: { brand: string | null; model: string | null; version: string | null; year: number | null; price: number; km: number | null };
-        credit: { financiera: string | null; score: number | null; risk_level: string | null; down_payment: number; term_months: number | null; monthly_payment: number; rate: number; cat: number; total_to_pay: number };
+        credit: { financiera: string | null; score: number | null; risk_level: string | null; down_payment: number; term_months: number | null; monthly_payment: number; rate: number; cat: number; total_to_pay: number; service_fee: number; financiera_id: string | null; car_id: string | null };
         documents: { slot: string; name: string | null; url: string }[];
         created_at: string | null;
         submitted_at: string | null;
@@ -92,6 +92,7 @@ const formatPrice = (value: number) =>
                         <div><dt class="text-xs text-muted-foreground">Plazo</dt><dd>{{ application.credit.term_months ?? '—' }} meses</dd></div>
                         <div><dt class="text-xs text-muted-foreground">Mensualidad</dt><dd>{{ formatPrice(application.credit.monthly_payment) }}</dd></div>
                         <div><dt class="text-xs text-muted-foreground">Tasa / CAT</dt><dd>{{ application.credit.rate }}% / {{ application.credit.cat }}%</dd></div>
+                        <div><dt class="text-xs text-muted-foreground">Cargo por servicio</dt><dd>{{ formatPrice(application.credit.service_fee) }}</dd></div>
                         <div><dt class="text-xs text-muted-foreground">Total a pagar</dt><dd>{{ formatPrice(application.credit.total_to_pay) }}</dd></div>
                     </dl>
                 </section>

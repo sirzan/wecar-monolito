@@ -44,6 +44,8 @@ export function useExternalSearch() {
 
     const enabled = computed(() => status.value?.enabled ?? false);
     const subscribed = computed(() => status.value?.subscribed ?? false);
+    const unlimited = computed(() => status.value?.unlimited ?? false);
+    const isAdmin = computed(() => status.value?.is_admin ?? false);
     const tokenBalance = computed(() => status.value?.token_balance ?? 0);
     const hasCoupon = computed(() => status.value?.has_coupon ?? false);
     const remainingSearches = computed(() => status.value?.searches.remaining ?? 0);
@@ -174,6 +176,8 @@ export function useExternalSearch() {
         externalAd,
         enabled,
         subscribed,
+        unlimited,
+        isAdmin,
         tokenBalance,
         hasCoupon,
         remainingSearches,

@@ -2,95 +2,154 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\DiditException;
 use App\Models\Profile;
+use App\Services\DiditService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class DiditController extends Controller
 {
+    public function __construct(private readonly DiditService $didit) {}
+
     public function createSession(Request $request): JsonResponse
     {
-        $apiKey = config('services.didit.api_key');
-        $workflowId = config('services.didit.workflow_id');
-
-        if (! $apiKey || ! $workflowId) {
+        if (! $this->didit->configured()) {
             return response()->json(['error' => 'Didit no está configurado.'], 422);
         }
 
-        $apiUrl = rtrim((string) config('services.didit.api_url'), '/');
+        $status = $request->user()->profile?->didit_status;
 
-        $response = Http::withHeaders([
-            'x-api-key' => $apiKey,
-            'accept' => 'application/json',
-        ])->post($apiUrl.'/v2/session/', [
-            'workflow_id' => $workflowId,
-            'vendor_data' => $request->user()->getKey(),
-            'callback' => route('panel.dashboard'),
-        ]);
-
-        if ($response->failed()) {
-            report(new \RuntimeException('Didit session failed: '.$response->body()));
-
-            return response()->json(['error' => 'No se pudo iniciar la verificación.'], 502);
+        if ($status === 'approved') {
+            return response()->json(['error' => 'Tu identidad ya está verificada.'], 409);
         }
 
-        $session = $response->json();
+        if ($status === 'in_review') {
+            return response()->json(['error' => 'Tu verificación está en revisión.'], 409);
+        }
 
-        Profile::query()->updateOrCreate(
-            ['user_id' => $request->user()->getKey()],
-            [
-                'full_name' => $request->user()->name,
-                'didit_session_id' => $session['session_id'] ?? null,
-                'didit_status' => 'pending',
-            ],
-        );
+        try {
+            $session = $this->didit->createSession($request->user());
 
-        return response()->json([
-            'url' => $session['url'] ?? null,
-            'session_id' => $session['session_id'] ?? null,
-        ]);
+            return response()->json($session);
+        } catch (DiditException $exception) {
+            Log::error('Didit session failed', [
+                'user_id' => $request->user()->getKey(),
+                'status' => $exception->statusCode,
+                'message' => $exception->diditMessage,
+                'context' => $exception->context,
+            ]);
+
+            $message = match (true) {
+                in_array($exception->statusCode, [401, 403], true) => 'La verificación no está disponible en este momento. Contacta a soporte.',
+                $exception->statusCode === 400 => 'No se pudo iniciar la verificación. Revisa la configuración del flujo de identidad.',
+                $exception->statusCode === 429 => 'Demasiados intentos de verificación. Intenta de nuevo en unos minutos.',
+                default => 'No se pudo iniciar la verificación de identidad.',
+            };
+
+            return response()->json(['error' => $message], $exception->statusCode === 429 ? 429 : 502);
+        } catch (\Throwable $exception) {
+            Log::error('Didit session request crashed', [
+                'user_id' => $request->user()->getKey(),
+                'message' => $exception->getMessage(),
+            ]);
+
+            return response()->json(['error' => 'No se pudo iniciar la verificación de identidad.'], 502);
+        }
+    }
+
+    public function callback(Request $request): RedirectResponse
+    {
+        $sessionId = (string) ($request->query('verificationSessionId') ?? $request->query('session_id') ?? '');
+        $profile = $request->user()->profile;
+
+        if (! $profile || $sessionId === '' || ! hash_equals((string) $profile->didit_session_id, $sessionId)) {
+            return redirect()
+                ->route('panel.dashboard')
+                ->with('error', 'No pudimos identificar tu sesión de verificación.');
+        }
+
+        $decision = $this->didit->fetchDecision($sessionId);
+
+        if ($decision) {
+            $this->didit->applyDecision($profile, $decision);
+            $profile->refresh();
+        }
+
+        $message = match ($profile->didit_status) {
+            'approved' => 'Tu identidad fue verificada correctamente.',
+            'in_review' => 'Tu verificación está en revisión. Te avisaremos cuando termine.',
+            'declined' => 'No pudimos verificar tu identidad. Puedes intentarlo de nuevo.',
+            'expired' => 'Tu sesión de verificación expiró. Puedes iniciar una nueva.',
+            default => 'Estamos confirmando tu verificación. Actualiza la página en unos momentos.',
+        };
+
+        $flashType = in_array($profile->didit_status, ['declined', 'expired'], true) ? 'error' : 'success';
+
+        return redirect()
+            ->route('panel.dashboard')
+            ->with($flashType, $message);
     }
 
     public function webhook(Request $request): JsonResponse
     {
-        $secret = (string) config('services.didit.shared_secret');
-
-        if ($secret === '') {
+        if (! $this->didit->webhookConfigured()) {
             return response()->json(['error' => 'Didit webhook no configurado.'], 500);
         }
 
-        $payload = $request->getContent();
-        $signature = (string) ($request->header('x-signature') ?? $request->header('x-webhook-signature'));
-        $signature = preg_replace('/^sha256=/', '', $signature) ?? '';
+        $payload = $this->didit->verifyWebhook($request);
 
-        $expected = hash_hmac('sha256', $payload, $secret);
+        if (! $payload) {
+            Log::warning('Didit webhook rejected', [
+                'ip' => $request->ip(),
+                'has_signature' => $request->hasHeader('X-Signature')
+                    || $request->hasHeader('X-Signature-V2')
+                    || $request->hasHeader('X-Signature-Simple'),
+            ]);
 
-        if (! hash_equals($expected, $signature)) {
             return response()->json(['error' => 'Firma inválida.'], 401);
         }
 
-        $data = json_decode($payload, true);
+        $webhookType = (string) ($payload['webhook_type'] ?? 'status.updated');
 
-        if (! is_array($data) || empty($data['session_id']) || empty($data['status'])) {
+        if (! in_array($webhookType, ['status.updated', 'data.updated'], true)) {
+            return response()->json(['success' => true, 'ignored' => true]);
+        }
+
+        $sessionId = (string) ($payload['session_id'] ?? '');
+        $status = (string) ($payload['status'] ?? data_get($payload, 'decision.status', ''));
+
+        if ($sessionId === '' || $status === '') {
             return response()->json(['error' => 'Payload inválido.'], 400);
         }
 
-        $profile = Profile::query()
-            ->where('didit_session_id', $data['session_id'])
-            ->first();
+        $profile = Profile::query()->where('didit_session_id', $sessionId)->first();
 
         if (! $profile) {
-            return response()->json(['error' => 'Sesión no encontrada.'], 404);
+            $vendorData = (string) ($payload['vendor_data'] ?? '');
+
+            if ($vendorData !== '') {
+                $profile = Profile::query()->where('user_id', $vendorData)->first();
+
+                if ($profile) {
+                    $profile->update(['didit_session_id' => $sessionId]);
+                }
+            }
         }
 
-        $status = strtolower((string) $data['status']);
+        if (! $profile) {
+            Log::warning('Didit webhook profile not found', [
+                'session_id' => $sessionId,
+                'vendor_data' => $payload['vendor_data'] ?? null,
+            ]);
 
-        $profile->update([
-            'didit_status' => $status,
-            'didit_verified_at' => $status === 'approved' ? now() : null,
-        ]);
+            return response()->json(['success' => true, 'ignored' => true]);
+        }
 
-        return response()->json(['success' => true]);
+        $updated = $this->didit->applyDecision($profile, $payload);
+
+        return response()->json(['success' => true, 'updated' => $updated]);
     }
 }

@@ -24,6 +24,8 @@ export interface ExternalPlatform {
 export interface ExternalSearchStatus {
     enabled: boolean;
     subscribed: boolean;
+    unlimited: boolean;
+    is_admin: boolean;
     membership_ends_at: string | null;
     token_balance: number;
     searches: { used: number; remaining: number; limit: number };

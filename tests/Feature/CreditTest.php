@@ -95,7 +95,16 @@ it('evaluates credit through api with deterministic fallback when no openai key'
             'resumenEjecutivo',
             'recomendaciones',
             'opcionesRecomendadas',
+            'opcionesPrendarias',
         ]);
+
+    $data = $response->json();
+
+    expect($data['opcionesRecomendadas'])->not->toBeEmpty()
+        ->and($data['opcionesRecomendadas'][0]['mensualidad'])->toBeNumeric()
+        ->and($data['opcionesRecomendadas'][0]['mensualidad'])->toBeGreaterThan(0)
+        ->and($data['opcionesRecomendadas'][0]['tasa'])->toBeNumeric()
+        ->and($data['opcionesRecomendadas'][0]['mensualidadEstimada'])->toBe($data['opcionesRecomendadas'][0]['mensualidad']);
 });
 
 it('validates document uploads strictly allowing only pdf up to 5mb', function () {
@@ -129,6 +138,7 @@ it('submits a credit application with files and notifies by email', function () 
     $this->seed();
 
     $user = User::factory()->create(['email_verified_at' => now()]);
+    $financiera = Financiera::query()->where('slug', 'bbva')->firstOrFail();
 
     $payload = [
         'full_name' => 'Juan Pérez Gómez',
@@ -156,15 +166,21 @@ it('submits a credit application with files and notifies by email', function () 
         'car_year' => 2023,
         'car_price' => 380000,
         'car_km' => 25000,
+        'financiera_id' => $financiera->getKey(),
         'financiera_name' => 'BBVA Auto',
-        'score' => 740,
+        'car_condition' => 'used',
+        'bureau' => 'excelente',
+        'employment' => 'fijo',
+        'tenure' => 4,
+        'age' => 32,
+        'score' => 999,
         'risk_level' => 'bajo',
         'down_payment' => 80000,
         'term_months' => 48,
-        'monthly_payment' => 8200,
-        'rate' => 12.99,
-        'cat' => 20.0,
-        'total_to_pay' => 473600,
+        'monthly_payment' => 1,
+        'rate' => 1,
+        'cat' => 1,
+        'total_to_pay' => 1,
         'ine' => UploadedFile::fake()->create('ine.pdf', 500, 'application/pdf'),
         'domicilio' => UploadedFile::fake()->create('domicilio.pdf', 500, 'application/pdf'),
         'estado_cuenta' => UploadedFile::fake()->create('ingresos.pdf', 500, 'application/pdf'),
@@ -183,7 +199,11 @@ it('submits a credit application with files and notifies by email', function () 
     $application = CreditApplication::where('email', 'juan.perez@example.com')->first();
     expect($application)->not->toBeNull()
         ->and($application->status)->toBe('en_revision')
-        ->and($application->documents)->toHaveCount(3);
+        ->and($application->documents)->toHaveCount(3)
+        ->and($application->financiera_id)->toBe($financiera->getKey())
+        ->and($application->service_fee)->toBeGreaterThan(0)
+        ->and($application->score)->not->toBe(999)
+        ->and((float) $application->rate)->toBeGreaterThan(1);
 
     Mail::assertQueued(CreditApplicationReceived::class);
     Mail::assertQueued(CreditApplicationSubmitted::class);

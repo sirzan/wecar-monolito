@@ -22,7 +22,7 @@ class CreditEvaluationService
      */
     public function evaluate(array $auto, array $profile): array
     {
-        $cacheKey = 'credit-evaluation:'.md5(json_encode([$auto, $profile]));
+        $cacheKey = 'credit-evaluation:v2:'.md5(json_encode([$auto, $profile]));
 
         return Cache::remember($cacheKey, 3600, function () use ($auto, $profile) {
             $financieras = Financiera::query()
@@ -34,33 +34,49 @@ class CreditEvaluationService
                 $financieras = $this->fallbackFinancieras();
             }
 
+            $input = $this->input($auto, $profile);
+            $scoring = $this->scoring->calculate($input);
+            $allOffers = $this->offers->generate($input, $scoring['score'], $financieras);
+
+            $purchaseOffers = collect($allOffers)
+                ->reject(fn (array $offer) => ($offer['tipo'] ?? null) === 'prendaria')
+                ->values();
+
+            $pawnOffers = collect($allOffers)
+                ->filter(fn (array $offer) => ($offer['tipo'] ?? null) === 'prendaria')
+                ->values();
+
+            $result = $this->result($auto, $profile, $input, $scoring, $purchaseOffers, $pawnOffers);
+
             $apiKey = config('services.openai.key');
 
             if ($apiKey) {
                 try {
-                    $ai = $this->evaluateWithOpenAi($auto, $profile, $financieras, (string) $apiKey);
+                    $narrative = $this->narrativeWithOpenAi($auto, $profile, $purchaseOffers, (string) $apiKey);
 
-                    if ($ai !== null) {
-                        return $ai;
+                    if ($narrative !== null) {
+                        $result['resumenEjecutivo'] = $narrative['resumenEjecutivo'];
+                        $result['recomendaciones'] = $narrative['recomendaciones'];
                     }
                 } catch (\Throwable $exception) {
                     report($exception);
                 }
             }
 
-            return $this->fallbackEvaluation($auto, $profile, $financieras);
+            return $result;
         });
     }
 
     /**
      * @param  array<string, mixed>  $auto
      * @param  array<string, mixed>  $profile
-     * @param  Collection<int, Financiera>  $financieras
      * @return array<string, mixed>
      */
-    private function fallbackEvaluation(array $auto, array $profile, Collection $financieras): array
+    private function input(array $auto, array $profile): array
     {
-        $input = [
+        $type = (string) ($auto['tipo'] ?? 'seminuevo');
+
+        return [
             'ingreso' => (float) ($profile['ingresoMensual'] ?? 0),
             'edad' => (int) ($profile['edad'] ?? 0),
             'antiguedad' => (float) ($profile['antiguedadLaboralAnios'] ?? 0),
@@ -71,26 +87,38 @@ class CreditEvaluationService
             'enganche' => (float) ($profile['enganche'] ?? 0),
             'plazo' => (int) ($profile['plazoMeses'] ?? 48),
             'car_year' => (int) ($auto['anio'] ?? now()->year - 3),
+            'brand' => (string) ($auto['marca'] ?? ''),
+            'vehicle_condition' => $type === 'nuevo' ? 'new' : 'used',
         ];
+    }
 
-        $scoring = $this->scoring->calculate($input);
+    /**
+     * @param  array<string, mixed>  $auto
+     * @param  array<string, mixed>  $profile
+     * @param  array<string, mixed>  $input
+     * @param  array{score: int, dti: float, monthly_payment: float}  $scoring
+     * @param  Collection<int, array<string, mixed>>  $purchaseOffers
+     * @param  Collection<int, array<string, mixed>>  $pawnOffers
+     * @return array<string, mixed>
+     */
+    private function result(
+        array $auto,
+        array $profile,
+        array $input,
+        array $scoring,
+        Collection $purchaseOffers,
+        Collection $pawnOffers,
+    ): array {
         $score = $scoring['score'];
         $dti = $scoring['dti'] * 100;
         $risk = $this->scoring->riskLevel($score, $scoring['dti']);
-        $offers = $this->offers->generate($input, $score, $financieras);
         $downPct = $input['precio'] > 0 ? ($input['enganche'] / $input['precio']) * 100 : 0;
-
-        $recommendations = [
-            $downPct < 20
-                ? 'Aumentar tu enganche al 20% reducirá tu mensualidad y mejorará la tasa ofrecida.'
-                : 'Mantén tu comprobación de ingresos al día con estados de cuenta en PDF.',
-            'Evita solicitar múltiples créditos en la misma semana para no afectar tu score en Buró.',
-            'Elige un plazo de 48 a 60 meses para balancear el costo total con una mensualidad cómoda.',
-        ];
+        $brand = $auto['marca'] ?? '';
+        $model = $auto['modelo'] ?? '';
 
         $summary = match ($risk) {
-            'bajo' => 'Excelente perfil financiero. Tienes alta probabilidad de aprobación con tasas preferenciales.',
-            'medio' => 'Perfil viable. Calificas para el crédito, aunque algunas opciones solicitarán comprobantes adicionales o mayor enganche.',
+            'bajo' => 'Excelente perfil financiero. Tienes alta probabilidad de aprobación para este '.$brand.' '.$model.' con tasas preferenciales.',
+            'medio' => 'Perfil viable. Calificas para el crédito de este '.$brand.' '.$model.', aunque algunas opciones solicitarán comprobantes adicionales o mayor enganche.',
             default => 'Perfil con observaciones. Te recomendamos aumentar el enganche o extender el plazo para reducir tu compromiso mensual.',
         };
 
@@ -100,32 +128,73 @@ class CreditEvaluationService
             'capacidadPagoMensualMaxima' => (int) max(0, round(($input['ingreso'] * 0.35) - $input['deudas'])),
             'dtiCalculadoPct' => round($dti, 1),
             'resumenEjecutivo' => $summary,
-            'recomendaciones' => $recommendations,
-            'opcionesRecomendadas' => $this->mapOffers($offers, $input['empleo']),
+            'recomendaciones' => [
+                $downPct < 20
+                    ? 'Aumentar tu enganche al 20% reducirá tu mensualidad y mejorará la tasa ofrecida.'
+                    : 'Mantén tu comprobación de ingresos al día con estados de cuenta en PDF.',
+                'Evita solicitar múltiples créditos en la misma semana para no afectar tu score en Buró.',
+                'Elige un plazo de 48 a 60 meses para balancear el costo total con una mensualidad cómoda.',
+            ],
+            'opcionesRecomendadas' => $this->mapOffers($purchaseOffers),
+            'opcionesPrendarias' => $this->mapOffers($pawnOffers),
         ];
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $offers
+     * @return array<int, array<string, mixed>>
+     */
+    private function mapOffers(Collection $offers): array
+    {
+        return $offers->map(fn (array $offer) => [
+            'id' => $offer['id'],
+            'slug' => $offer['slug'],
+            'nombre' => $offer['nombre'],
+            'tipo' => $offer['tipo'],
+            'logo' => $offer['logo'],
+            'color' => $offer['color'],
+            'tasa_min' => $offer['tasa_min'],
+            'tasa_max' => $offer['tasa_max'],
+            'cat_min' => $offer['cat_min'],
+            'cat_max' => $offer['cat_max'],
+            'enganche_pct' => $offer['enganche_pct'],
+            'plazo_max' => $offer['plazo_max'],
+            'score_min' => $offer['score_min'],
+            'destacado' => $offer['destacado'],
+            'aplica_para' => $offer['aplica_para'],
+            'contacto' => $offer['contacto'],
+            'notas' => $offer['notas'],
+            'califica' => $offer['elegible'],
+            'probabilidadAprobacion' => $offer['aprobacion'],
+            'tasa' => $offer['tasa'],
+            'tasaEstimadaAnual' => $offer['tasa'],
+            'mensualidad' => $offer['mensualidad'],
+            'mensualidadEstimada' => $offer['mensualidad'],
+            'motivoDictamen' => $offer['motivo'],
+            'requisitosClave' => $offer['requisitos'],
+            'cat' => $offer['cat'],
+            'total' => $offer['total'],
+            'cargoServicio' => $offer['cargo_servicio'],
+            'plazoEfectivo' => $offer['plazo_efectivo'],
+            'plazoAjustado' => $offer['plazo_ajustado'],
+        ])->values()->all();
     }
 
     /**
      * @param  array<string, mixed>  $auto
      * @param  array<string, mixed>  $profile
-     * @param  Collection<int, Financiera>  $financieras
-     * @return array<string, mixed>|null
+     * @param  Collection<int, array<string, mixed>>  $offers
+     * @return array{resumenEjecutivo: string, recomendaciones: array<int, string>}|null
      */
-    private function evaluateWithOpenAi(array $auto, array $profile, Collection $financieras, string $apiKey): ?array
+    private function narrativeWithOpenAi(array $auto, array $profile, Collection $offers, string $apiKey): ?array
     {
-        $institutions = $financieras->take(25)->map(fn (Financiera $financiera) => [
-            'slug' => $financiera->slug,
-            'nombre' => $financiera->nombre,
-            'tipo' => $financiera->tipo,
-            'tasaMin' => (float) $financiera->tasa_min,
-            'tasaMax' => (float) $financiera->tasa_max,
-            'catMin' => (float) $financiera->cat_min,
-            'catMax' => (float) $financiera->cat_max,
-            'engancheMinPct' => (int) $financiera->enganche_pct,
-            'plazoMaxMeses' => (int) $financiera->plazo_max,
-            'scoreMinBuro' => $financiera->score_min,
-            'aplicaPara' => $financiera->aplica_para,
-            'notas' => $financiera->notas,
+        $context = $offers->take(15)->map(fn (array $offer) => [
+            'nombre' => $offer['nombre'],
+            'tipo' => $offer['tipo'],
+            'califica' => $offer['elegible'],
+            'tasa' => $offer['tasa'],
+            'mensualidad' => $offer['mensualidad'],
+            'motivo' => $offer['motivo'],
         ])->values()->all();
 
         $response = Http::withToken($apiKey)
@@ -137,14 +206,14 @@ class CreditEvaluationService
                 'messages' => [
                     [
                         'role' => 'system',
-                        'content' => 'Eres un Director de Riesgos y Crédito Automotriz experto en México. Evalúa la solicitud con políticas bancarias reales: antigüedad máxima del auto, DTI máximo 35-40%, score de Buró y comprobación de ingresos. Devuelve SOLO JSON con: scorePerfilEstimado (300-850), nivelRiesgo (bajo|medio|alto), capacidadPagoMensualMaxima, dtiCalculadoPct, resumenEjecutivo, recomendaciones (3-5), opcionesRecomendadas (slug, nombre, tipo, califica, probabilidadAprobacion 0-100, tasaEstimadaAnual, mensualidadEstimada, motivoDictamen, requisitosClave).',
+                        'content' => 'Eres un asesor de crédito automotriz en México. Redacta un resumen ejecutivo breve y 3 recomendaciones accionables para el cliente. NO calcules ni cambies tasas, CAT, elegibilidad, mensualidades o plazos: esos datos ya fueron calculados por el servidor. Devuelve SOLO JSON con resumenEjecutivo (string) y recomendaciones (array de strings).',
                     ],
                     [
                         'role' => 'user',
                         'content' => json_encode([
                             'auto' => $auto,
                             'perfil' => $profile,
-                            'institucionesDisponibles' => $institutions,
+                            'dictamenes' => $context,
                         ], JSON_UNESCAPED_UNICODE),
                     ],
                 ],
@@ -154,36 +223,14 @@ class CreditEvaluationService
         $content = (string) $response->json('choices.0.message.content', '{}');
         $decoded = json_decode($content, true);
 
-        if (! is_array($decoded) || ! isset($decoded['opcionesRecomendadas'])) {
+        if (! is_array($decoded) || ! is_string($decoded['resumenEjecutivo'] ?? null) || ! is_array($decoded['recomendaciones'] ?? null)) {
             return null;
         }
 
-        return $decoded;
-    }
-
-    /**
-     * @param  array<int, array<string, mixed>>  $offers
-     * @return array<int, array<string, mixed>>
-     */
-    private function mapOffers(array $offers, string $employment): array
-    {
-        return collect($offers)->map(fn (array $offer) => [
-            'slug' => $offer['slug'],
-            'nombre' => $offer['nombre'],
-            'tipo' => $offer['tipo'],
-            'califica' => $offer['elegible'],
-            'probabilidadAprobacion' => $offer['aprobacion'],
-            'tasaEstimadaAnual' => $offer['tasa'],
-            'mensualidadEstimada' => $offer['mensualidad'],
-            'motivoDictamen' => $offer['motivo'] ?? ($offer['elegible']
-                ? 'Cumples con el perfil crediticio e historial estimado.'
-                : 'No cumples con la política de esta institución.'),
-            'requisitosClave' => [
-                $employment === 'fijo' ? '3 últimos recibos de nómina' : 'Estados de cuenta (3 meses)',
-                'Identificación oficial (INE)',
-                'Comprobante de domicilio reciente',
-            ],
-        ])->values()->all();
+        return [
+            'resumenEjecutivo' => $decoded['resumenEjecutivo'],
+            'recomendaciones' => array_values(array_filter($decoded['recomendaciones'], 'is_string')),
+        ];
     }
 
     /**
@@ -199,7 +246,13 @@ class CreditEvaluationService
             ['slug' => 'afirme', 'nombre' => 'Afirme Auto', 'tipo' => 'banco', 'tasa_min' => 14.9, 'tasa_max' => 22.5, 'cat_min' => 18.0, 'cat_max' => 25.0, 'enganche_pct' => 10, 'plazo_max' => 72, 'score_min' => 580],
         ])->map(function (array $data) {
             $financiera = new Financiera($data);
-            $financiera->forceFill(['id' => (string) Str::uuid()]);
+            $financiera->forceFill([
+                'id' => (string) Str::uuid(),
+                'vehicle_condition' => 'any',
+                'brand_scope' => null,
+                'max_vehicle_age' => 8,
+                'requires_membership' => false,
+            ]);
 
             return $financiera;
         });

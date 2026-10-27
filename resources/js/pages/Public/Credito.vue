@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { usePage } from '@inertiajs/vue3';
 import { CheckCircle2, Clock, FileCheck, Percent, ShieldCheck } from '@lucide/vue';
 import PublicLayout from '@/layouts/PublicLayout.vue';
@@ -26,23 +26,86 @@ const downPaymentPct = ref(20);
 const term = ref(48);
 const brand = ref('');
 const model = ref('');
+const version = ref('');
 const year = ref(new Date().getFullYear() - 2);
 const dialogOpen = ref(false);
+const versions = ref<{ id: string; name: string }[]>([]);
+const versionsLoading = ref(false);
+const versionsError = ref('');
+let versionsTimer: ReturnType<typeof setTimeout> | null = null;
 
 const models = computed(() => props.brands.find((item) => item.name === brand.value)?.models ?? []);
+const minRate = computed(() => {
+    const rates = props.financieras
+        .map((item) => Number(item.tasa_min))
+        .filter((rate) => Number.isFinite(rate) && rate > 0);
+
+    return rates.length ? Math.min(...rates) : 12.5;
+});
+const selectedModelId = computed(() => models.value.find((item) => item.name === model.value)?.id ?? '');
 const downPayment = computed(() => Math.round((price.value * downPaymentPct.value) / 100));
 const financed = computed(() => Math.max(price.value - downPayment.value, 0));
 const monthly = computed(() => {
-    const rate = 0.125 / 12;
+    const rate = minRate.value / 100 / 12;
     if (financed.value <= 0) return 0;
     return Math.round((financed.value * rate) / (1 - Math.pow(1 + rate, -term.value)));
 });
+
+const loadVersions = async () => {
+    if (!selectedModelId.value || !year.value) {
+        versions.value = [];
+        version.value = '';
+        return;
+    }
+
+    versionsLoading.value = true;
+    versionsError.value = '';
+
+    try {
+        const params = new URLSearchParams({
+            model_id: selectedModelId.value,
+            year: String(year.value),
+        });
+        const response = await fetch(`/api/car-versions?${params.toString()}`, {
+            headers: { Accept: 'application/json' },
+        });
+        const payload = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+            throw new Error(payload.error || 'No pudimos cargar las versiones.');
+        }
+
+        versions.value = payload.versions ?? [];
+
+        if (version.value && !versions.value.some((item) => item.name === version.value)) {
+            version.value = '';
+        }
+    } catch (error) {
+        versions.value = [];
+        version.value = '';
+        versionsError.value = error instanceof Error ? error.message : 'No pudimos cargar las versiones.';
+    } finally {
+        versionsLoading.value = false;
+    }
+};
+
+watch(
+    () => [brand.value, model.value, year.value],
+    () => {
+        versions.value = [];
+        version.value = '';
+        versionsError.value = '';
+
+        if (versionsTimer) clearTimeout(versionsTimer);
+        versionsTimer = setTimeout(loadVersions, 600);
+    },
+);
 
 const formatPrice = (value: number) =>
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(value);
 
 const benefits = [
-    { icon: Percent, title: 'Tasas competitivas', description: 'Desde 12.5% anual, sujeto a evaluación y sin sorpresas durante el plazo.' },
+    { icon: Percent, title: 'Tasas competitivas', description: 'Desde la mejor tasa disponible, sujeta a evaluación y sin sorpresas durante el plazo.' },
     { icon: Clock, title: 'Respuesta rápida', description: 'Aprobación estimada de 24 a 48 hrs, con documentación mínima y todo en línea.' },
     { icon: ShieldCheck, title: 'Plazos y protección', description: 'Hasta 72 meses, enganches desde el 10% y seguro del auto incluido en tu mensualidad.' },
     { icon: FileCheck, title: 'Precalificación sencilla', description: 'Evaluamos tu perfil de forma rápida con IA para darte opciones reales de financiamiento.' },
@@ -89,7 +152,25 @@ const benefits = [
                         </div>
                         <div>
                             <Label>Versión</Label>
-                            <Input placeholder="Ej. Sense TM" disabled class="mt-1.5" />
+                            <select
+                                v-model="version"
+                                :disabled="!model || versionsLoading || versions.length === 0"
+                                class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"
+                            >
+                                <option value="">
+                                    {{ versionsLoading ? 'Cargando versiones…' : versions.length ? 'Versión' : 'Sin versiones' }}
+                                </option>
+                                <option v-for="item in versions" :key="item.id" :value="item.name">{{ item.name }}</option>
+                            </select>
+                            <p v-if="versionsError" class="mt-1 text-[11px] font-semibold text-destructive">{{ versionsError }}</p>
+                            <button
+                                v-if="!versionsLoading && versions.length === 0 && model"
+                                type="button"
+                                class="mt-1 text-[11px] font-bold text-primary hover:underline"
+                                @click="loadVersions"
+                            >
+                                Reintentar
+                            </button>
                         </div>
                     </div>
 
@@ -127,14 +208,14 @@ const benefits = [
                     <div class="mt-4 grid grid-cols-2 gap-3 border-t border-secondary-foreground/15 pt-3">
                         <div>
                             <p class="text-[10px] text-secondary-foreground/60">Tasa desde</p>
-                            <p class="mt-0.5 text-sm font-bold">12.5% anual</p>
+                            <p class="mt-0.5 text-sm font-bold">{{ minRate }}% anual</p>
                         </div>
                         <div>
                             <p class="text-[10px] text-secondary-foreground/60">Monto a financiar</p>
                             <p class="mt-0.5 text-sm font-bold">{{ formatPrice(financed) }}</p>
                         </div>
                     </div>
-                    <Button variant="hero" size="lg" class="mt-4 w-full" @click="dialogOpen = true">
+                    <Button variant="hero" size="lg" class="mt-4 w-full" :disabled="!version" @click="dialogOpen = true">
                         Completar perfil y comparar
                     </Button>
                     <p class="mt-2.5 text-center text-[11px] text-secondary-foreground/70">
@@ -191,6 +272,7 @@ const benefits = [
             term,
             brand,
             model,
+            version,
             year,
             price,
         }"

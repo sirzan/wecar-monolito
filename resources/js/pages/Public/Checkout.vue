@@ -20,6 +20,7 @@ const form = useForm({ method: '' as 'stripe' | 'paypal' | 'spei' | '', coupon_c
 
 const isTokens = props.subscription.kind === 'tokens';
 const isMembership = props.subscription.kind === 'membership';
+const isAgency = props.subscription.kind === 'agency';
 
 const formatPrice = (value: number) =>
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(value);
@@ -37,10 +38,10 @@ const pay = (method: 'stripe' | 'paypal' | 'spei') => {
         <div class="text-center">
             <p class="text-xs font-bold uppercase tracking-[0.18em] text-primary">Pago seguro</p>
             <h1 class="mt-2 text-2xl font-black text-secondary sm:text-3xl">
-                {{ isTokens ? 'Compra tus tokens' : isMembership ? 'Activa tu membresía' : 'Completa tu publicación' }}
+                {{ isTokens ? 'Compra tus tokens' : isMembership ? 'Activa tu membresía' : isAgency ? 'Renueva tu plan de agencia' : 'Completa tu publicación' }}
             </h1>
             <p class="mt-2 text-sm text-muted-foreground">
-                {{ isTokens ? 'Los tokens se acreditarán al confirmar el pago.' : isMembership ? 'La membresía se activa al confirmar el pago.' : 'Tu auto se publicará automáticamente al confirmar el pago.' }}
+                {{ isTokens ? 'Los tokens se acreditarán al confirmar el pago.' : isMembership ? 'La membresía se activa al confirmar el pago.' : isAgency ? 'El plan de tu agencia se renovará al confirmar el pago.' : 'Tu auto se publicará automáticamente al confirmar el pago.' }}
             </p>
         </div>
 
