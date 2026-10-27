@@ -40,13 +40,6 @@ class PublicController extends Controller
             ->limit(16)
             ->get(['id', 'name', 'slug', 'logo']);
 
-        $plans = Plan::query()
-            ->where('is_active', true)
-            ->where('type', 'publication')
-            ->whereIn('audience', ['user', 'both'])
-            ->orderBy('sort_order')
-            ->get();
-
         $financieras = Financiera::query()
             ->where('activo', true)
             ->orderByDesc('destacado')
@@ -65,7 +58,7 @@ class PublicController extends Controller
             'featuredCars' => CarResource::collection($featured)->resolve(request()),
             'externalCars' => $this->externalSearch->cached($request->user(), 8)['results'],
             'financieras' => $financieras,
-            '$brands' => $$brands,
+            'brands' => $brands,
             'plans' => $plans,
             'seo' => [
                 'title' => 'Wecar — Compra y vende autos seminuevos en México',
