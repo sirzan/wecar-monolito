@@ -15,6 +15,7 @@ use App\Http\Controllers\PushController;
 use App\Http\Controllers\SitemapController;
 use App\Http\Controllers\VendeController;
 use Illuminate\Support\Facades\Route;
+use Laravel\Fortify\Http\Controllers\RegisteredUserController;
 
 Route::get('/', [PublicController::class, 'home'])->name('home');
 Route::get('/comprar', [PublicController::class, 'comprar'])->name('comprar');
@@ -28,6 +29,10 @@ Route::get('/vende', [PublicController::class, 'vende'])->name('vende');
 Route::post('/vende', [VendeController::class, 'store'])
     ->middleware(['auth', 'verified'])
     ->name('vende.store');
+
+Route::get('/registro', [RegisteredUserController::class, 'create'])
+    ->middleware('guest:'.config('fortify.guard'))
+    ->name('registro');
 Route::get('/credito', [PublicController::class, 'credito'])->name('credito');
 Route::get('/garantia', [PublicController::class, 'garantia'])->name('garantia');
 Route::get('/certificaciones', [PublicController::class, 'certificaciones'])->name('certificaciones');
