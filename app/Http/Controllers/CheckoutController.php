@@ -40,7 +40,7 @@ class CheckoutController extends Controller
 
         $payments = SiteSetting::get('payments', []);
 
-        $kind = $subscription->plan?->type ?? $subscription->kind;
+        $kind = $subscription->kind === 'agency' ? 'agency' : ($subscription->plan?->type ?? $subscription->kind);
         $enabledForKind = match ($kind) {
             'membership' => (bool) ($payments['membership_enabled'] ?? false),
             'tokens' => (bool) ($payments['tokens_enabled'] ?? false),
@@ -106,7 +106,7 @@ class CheckoutController extends Controller
 
         $subscription->loadMissing(['plan', 'user']);
         abort_unless($subscription->plan, 422, 'La suscripción no tiene un plan válido.');
-        $kind = $subscription->plan?->type ?? $subscription->kind;
+        $kind = $subscription->kind === 'agency' ? 'agency' : ($subscription->plan?->type ?? $subscription->kind);
 
         if ($kind === 'tokens' && filled($validated['coupon_code'] ?? null)) {
             abort_unless(
@@ -293,6 +293,18 @@ class CheckoutController extends Controller
         if ($subscription->car) {
             return redirect()
                 ->route('autos.show', $subscription->car->slug)
+                ->with('success', $message);
+        }
+
+        if ($subscription->kind === 'agency' && $subscription->agency) {
+            return redirect()
+                ->route('panel.agency.billing', $subscription->agency)
+                ->with('success', $message);
+        }
+
+        if ($subscription->kind === 'publication') {
+            return redirect()
+                ->route('panel.billing')
                 ->with('success', $message);
         }
 

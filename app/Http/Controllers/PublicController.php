@@ -11,6 +11,8 @@ use App\Models\Plan;
 use App\Models\SiteSetting;
 use App\Services\ExternalSearch\ExternalSearchService;
 use App\Services\Pricing\CarPriceSuggestionService;
+use App\Services\PublicationPlanService;
+use App\Support\AgencyContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -40,6 +42,7 @@ class PublicController extends Controller
         $plans = Plan::query()
             ->where('is_active', true)
             ->where('type', 'publication')
+            ->whereIn('audience', ['user', 'both'])
             ->orderBy('sort_order')
             ->get();
 
@@ -306,11 +309,42 @@ class PublicController extends Controller
         ]);
     }
 
-    public function vende(Request $request): Response
+    public function vende(Request $request, PublicationPlanService $publicationPlans): Response
     {
+        $user = $request->user();
+        $agency = $user ? app(AgencyContext::class)->current($request) : null;
+        $agency = $agency && $user?->belongsToAgency($agency) ? $agency : null;
+
+        $plans = Plan::query()
+            ->where('is_active', true)
+            ->where('type', 'publication')
+            ->whereIn('audience', $agency ? ['agency', 'both'] : ['user', 'both'])
+            ->orderBy('sort_order')
+            ->get();
+
+        $activeSubscription = $user && ! $agency ? $publicationPlans->activeForUser($user) : null;
+        $activePlan = $activeSubscription ? [
+            'name' => $publicationPlans->planFor($activeSubscription)?->name ?? data_get($activeSubscription->metadata, 'plan_name'),
+            'key' => $publicationPlans->planFor($activeSubscription)?->key_name,
+            'ends_at' => $activeSubscription->ends_at?->toIso8601String(),
+            'max_cars' => $publicationPlans->maxCars($activeSubscription),
+            'used_cars' => $publicationPlans->activeCarsCount($user),
+        ] : null;
+
+        $agencyPlan = $agency ? $publicationPlans->planForAgency($agency) : null;
+        $agencyPlanData = $agency ? [
+            'name' => $agencyPlan?->name ?? ucfirst($agency->plan),
+            'ends_at' => $agency->plan_expires_at?->toIso8601String(),
+            'max_cars' => max((int) $agency->max_cars, 1),
+            'used_cars' => $publicationPlans->activeAgencyCarsCount($agency),
+            'active' => $agency->isPlanActive(),
+        ] : null;
+
         return Inertia::render('Public/Vende', [
             'brands' => CarBrand::query()->with('models:id,brand_id,name')->orderBy('name')->get(['id', 'name', 'slug']),
-            'plans' => Plan::query()->where('is_active', true)->where('type', 'publication')->orderBy('sort_order')->get(),
+            'plans' => $plans,
+            'activePlan' => $activePlan,
+            'agencyPlan' => $agencyPlanData,
             'filters' => [
                 'bodies' => ['Sedán', 'SUV', 'Hatchback', 'Pickup', 'Coupé', 'Van'],
                 'transmissions' => ['Automática', 'Manual', 'CVT'],

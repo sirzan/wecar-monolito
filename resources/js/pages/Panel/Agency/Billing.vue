@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { CreditCard } from '@lucide/vue';
+import { router } from '@inertiajs/vue3';
 import PanelLayout from '@/layouts/PanelLayout.vue';
 import Button from '@/components/ui/Button.vue';
 
@@ -14,13 +15,21 @@ const props = defineProps<{
         plan_expires_at: string | null;
         max_cars: number;
         cars_count: number;
+        plan_name: string | null;
     };
+    subscription: { id: string; ends_at: string | null; amount: number } | null;
+    renewalPlan: { id: string; name: string; price: number; duration_weeks: number } | null;
 }>();
 
 const base = `/panel/agencia/${props.agency.slug}`;
 
 const formatDate = (value: string | null) =>
     value ? new Date(value).toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: '2-digit' }) : 'Sin fecha';
+
+const formatPrice = (value: number) =>
+    new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(value);
+
+const renew = () => router.post(`${base}/facturacion/renovar`);
 </script>
 
 <template>
@@ -34,7 +43,7 @@ const formatDate = (value: string | null) =>
                 <span class="grid h-11 w-11 place-items-center rounded-xl bg-accent text-accent-foreground"><CreditCard class="h-5 w-5" /></span>
                 <div>
                     <p class="text-sm font-semibold text-muted-foreground">Plan actual</p>
-                    <p class="text-lg font-black capitalize text-secondary">{{ agency.plan }}</p>
+                    <p class="text-lg font-black capitalize text-secondary">{{ agency.plan_name ?? agency.plan }}</p>
                 </div>
             </div>
             <dl class="mt-5 grid gap-4 sm:grid-cols-3">
@@ -57,6 +66,7 @@ const formatDate = (value: string | null) =>
             <div class="mt-6 flex flex-wrap gap-3">
                 <Button as="a" :href="`${base}/inventario`" variant="outline">Ver inventario</Button>
                 <Button as="a" href="/vende">Publicar auto</Button>
+                <Button v-if="renewalPlan" variant="outline" @click="renew">Renovar {{ renewalPlan.name }}{{ renewalPlan.price > 0 ? ` · ${formatPrice(renewalPlan.price)}` : '' }}</Button>
             </div>
         </div>
     </div>

@@ -203,7 +203,8 @@ it('processes didit webhooks with a valid signature', function () {
     $signature = hash_hmac('sha256', $payload, 'didit-secret');
 
     $this->call('POST', '/webhooks/didit', [], [], [], [
-        'HTTP_X-SIGNATURE' => $signature,
+        'HTTP_X_SIGNATURE' => $signature,
+        'HTTP_X_TIMESTAMP' => (string) time(),
         'CONTENT_TYPE' => 'application/json',
     ], $payload)->assertOk();
 

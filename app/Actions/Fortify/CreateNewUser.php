@@ -5,6 +5,7 @@ namespace App\Actions\Fortify;
 use App\Models\Agency;
 use App\Models\Profile;
 use App\Models\User;
+use App\Services\PublicationPlanService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
@@ -61,14 +62,18 @@ class CreateNewUser implements CreatesNewUsers
             ]);
 
             if ($isAgency) {
+                $plan = app(PublicationPlanService::class)->defaultAgencyPlan();
+                $weeks = max((int) ($plan?->duration_weeks ?? 4), 1);
+
                 $agency = Agency::query()->create([
                     'owner_id' => $user->getKey(),
                     'slug' => $this->uniqueAgencySlug($validated['agency_name']),
                     'name' => $validated['agency_name'],
                     'phone' => $validated['agency_phone'],
-                    'plan' => 'agencia',
-                    'plan_expires_at' => now()->addDays(30),
-                    'max_cars' => 30,
+                    'plan' => $plan?->key_name ?? 'agencia',
+                    'plan_id' => $plan?->getKey(),
+                    'plan_expires_at' => now()->addWeeks($weeks),
+                    'max_cars' => max((int) ($plan?->max_cars ?? 30), 1),
                     'is_active' => true,
                 ]);
 

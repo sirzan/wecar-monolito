@@ -39,6 +39,8 @@ const props = defineProps<{
     plans: { id: string; key_name: string; name: string; price: number; max_cars: number; highlight: boolean; duration?: string }[];
     filters: { bodies: string[]; transmissions: string[]; fuels: string[]; colors: string[] };
     seo: { title: string; description: string; canonical: string };
+    activePlan?: { name: string | null; key: string | null; ends_at: string | null; max_cars: number; used_cars: number } | null;
+    agencyPlan?: { name: string; ends_at: string | null; max_cars: number; used_cars: number; active: boolean } | null;
     adminMode?: boolean;
 }>();
 
@@ -75,7 +77,7 @@ const form = useForm({
     accepts_trade: false,
     trade_preference: '',
     vin: '',
-    plan_key: props.plans.find(p => p.price === 0)?.key_name || props.plans[0]?.key_name || 'basico',
+    plan_key: props.activePlan?.key || props.plans.find(p => p.price === 0)?.key_name || props.plans[0]?.key_name || 'basico',
     images: [] as File[],
 });
 
@@ -107,9 +109,10 @@ const versionsLoading = ref(false);
 const versionsError = ref('');
 let versionsTimer: ReturnType<typeof setTimeout> | null = null;
 const selectedPlan = computed(() => props.plans.find((plan) => plan.key_name === form.plan_key) ?? null);
+const coveredPlan = computed(() => Boolean(props.activePlan || props.agencyPlan));
 
 const finalPlanPrice = computed(() => {
-    if (isAdmin.value) return 0;
+    if (isAdmin.value || coveredPlan.value) return 0;
     if (!selectedPlan.value) return 0;
     const base = selectedPlan.value.price;
     if (!appliedCoupon.value || base <= 0) return base;
@@ -736,15 +739,40 @@ const submit = () => {
             <!-- ════════════ PASO 4: PLANES Y PUBLICACIÓN ════════════ -->
             <div v-if="step === 4" class="rounded-3xl border border-border bg-card p-6 sm:p-8 shadow-soft space-y-6">
                 <div>
-                    <h2 class="text-xl font-black text-secondary">Paso 4: Elige tu plan de publicación</h2>
-                    <p class="text-xs text-muted-foreground mt-0.5">Selecciona el nivel de visibilidad para tu anuncio.</p>
+                    <h2 class="text-xl font-black text-secondary">Paso 4: {{ coveredPlan ? 'Confirma tu publicación' : 'Elige tu plan de publicación' }}</h2>
+                    <p class="text-xs text-muted-foreground mt-0.5">{{ coveredPlan ? 'Tu plan ya está activo y cubre esta publicación.' : 'Selecciona el nivel de visibilidad para tu anuncio.' }}</p>
                 </div>
 
                 <div v-if="isAdmin" class="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm font-semibold text-emerald-700">
                     Modo administrador: la publicación no genera cobro ni suscripción.
                 </div>
 
-                <div class="grid gap-5 md:grid-cols-3">
+                <div v-if="activePlan" class="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-800">
+                    <p class="font-black">Plan activo: {{ activePlan.name }}</p>
+                    <p class="mt-1 text-xs">
+                        Publicaciones usadas: <strong>{{ activePlan.used_cars }} / {{ activePlan.max_cars }}</strong>.
+                        No se generará un cobro adicional.
+                    </p>
+                    <p v-if="activePlan.used_cars >= activePlan.max_cars" class="mt-2 text-xs font-bold text-destructive">
+                        Alcanzaste el límite de autos. Renueva o cambia de plan antes de publicar.
+                    </p>
+                </div>
+
+                <div v-if="agencyPlan" class="rounded-2xl border p-4 text-sm" :class="agencyPlan.active ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-800' : 'border-destructive/30 bg-destructive/10 text-destructive'">
+                    <p class="font-black">Plan de agencia: {{ agencyPlan.name }}</p>
+                    <p class="mt-1 text-xs">
+                        Publicaciones usadas: <strong>{{ agencyPlan.used_cars }} / {{ agencyPlan.max_cars }}</strong>.
+                        La publicación no genera un cobro individual.
+                    </p>
+                    <p v-if="!agencyPlan.active" class="mt-2 text-xs font-bold">
+                        El plan de la agencia venció. Renueva desde Facturación antes de publicar.
+                    </p>
+                    <p v-else-if="agencyPlan.used_cars >= agencyPlan.max_cars" class="mt-2 text-xs font-bold">
+                        La agencia alcanzó su límite de autos. Actualiza el plan para publicar más.
+                    </p>
+                </div>
+
+                <div v-if="!coveredPlan" class="grid gap-5 md:grid-cols-3">
                     <div
                         v-for="plan in plans.filter(p => !p.key_name.startsWith('search_') && !p.key_name.startsWith('membresia_'))"
                         :key="plan.id"
@@ -785,7 +813,7 @@ const submit = () => {
                 </div>
 
                 <!-- Cupones de descuento para planes de pago -->
-                <div v-if="selectedPlan && selectedPlan.price > 0" class="rounded-2xl border border-border bg-muted/30 p-4">
+                <div v-if="!coveredPlan && selectedPlan && selectedPlan.price > 0" class="rounded-2xl border border-border bg-muted/30 p-4">
                     <Label class="text-xs font-bold text-secondary">¿Tienes un cupón de descuento?</Label>
                     <div class="mt-2 flex gap-2 max-w-sm">
                         <Input
@@ -824,9 +852,9 @@ const submit = () => {
                 <!-- Resumen final de cobro -->
                 <div class="rounded-2xl bg-secondary p-5 text-white flex flex-col sm:flex-row items-center justify-between gap-4">
                     <div>
-                        <p class="text-xs text-white/70">{{ isAdmin ? 'Costo de publicación:' : 'Total a pagar al publicar:' }}</p>
+                        <p class="text-xs text-white/70">{{ isAdmin ? 'Costo de publicación:' : coveredPlan ? 'Costo de publicación:' : 'Total a pagar al publicar:' }}</p>
                         <p class="text-2xl font-black text-primary">
-                            {{ finalPlanPrice === 0 ? 'Gratis' : formatPrice(finalPlanPrice) }}
+                            {{ coveredPlan ? 'Incluido en tu plan' : finalPlanPrice === 0 ? 'Gratis' : formatPrice(finalPlanPrice) }}
                         </p>
                         <p v-if="isAdmin" class="text-[11px] text-white/60">
                             Sin cargo por ser administrador. No se creará una suscripción.
@@ -844,7 +872,7 @@ const submit = () => {
                         :disabled="form.processing"
                     >
                         <LoaderCircle v-if="form.processing" class="h-5 w-5 animate-spin" />
-                        <span v-else>{{ isAdmin ? 'Publicar auto sin cargo' : 'Confirmar y publicar auto' }}</span>
+                        <span v-else>{{ isAdmin ? 'Publicar auto sin cargo' : coveredPlan ? 'Publicar con mi plan' : 'Confirmar y publicar auto' }}</span>
                     </Button>
                 </div>
             </div>

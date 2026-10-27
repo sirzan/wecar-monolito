@@ -59,6 +59,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
 Route::post('/webhooks/stripe', [CheckoutController::class, 'stripeWebhook'])->name('webhooks.stripe');
 Route::post('/webhooks/didit', [DiditController::class, 'webhook'])->name('webhooks.didit');
+Route::post('/api/webhooks/didit', [DiditController::class, 'webhook'])->name('webhooks.didit.api');
 
 Route::post('/api/ai-search', AiSearchController::class)->middleware('throttle:20,1')->name('ai-search');
 Route::get('/api/credito/financieras', [CreditController::class, 'financieras'])->name('credit.financieras');

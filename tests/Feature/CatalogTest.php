@@ -124,6 +124,7 @@ it('publishes a car with images for a verified user', function () {
         'body' => 'Sedán',
         'color' => 'Blanco',
         'city' => 'Monterrey, NL',
+        'plan_key' => 'basico',
         'images' => [UploadedFile::fake()->image('carro.jpg')],
     ]);
 
