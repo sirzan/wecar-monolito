@@ -135,6 +135,12 @@ class VendeController extends Controller
             ]);
         }
 
+        if ($request->routeIs('admin.cars.store')) {
+            return redirect()
+                ->route('admin.cars')
+                ->with('success', 'Auto publicado correctamente desde el panel administrativo.');
+        }
+
         if ($requiresPayment && $subscription) {
             return redirect()
                 ->route('checkout.show', $subscription)

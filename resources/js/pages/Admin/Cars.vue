@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { Link, router } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
+import { Link, router, usePage } from '@inertiajs/vue3';
 import { ExternalLink, Star, Trash2 } from '@lucide/vue';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import Pagination from '@/components/site/Pagination.vue';
@@ -25,6 +25,12 @@ interface AdminCar {
     created_at: string | null;
     url: string;
 }
+
+const page = usePage<{ auth: { user: { roles: string[] } | null } }>();
+const canPublish = computed(() => {
+    const roles = page.props.auth.user?.roles ?? [];
+    return roles.includes('superadmin') || roles.includes('manager');
+});
 
 const props = defineProps<{
     cars: { data: AdminCar[]; current_page: number; last_page: number; total: number };
@@ -67,7 +73,7 @@ const destroy = (car: AdminCar) => {
                 <h1 class="text-3xl font-semibold tracking-tight">Autos</h1>
                 <p class="mt-1 text-sm text-muted-foreground">{{ cars.total }} autos registrados.</p>
             </div>
-            <Button as="a" href="/vende">Publicar auto</Button>
+            <Button v-if="canPublish" as="a" href="/admin/autos/crear">Publicar auto</Button>
         </div>
 
         <div class="mt-6 grid gap-3 rounded-2xl border border-border bg-card/50 p-4 md:grid-cols-[1fr_180px_140px_200px_auto]">

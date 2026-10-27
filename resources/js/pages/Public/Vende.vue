@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import { useForm, usePage } from '@inertiajs/vue3';
+import { Link, useForm, usePage } from '@inertiajs/vue3';
 import {
     BadgeDollarSign,
     Building2,
@@ -26,6 +26,7 @@ import {
     X,
     Zap,
 } from '@lucide/vue';
+import AdminLayout from '@/layouts/AdminLayout.vue';
 import PublicLayout from '@/layouts/PublicLayout.vue';
 import SeoHead from '@/components/site/SeoHead.vue';
 import Button from '@/components/ui/Button.vue';
@@ -33,13 +34,12 @@ import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
 import type { MarketPrice, PriceComparables } from '@/types/pricing';
 
-defineOptions({ layout: PublicLayout });
-
 const props = defineProps<{
     brands: { id: string; name: string; slug: string; models: { id: string; name: string }[] }[];
     plans: { id: string; key_name: string; name: string; price: number; max_cars: number; highlight: boolean; duration?: string }[];
     filters: { bodies: string[]; transmissions: string[]; fuels: string[]; colors: string[] };
     seo: { title: string; description: string; canonical: string };
+    adminMode?: boolean;
 }>();
 
 const page = usePage<{ auth: { user: { id: string; name: string; email: string; roles: string[] } | null }; currentAgency: { name: string; slug: string } | null }>();
@@ -332,14 +332,25 @@ const confidenceLabel = (value?: string) =>
     ({ high: 'alta', medium: 'media', low: 'baja', none: 'sin datos' })[value ?? 'none'] ?? 'baja';
 
 const submit = () => {
-    form.post('/vende', { forceFormData: true });
+    form.post(props.adminMode ? '/admin/autos' : '/vende', { forceFormData: true });
 };
 </script>
 
 <template>
-    <SeoHead :title="seo.title" :description="seo.description" :canonical="seo.canonical" />
+    <component :is="adminMode ? AdminLayout : PublicLayout">
+        <SeoHead v-if="!adminMode" :title="seo.title" :description="seo.description" :canonical="seo.canonical" />
 
-    <section class="bg-gradient-dark py-12 px-4 sm:px-6 text-white text-center">
+        <div v-if="adminMode" class="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <div>
+                <h1 class="text-2xl font-black text-secondary sm:text-3xl">Publicar auto</h1>
+                <p class="mt-1 text-sm text-muted-foreground">Mismo flujo de publicación del panel de usuarios, sin cargo administrativo.</p>
+            </div>
+            <Link href="/admin/autos" class="rounded-full border border-border px-4 py-2 text-xs font-bold text-secondary transition hover:border-primary/40 hover:text-primary">
+                Volver a autos
+            </Link>
+        </div>
+
+        <section v-if="!adminMode" class="bg-gradient-dark py-12 px-4 sm:px-6 text-white text-center">
         <div class="mx-auto max-w-4xl">
             <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/20 px-3.5 py-1 text-xs font-bold text-primary uppercase tracking-wider">
                 <Sparkles class="h-3.5 w-3.5" /> Vende sin complicaciones
@@ -863,5 +874,6 @@ const submit = () => {
                 </Button>
             </div>
         </form>
-    </section>
+        </section>
+    </component>
 </template>
