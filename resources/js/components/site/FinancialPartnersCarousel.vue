@@ -80,7 +80,7 @@ const failedPartners = ref<Record<string, boolean>>({});
 
 <style scoped>
 .partners-viewport {
-    --visible: 2;
+    --visible: 2.5;
     --gap: 0.75rem;
     --card-width: calc(100cqw / var(--visible));
     container-type: inline-size;

@@ -84,7 +84,7 @@ const jsonLd = [
                     <input
                         v-model="localQuery"
                         placeholder="Buscar marca, modelo…"
-                        class="min-w-0 flex-1 bg-transparent px-0.5 text-[10px] text-secondary outline-none placeholder:text-muted-foreground sm:px-1.5 sm:text-xs"
+                        class="min-w-0 flex-1 bg-transparent px-0.5 text-[10px] text-secondary outline-none placeholder:text-[10px] placeholder:text-muted-foreground sm:px-1.5 sm:text-xs sm:placeholder:text-xs"
                     />
                     <Button type="submit" variant="hero" size="pill" class="h-5 shrink-0 gap-1 px-2 text-[9px] sm:h-7 sm:gap-1 sm:px-3.5 sm:text-[10px]">
                         <Sparkles class="h-3 w-3" />
