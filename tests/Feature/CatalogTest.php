@@ -75,6 +75,8 @@ it('renders a car detail page with slug and seo', function () {
             ->component('Public/AutoDetalle')
             ->where('car.slug', $car->slug)
             ->has('seo.title')
+            ->where('financing.min_rate', fn ($rate) => (float) $rate > 0)
+            ->where('financing.max_term', fn ($term) => (int) $term >= 12)
         );
 });
 

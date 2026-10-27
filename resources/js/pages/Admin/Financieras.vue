@@ -14,6 +14,11 @@ interface FinancieraItem {
     slug: string;
     nombre: string;
     tipo: string;
+    vehicle_condition: string;
+    brand_scope: string[] | null;
+    max_vehicle_age: number | null;
+    requires_membership: boolean;
+    aplica_para: string | null;
     tasa_min: number | null;
     tasa_max: number | null;
     cat_min: number | null;
@@ -35,6 +40,11 @@ const form = reactive({
     nombre: '',
     slug: '',
     tipo: 'banco',
+    vehicle_condition: 'any',
+    brand_scope: '',
+    max_vehicle_age: '' as number | string,
+    requires_membership: false,
+    aplica_para: '',
     tasa_min: '' as number | string,
     tasa_max: '' as number | string,
     cat_min: '' as number | string,
@@ -52,7 +62,7 @@ const form = reactive({
 const reset = () => {
     editingId.value = null;
     Object.assign(form, {
-        nombre: '', slug: '', tipo: 'banco', tasa_min: '', tasa_max: '', cat_min: '', cat_max: '',
+        nombre: '', slug: '', tipo: 'banco', vehicle_condition: 'any', brand_scope: '', max_vehicle_age: '', requires_membership: false, aplica_para: '', tasa_min: '', tasa_max: '', cat_min: '', cat_max: '',
         enganche_pct: '', plazo_max: '', score_min: '', destacado: false, contacto: '', notas: '', orden: 0, activo: true,
     });
 };
@@ -63,6 +73,11 @@ const edit = (item: FinancieraItem) => {
         nombre: item.nombre,
         slug: item.slug,
         tipo: item.tipo,
+        vehicle_condition: item.vehicle_condition,
+        brand_scope: (item.brand_scope ?? []).join(', '),
+        max_vehicle_age: item.max_vehicle_age ?? '',
+        requires_membership: item.requires_membership,
+        aplica_para: item.aplica_para ?? '',
         tasa_min: item.tasa_min ?? '',
         tasa_max: item.tasa_max ?? '',
         cat_min: item.cat_min ?? '',
@@ -114,6 +129,20 @@ const destroy = (item: FinancieraItem) => {
                             <option value="fintech">Fintech</option>
                         </select>
                     </div>
+                    <div>
+                        <Label>Condición del auto</Label>
+                        <select v-model="form.vehicle_condition" class="mt-1.5 h-11 w-full rounded-xl border border-input bg-background px-3 text-sm">
+                            <option value="any">Nuevos y seminuevos</option>
+                            <option value="new">Solo nuevos</option>
+                            <option value="used">Solo seminuevos</option>
+                        </select>
+                    </div>
+                    <div><Label>Marcas permitidas (slugs separados por coma)</Label><Input v-model="form.brand_scope" class="mt-1.5" placeholder="volkswagen, audi, seat" /></div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div><Label>Edad máx. del auto</Label><Input v-model.number="form.max_vehicle_age" type="number" min="0" class="mt-1.5" /></div>
+                        <label class="flex items-center gap-2 pt-6 text-sm"><input v-model="form.requires_membership" type="checkbox" /> Requiere membresía</label>
+                    </div>
+                    <div><Label>Aplica para</Label><Input v-model="form.aplica_para" class="mt-1.5" placeholder="Autos nuevos y seminuevos" /></div>
                     <div class="grid grid-cols-2 gap-3">
                         <div><Label>Tasa mín.</Label><Input v-model.number="form.tasa_min" type="number" step="0.01" class="mt-1.5" /></div>
                         <div><Label>Tasa máx.</Label><Input v-model.number="form.tasa_max" type="number" step="0.01" class="mt-1.5" /></div>

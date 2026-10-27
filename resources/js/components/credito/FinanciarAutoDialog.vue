@@ -34,6 +34,7 @@ interface CarInput {
     price?: number | null;
     km?: number | null;
     title?: string | null;
+    condition?: 'new' | 'used' | null;
 }
 
 const props = withDefaults(
@@ -187,6 +188,7 @@ const documents = reactive<Record<DocSlot, { file?: File; saved?: boolean; name?
 });
 
 const offers = ref<any[]>([]);
+const pawnOffers = ref<any[]>([]);
 const evaluation = ref<any | null>(null);
 const selectedSlug = ref<string | null>(null);
 
@@ -200,8 +202,37 @@ const monthlyEstimate = computed(() => {
     return Math.round((financedAmount.value * rate) / (1 - Math.pow(1 + rate, -basics.term)));
 });
 
-const formatPrice = (value: number) =>
-    new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(value);
+const eligibleMonthly = computed(() => {
+    const values = offers.value
+        .filter((offer) => offer.califica)
+        .map((offer) => Number(offer.mensualidad))
+        .filter((value) => Number.isFinite(value) && value > 0);
+
+    return values.length ? Math.min(...values) : monthlyEstimate.value;
+});
+
+const normalizeOffer = (offer: any) => {
+    const mensualidad = Number(offer.mensualidad ?? offer.mensualidadEstimada ?? 0);
+    const tasa = Number(offer.tasa ?? offer.tasaEstimadaAnual ?? 0);
+
+    return {
+        ...offer,
+        mensualidad: Number.isFinite(mensualidad) ? mensualidad : 0,
+        tasa: Number.isFinite(tasa) ? tasa : 0,
+        tasaEstimadaAnual: Number.isFinite(tasa) ? tasa : 0,
+        cat: Number.isFinite(Number(offer.cat)) ? Number(offer.cat) : 0,
+        total: Number.isFinite(Number(offer.total)) ? Number(offer.total) : 0,
+        cargoServicio: Number.isFinite(Number(offer.cargoServicio)) ? Number(offer.cargoServicio) : 0,
+    };
+};
+
+const formatPrice = (value: number) => {
+    const amount = Number(value);
+
+    if (!Number.isFinite(amount)) return '—';
+
+    return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(amount);
+};
 
 const csrf = () =>
     document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
@@ -213,6 +244,7 @@ const reset = () => {
     submitError.value = null;
     successFolio.value = null;
     offers.value = [];
+    pawnOffers.value = [];
     evaluation.value = null;
     selectedSlug.value = null;
     documents.ine = {};
@@ -340,7 +372,7 @@ const evaluate = async () => {
                     anio: Number(profile.year),
                     precio: price.value,
                     km: props.car?.km ?? 0,
-                    tipo: 'seminuevo',
+                    tipo: props.car?.condition === 'new' ? 'nuevo' : 'seminuevo',
                 },
                 perfil: {
                     ingresoMensual: Number(profile.income),
@@ -358,7 +390,8 @@ const evaluate = async () => {
         if (!response.ok) throw new Error('No se pudo evaluar tu perfil.');
 
         evaluation.value = await response.json();
-        offers.value = evaluation.value.opcionesRecomendadas ?? [];
+        offers.value = (evaluation.value.opcionesRecomendadas ?? []).map(normalizeOffer);
+        pawnOffers.value = (evaluation.value.opcionesPrendarias ?? []).map(normalizeOffer);
         selectedSlug.value = offers.value.find((offer) => offer.califica)?.slug ?? null;
         step.value = 3;
     } catch (error) {
@@ -369,8 +402,8 @@ const evaluate = async () => {
 };
 
 const goToApplication = () => {
-    if (!selectedOffer.value) {
-        submitError.value = 'Selecciona una financiera para continuar.';
+    if (!selectedOffer.value || !selectedOffer.value.califica) {
+        submitError.value = 'Selecciona una financiera elegible para continuar.';
         return;
     }
 
@@ -407,6 +440,13 @@ const submit = async () => {
             car_brand: profile.brand,
             car_model: profile.model,
             car_version: profile.version || props.car?.version || null,
+            financiera_id: selectedOffer.value.id,
+            car_id: props.car?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(props.car.id) ? props.car.id : null,
+            car_condition: props.car?.condition === 'new' ? 'new' : 'used',
+            bureau: profile.bureau,
+            employment: profile.employment,
+            tenure: Number(profile.tenure),
+            age: Number(profile.age),
             car_year: Number(profile.year),
             car_price: price.value,
             car_km: props.car?.km ?? 0,
@@ -414,11 +454,12 @@ const submit = async () => {
             score: evaluation.value?.scorePerfilEstimado ?? 0,
             risk_level: evaluation.value?.nivelRiesgo ?? null,
             down_payment: downPaymentAmount.value,
-            term_months: basics.term,
+            term_months: selectedOffer.value.plazoEfectivo ?? basics.term,
             monthly_payment: selectedOffer.value.mensualidad,
-            rate: selectedOffer.value.tasa,
+            rate: selectedOffer.value.tasaEstimadaAnual,
             cat: selectedOffer.value.cat,
             total_to_pay: selectedOffer.value.total,
+            service_fee: selectedOffer.value.cargoServicio ?? 0,
             inputs: {
                 vehicle: { ...props.car, brand_name: profile.brand, model_name: profile.model, version_name: profile.version },
                 enganche: downPaymentAmount.value,
@@ -636,7 +677,7 @@ const submit = async () => {
                                 <div class="grid gap-3 sm:grid-cols-2">
                                     <div class="rounded-2xl bg-gradient-primary p-4 text-primary-foreground">
                                         <p class="text-[10px] font-bold uppercase tracking-wider">Mensualidad desde</p>
-                                        <p class="mt-1 text-3xl font-black">{{ formatPrice(Math.min(...offers.filter((offer) => offer.califica).map((offer) => offer.mensualidad), monthlyEstimate)) }}</p>
+                                        <p class="mt-1 text-3xl font-black">{{ formatPrice(eligibleMonthly) }}</p>
                                     </div>
                                     <div class="rounded-2xl bg-gradient-dark p-4 text-white">
                                         <p class="text-[10px] font-bold uppercase tracking-wider text-primary">Score estimado</p>
@@ -656,7 +697,7 @@ const submit = async () => {
                                         class="rounded-2xl border p-4 transition"
                                         :class="selectedSlug === offer.slug ? 'border-primary ring-2 ring-primary/20' : 'border-border'"
                                     >
-                                        <button type="button" class="w-full text-left" @click="selectedSlug = offer.slug">
+                                        <button type="button" class="w-full text-left" :disabled="!offer.califica" @click="offer.califica && (selectedSlug = offer.slug)">
                                             <div class="flex flex-wrap items-start justify-between gap-3">
                                                 <div>
                                                     <p class="font-black text-secondary">{{ offer.nombre }}</p>
@@ -664,15 +705,40 @@ const submit = async () => {
                                                 </div>
                                                 <div class="text-right">
                                                     <p class="text-lg font-black text-primary">{{ formatPrice(offer.mensualidad) }}/mes</p>
-                                                    <p class="text-[11px] text-muted-foreground">Tasa {{ offer.tasaEstimadaAnual }}% · CAT {{ (offer.tasaEstimadaAnual * 1.25).toFixed(1) }}%</p>
+                                                    <p class="text-[11px] text-muted-foreground">Tasa {{ offer.tasaEstimadaAnual }}% · CAT {{ offer.cat }}%</p>
+                                                    <p class="text-[11px] text-muted-foreground">Plazo {{ offer.plazoEfectivo ?? basics.term }} meses</p>
                                                 </div>
                                             </div>
                                             <p v-if="offer.motivoDictamen" class="mt-2 text-xs text-muted-foreground">{{ offer.motivoDictamen }}</p>
+                                            <p v-if="offer.plazoAjustado" class="mt-1 text-xs font-semibold text-amber-600">
+                                                El plazo se ajustó al máximo permitido por esta financiera.
+                                            </p>
+                                            <p class="mt-1 text-xs font-semibold text-secondary">
+                                                Total estimado: {{ formatPrice(offer.total ?? 0) }} · Cargo por servicio: {{ formatPrice(offer.cargoServicio ?? 0) }}
+                                            </p>
+                                            <p v-if="offer.requisitosClave?.length" class="mt-1 text-[11px] text-muted-foreground">
+                                                Requisitos: {{ offer.requisitosClave.join(' · ') }}
+                                            </p>
                                             <span v-if="!offer.califica" class="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-destructive">
                                                 <AlertCircle class="h-3.5 w-3.5" /> No elegible
                                             </span>
                                         </button>
                                     </article>
+                                </div>
+
+                                <div v-if="pawnOffers.length" class="mt-5">
+                                    <h3 class="text-sm font-black text-secondary">Préstamo prendario</h3>
+                                    <p class="mt-1 text-xs text-muted-foreground">Opciones para obtener liquidez usando tu auto como garantía; no forman parte del crédito de compra.</p>
+                                    <div class="mt-3 space-y-2">
+                                        <div v-for="offer in pawnOffers" :key="offer.slug" class="rounded-2xl border border-border bg-muted/20 p-3 text-xs">
+                                            <div class="flex items-center justify-between gap-2">
+                                                <span class="font-bold text-secondary">{{ offer.nombre }}</span>
+                                                <span class="font-bold text-primary">{{ formatPrice(offer.mensualidad) }}/mes</span>
+                                            </div>
+                                            <p class="mt-1 text-muted-foreground">Tasa {{ offer.tasaEstimadaAnual }}% · {{ offer.plazoEfectivo ?? basics.term }} meses</p>
+                                            <p v-if="offer.motivoDictamen" class="mt-1 text-muted-foreground">{{ offer.motivoDictamen }}</p>
+                                        </div>
+                                    </div>
                                 </div>
                             </template>
                         </div>
@@ -681,7 +747,13 @@ const submit = async () => {
                         <div v-else class="space-y-4">
                             <div class="rounded-2xl bg-accent/40 p-4">
                                 <p class="text-sm font-bold text-secondary">{{ selectedOffer?.nombre }}</p>
-                                <p class="text-xs text-muted-foreground">{{ formatPrice(selectedOffer?.mensualidad ?? 0) }}/mes · {{ basics.term }} meses</p>
+                                <p class="text-xs text-muted-foreground">
+                                    {{ formatPrice(selectedOffer?.mensualidad ?? 0) }}/mes · {{ selectedOffer?.plazoEfectivo ?? basics.term }} meses
+                                    · Tasa {{ selectedOffer?.tasaEstimadaAnual ?? 0 }}% · CAT {{ selectedOffer?.cat ?? 0 }}%
+                                </p>
+                                <p class="mt-1 text-xs text-muted-foreground">
+                                    Total estimado {{ formatPrice(selectedOffer?.total ?? 0) }} · Cargo por servicio {{ formatPrice(selectedOffer?.cargoServicio ?? 0) }}
+                                </p>
                             </div>
 
                             <div class="grid gap-4 sm:grid-cols-2">

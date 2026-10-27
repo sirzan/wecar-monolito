@@ -50,6 +50,10 @@ class FinancieraController extends Controller
             'nombre' => ['required', 'string', 'max:120'],
             'slug' => ['nullable', 'string', 'max:140', Rule::unique('financieras', 'slug')->ignore($financiera?->getKey())],
             'tipo' => ['required', 'in:banco,financiera_marca,autofinanciamiento,prendaria,fintech'],
+            'vehicle_condition' => ['required', 'in:any,new,used'],
+            'brand_scope' => ['nullable', 'string', 'max:500'],
+            'max_vehicle_age' => ['nullable', 'integer', 'min:0', 'max:50'],
+            'requires_membership' => ['boolean'],
             'logo' => ['nullable', 'string', 'max:500'],
             'color' => ['nullable', 'string', 'max:20'],
             'tasa_min' => ['nullable', 'numeric', 'min:0', 'max:100'],
@@ -69,6 +73,9 @@ class FinancieraController extends Controller
 
         $validated['slug'] = empty($validated['slug']) ? Str::slug($validated['nombre']) : $validated['slug'];
         $validated['orden'] = $validated['orden'] ?? 0;
+        $validated['brand_scope'] = filled($validated['brand_scope'] ?? null)
+            ? collect(explode(',', (string) $validated['brand_scope']))->map(fn (string $brand) => Str::slug(trim($brand)))->filter()->unique()->values()->all()
+            : null;
 
         return $validated;
     }

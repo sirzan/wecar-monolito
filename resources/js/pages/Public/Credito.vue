@@ -35,11 +35,18 @@ const versionsError = ref('');
 let versionsTimer: ReturnType<typeof setTimeout> | null = null;
 
 const models = computed(() => props.brands.find((item) => item.name === brand.value)?.models ?? []);
+const minRate = computed(() => {
+    const rates = props.financieras
+        .map((item) => Number(item.tasa_min))
+        .filter((rate) => Number.isFinite(rate) && rate > 0);
+
+    return rates.length ? Math.min(...rates) : 12.5;
+});
 const selectedModelId = computed(() => models.value.find((item) => item.name === model.value)?.id ?? '');
 const downPayment = computed(() => Math.round((price.value * downPaymentPct.value) / 100));
 const financed = computed(() => Math.max(price.value - downPayment.value, 0));
 const monthly = computed(() => {
-    const rate = 0.125 / 12;
+    const rate = minRate.value / 100 / 12;
     if (financed.value <= 0) return 0;
     return Math.round((financed.value * rate) / (1 - Math.pow(1 + rate, -term.value)));
 });
@@ -98,7 +105,7 @@ const formatPrice = (value: number) =>
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(value);
 
 const benefits = [
-    { icon: Percent, title: 'Tasas competitivas', description: 'Desde 12.5% anual, sujeto a evaluación y sin sorpresas durante el plazo.' },
+    { icon: Percent, title: 'Tasas competitivas', description: 'Desde la mejor tasa disponible, sujeta a evaluación y sin sorpresas durante el plazo.' },
     { icon: Clock, title: 'Respuesta rápida', description: 'Aprobación estimada de 24 a 48 hrs, con documentación mínima y todo en línea.' },
     { icon: ShieldCheck, title: 'Plazos y protección', description: 'Hasta 72 meses, enganches desde el 10% y seguro del auto incluido en tu mensualidad.' },
     { icon: FileCheck, title: 'Precalificación sencilla', description: 'Evaluamos tu perfil de forma rápida con IA para darte opciones reales de financiamiento.' },
@@ -201,7 +208,7 @@ const benefits = [
                     <div class="mt-4 grid grid-cols-2 gap-3 border-t border-secondary-foreground/15 pt-3">
                         <div>
                             <p class="text-[10px] text-secondary-foreground/60">Tasa desde</p>
-                            <p class="mt-0.5 text-sm font-bold">12.5% anual</p>
+                            <p class="mt-0.5 text-sm font-bold">{{ minRate }}% anual</p>
                         </div>
                         <div>
                             <p class="text-[10px] text-secondary-foreground/60">Monto a financiar</p>

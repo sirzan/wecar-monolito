@@ -10,6 +10,7 @@ use App\Models\Financiera;
 use App\Models\Plan;
 use App\Models\SiteSetting;
 use App\Services\ExternalSearch\ExternalSearchService;
+use App\Services\Pricing\CarPriceSuggestionService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -188,7 +189,7 @@ class PublicController extends Controller
         ]);
     }
 
-    public function autoShow(string $car): Response|RedirectResponse
+    public function autoShow(string $car, CarPriceSuggestionService $priceSuggestions): Response|RedirectResponse
     {
         $model = Car::query()
             ->published()
@@ -215,9 +216,34 @@ class PublicController extends Controller
             ->limit(4)
             ->get();
 
+        $priceReference = $model->model
+            ? $priceSuggestions->comparables(
+                $model->model,
+                (int) $model->year,
+                $model->version_id,
+                (int) $model->km,
+                $model->getKey(),
+            )
+            : ['samples' => 0, 'min' => null, 'p25' => null, 'median' => null, 'p75' => null, 'max' => null, 'confidence' => 'none', 'scope' => 'model'];
+
+        $financing = [
+            'min_rate' => (float) (Financiera::query()
+                ->where('activo', true)
+                ->whereNotNull('tasa_min')
+                ->where('tasa_min', '>', 0)
+                ->min('tasa_min') ?? 12.5),
+            'max_term' => max(12, (int) (Financiera::query()
+                ->where('activo', true)
+                ->where('plazo_max', '>', 0)
+                ->max('plazo_max') ?? 72)),
+            'service_fee_rate' => 0.025,
+        ];
+
         return Inertia::render('Public/AutoDetalle', [
             'car' => (new CarResource($model))->resolve(request()),
             'similar' => CarResource::collection($similar)->resolve(request()),
+            'priceReference' => $priceReference,
+            'financing' => $financing,
             'seo' => [
                 'title' => trim(($model->brand?->name ?? '').' '.($model->model?->name ?? '').' '.$model->year).' — Wecar',
                 'description' => $model->seo_description

@@ -15,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'pais', 'ocupacion', 'empresa', 'antiguedad', 'ingreso_mensual', 'deuda_mensual',
     'banco', 'tipo_cuenta', 'car_brand', 'car_model', 'car_version', 'car_year',
     'car_price', 'car_km', 'financiera_name', 'score', 'risk_level', 'down_payment',
-    'term_months', 'monthly_payment', 'rate', 'cat', 'total_to_pay', 'inputs', 'offers',
+    'term_months', 'monthly_payment', 'rate', 'cat', 'total_to_pay', 'service_fee', 'inputs', 'offers',
     'status', 'notes', 'submitted_at',
 ])]
 class CreditApplication extends Model
@@ -37,6 +37,7 @@ class CreditApplication extends Model
             'rate' => 'decimal:2',
             'cat' => 'decimal:2',
             'total_to_pay' => 'decimal:2',
+            'service_fee' => 'decimal:2',
         ];
     }
 
