@@ -10,5 +10,6 @@ Disallow: /reset-password
 Disallow: /email/verify
 Disallow: /user/
 Disallow: /api/
+Disallow: /auto/externo/
 
 Sitemap: https://wecar.mx/sitemap.xml

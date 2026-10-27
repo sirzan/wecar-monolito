@@ -73,6 +73,9 @@ Route::get('/api/car-price-suggestions/comparables', [CarPriceSuggestionControll
 Route::get('/api/car-price-suggestions/market', [CarPriceSuggestionController::class, 'market'])->middleware('throttle:20,1')->name('price-suggestions.market');
 
 Route::get('/sitemap.xml', SitemapController::class)->name('sitemap');
+Route::get('/sitemaps/{file}', [SitemapController::class, 'show'])
+    ->where('file', '^(pages|cars-\d{1,5})\.xml$')
+    ->name('sitemap.file');
 
 Route::get('/auth/google/redirect', [GoogleController::class, 'redirect'])->name('auth.google.redirect');
 Route::get('/auth/google/callback', [GoogleController::class, 'callback'])->name('auth.google.callback');

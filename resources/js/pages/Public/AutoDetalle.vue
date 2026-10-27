@@ -80,7 +80,7 @@ const props = defineProps<{
     similar: CarCardData[];
     priceReference: { samples: number; min: number | null; p25: number | null; median: number | null; p75: number | null; max: number | null; confidence: string; scope: string };
     financing: { min_rate: number; max_term: number; service_fee_rate: number };
-    seo: { title: string; description: string; canonical: string; image: string | null };
+    seo: { title: string; description: string; canonical: string; image: string | null; images: string[]; noindex: boolean; robots: string; availability: string };
 }>();
 
 const images = computed(() => (props.car.gallery.length ? props.car.gallery : props.car.image ? [props.car.image] : []));
@@ -222,34 +222,58 @@ const whatsappUrl = computed(() => {
     return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
 });
 
+const siteOrigin = computed(() => {
+    try {
+        return new URL(props.seo.canonical).origin;
+    } catch {
+        return '';
+    }
+});
+
 const jsonLd = computed(() => [
     {
         '@context': 'https://schema.org',
         '@type': 'Vehicle',
+        '@id': `${props.seo.canonical}#vehicle`,
+        url: props.seo.canonical,
+        sku: props.car.slug,
         name: props.car.title,
-        brand: props.car.brand,
+        brand: props.car.brand ? { '@type': 'Brand', name: props.car.brand } : undefined,
         model: props.car.model,
+        vehicleConfiguration: props.car.version,
         vehicleModelDate: props.car.year,
         mileageFromOdometer: { '@type': 'QuantitativeValue', value: props.car.km, unitCode: 'KMT' },
         bodyType: props.car.body,
         fuelType: props.car.fuel,
         vehicleTransmission: props.car.transmission,
         color: props.car.color,
-        image: images.value,
+        image: props.seo.images.length ? props.seo.images : images.value,
+        itemCondition: 'https://schema.org/UsedCondition',
         offers: {
             '@type': 'Offer',
             price: props.car.price,
             priceCurrency: 'MXN',
-            availability: props.car.status === 'vendido' ? 'https://schema.org/SoldOut' : 'https://schema.org/InStock',
+            availability: props.seo.availability,
             url: props.seo.canonical,
+            seller: props.car.agency
+                ? {
+                      '@type': 'Organization',
+                      name: props.car.agency.name,
+                      url: `${siteOrigin.value}/agencia/${props.car.agency.slug}`,
+                  }
+                : {
+                      '@type': 'Organization',
+                      name: 'Wecar',
+                      url: siteOrigin.value,
+                  },
         },
     },
     {
         '@context': 'https://schema.org',
         '@type': 'BreadcrumbList',
         itemListElement: [
-            { '@type': 'ListItem', position: 1, name: 'Inicio', item: '/' },
-            { '@type': 'ListItem', position: 2, name: 'Comprar', item: '/comprar' },
+            { '@type': 'ListItem', position: 1, name: 'Inicio', item: `${siteOrigin.value}/` },
+            { '@type': 'ListItem', position: 2, name: 'Comprar', item: `${siteOrigin.value}/comprar` },
             { '@type': 'ListItem', position: 3, name: props.car.title, item: props.seo.canonical },
         ],
     },
@@ -257,7 +281,19 @@ const jsonLd = computed(() => [
 </script>
 
 <template>
-    <SeoHead :title="seo.title" :description="seo.description" :canonical="seo.canonical" :image="seo.image" type="product" />
+    <SeoHead
+        :title="seo.title"
+        :description="seo.description"
+        :canonical="seo.canonical"
+        :image="seo.image"
+        :image-alt="car.title"
+        type="product"
+        :noindex="seo.noindex"
+        :robots="seo.robots"
+        :price="car.price"
+        currency="MXN"
+        :availability="seo.availability"
+    />
     <component :is="'script'" type="application/ld+json" v-text="JSON.stringify(jsonLd)" />
 
     <section class="mx-auto max-w-7xl px-4 py-6 sm:px-6 pb-24 lg:pb-12">

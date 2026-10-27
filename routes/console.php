@@ -3,6 +3,7 @@
 use App\Services\ExternalSearch\ExternalSearchCacheService;
 use App\Services\PlanExpirationService;
 use App\Services\PlanReminderService;
+use App\Services\SitemapService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -33,6 +34,18 @@ Artisan::command('plans:send-reminders', function () {
     ));
 })->purpose('Envía recordatorios de vencimiento de planes y membresías');
 
+Artisan::command('seo:generate-sitemap', function () {
+    $result = app(SitemapService::class)->generate();
+
+    $this->info(sprintf(
+        'Sitemap generado: %d páginas, %d autos, %d archivos.',
+        $result['pages'],
+        $result['cars'],
+        $result['files'],
+    ));
+})->purpose('Genera el sitemap XML del portal y de los autos publicados');
+
 Schedule::call(fn () => app(ExternalSearchCacheService::class)->prune())->daily();
+Schedule::command('seo:generate-sitemap')->hourlyAt(15)->timezone('America/Monterrey')->withoutOverlapping();
 Schedule::command('plans:send-reminders')->dailyAt('09:00')->timezone('America/Monterrey');
 Schedule::command('plans:process-expirations')->hourlyAt(5)->timezone('America/Monterrey');

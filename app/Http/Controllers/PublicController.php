@@ -16,6 +16,7 @@ use App\Support\AgencyContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -101,7 +102,7 @@ class PublicController extends Controller
         return $this->catalogResponse($request, ['city' => $city], [
             'title' => 'Autos seminuevos en '.$city.' — Wecar',
             'description' => 'Compra y vende autos seminuevos en '.$city.'. Catálogo certificado con financiamiento y compra segura.',
-            'canonical' => route('comprar.city', rawurlencode($city)),
+            'canonical' => route('comprar.city', $city),
             'noindex' => false,
         ]);
     }
@@ -113,7 +114,7 @@ class PublicController extends Controller
         return $this->catalogResponse($request, ['body' => $body], [
             'title' => 'Autos '.$body.' seminuevos en México — Wecar',
             'description' => 'Explora autos tipo '.$body.' seminuevos certificados con financiamiento y compra segura en Wecar.',
-            'canonical' => route('comprar.body', rawurlencode($body)),
+            'canonical' => route('comprar.body', $body),
             'noindex' => false,
         ]);
     }
@@ -242,17 +243,49 @@ class PublicController extends Controller
             'service_fee_rate' => 0.025,
         ];
 
+        $indexable = $model->isSeoIndexable();
+        $location = $model->city ?: $model->state;
+        $fallbackTitle = trim(implode(' ', array_filter([
+            $model->brand?->name,
+            $model->model?->name,
+            $model->version?->name,
+            $model->year,
+        ])));
+
+        if ($location) {
+            $fallbackTitle .= ' en '.$location;
+        }
+
+        $fallbackTitle = Str::limit(trim($fallbackTitle).' | Wecar', 72, '');
+        $descriptionSuffix = trim(implode(' · ', array_filter([
+            $location,
+            number_format((int) $model->km, 0, '.', ',').' km',
+            number_format((float) $model->price, 0, '.', ',').' MXN',
+        ])));
+
+        $description = $model->seo_description
+            ?: trim(Str::limit(strip_tags((string) $model->description), 120).' '.$descriptionSuffix);
+
         return Inertia::render('Public/AutoDetalle', [
             'car' => (new CarResource($model))->resolve(request()),
             'similar' => CarResource::collection($similar)->resolve(request()),
             'priceReference' => $priceReference,
             'financing' => $financing,
             'seo' => [
-                'title' => trim(($model->brand?->name ?? '').' '.($model->model?->name ?? '').' '.$model->year).' — Wecar',
-                'description' => $model->seo_description
-                    ?? str($model->description ?? 'Auto seminuevo certificado en Wecar.')->limit(155)->toString(),
+                'title' => $model->seo_title ?: $fallbackTitle,
+                'description' => Str::limit($description ?: 'Auto seminuevo certificado en Wecar.', 160, ''),
                 'canonical' => route('autos.show', $model->slug),
-                'image' => $model->image,
+                'image' => $this->absoluteImage($model->image ?? data_get($model->gallery, 0)),
+                'images' => collect($model->gallery ?? [])
+                    ->map(fn (string $image) => $this->absoluteImage($image))
+                    ->filter()
+                    ->values()
+                    ->all(),
+                'noindex' => ! $indexable,
+                'robots' => $indexable ? 'index,follow,max-image-preview:large' : 'noindex,follow',
+                'availability' => $model->status?->name === 'vendido'
+                    ? 'https://schema.org/SoldOut'
+                    : 'https://schema.org/InStock',
             ],
         ]);
     }
@@ -476,6 +509,30 @@ class PublicController extends Controller
                 'image' => $agency->logo,
             ],
         ]);
+    }
+
+    private function absoluteImage(?string $image): ?string
+    {
+        if (! filled($image)) {
+            return null;
+        }
+
+        $base = rtrim((string) config('seo.base_url', config('app.url')), '/');
+
+        if (Str::startsWith($image, ['http://', 'https://'])) {
+            $host = parse_url($image, PHP_URL_HOST);
+            $path = parse_url($image, PHP_URL_PATH) ?: '/';
+
+            $isIp = filter_var($host, FILTER_VALIDATE_IP) !== false;
+
+            if ($host === 'localhost' || $host === '127.0.0.1' || ($isIp && filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false)) {
+                return $base.'/'.ltrim($path, '/');
+            }
+
+            return $image;
+        }
+
+        return $base.'/'.ltrim($image, '/');
     }
 
     /**
