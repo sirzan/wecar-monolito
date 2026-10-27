@@ -501,7 +501,7 @@ const jsonLd = computed(() => [
                             class="mt-2 text-xs font-bold text-primary hover:underline"
                             @click="financiarOpen = true"
                         >
-                            Ver opciones y calcular con mi perfil &gt;
+                            Ver opciones y cotizar con mi perfil &gt;
                         </button>
                     </div>
 

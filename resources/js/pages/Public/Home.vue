@@ -17,11 +17,11 @@ import SearchTokensCard from '@/components/external/SearchTokensCard.vue';
 import SearchRewardAdDialog from '@/components/external/SearchRewardAdDialog.vue';
 import { useExternalSearch } from '@/composables/useExternalSearch';
 import type { ExternalCar } from '@/types/external';
-
+  
 defineOptions({ layout: PublicLayout });
 
 const props = defineProps<{
-    featuredCars: CarCardData[];
+  featuredCars: CarCardData[];
     externalCars: ExternalCar[];
     brands: { id: string; name: string; slug: string; logo: string | null }[];
     plans: { id: string; key_name: string; name: string; price: number; max_cars: number; highlight: boolean }[];
@@ -80,7 +80,7 @@ const jsonLd = [
             class="absolute inset-0 -z-20 h-full w-full object-cover" />
         <div class="absolute inset-0 -z-10 bg-gradient-to-b from-secondary/40 via-secondary/20 to-secondary/70" />
         <div class="mx-auto flex w-full flex-col items-center px-3 py-12 text-white sm:px-5 sm:py-24 md:py-32 lg:py-40">
-            <h1 class="page-title text-shadow-hero-soft animate-fade-in text-center text-white">
+            <h1 class="hero-title page-title text-shadow-hero-soft animate-fade-in text-center text-white">
                 Encuentra tu <span class="text-white">auto ideal</span>
             </h1>
 
@@ -99,9 +99,6 @@ const jsonLd = [
                         Buscar
                     </Button>
                 </div>
-                <p class="mt-2 flex items-center justify-center gap-1 text-[11px] text-white/60">
-                    <Sparkles class="h-3 w-3" /> Búsqueda inteligente
-                </p>
             </form>
         </div>
     </section>
@@ -162,6 +159,12 @@ const jsonLd = [
             <Button as="a" href="/comprar" variant="outline" class="w-full">Ver todos los autos</Button>
         </div>
     </section>
+
+    <!-- 4. Garantía, beneficios, publica y planes, aliados -->
+    <HomeSections :plans="plans" />
+
+    <!-- Modal global de financiamiento -->
+    <FinanciarAutoDialog :open="financiarOpen" @close="financiarOpen = false" />
 
     <!-- 3b. Autos externos y buscador inteligente -->
     <section v-if="props.externalCars.length || externalSearch.enabled.value"
@@ -249,3 +252,12 @@ const jsonLd = [
 
     <SearchRewardAdDialog :open="rewardOpen" @close="rewardOpen = false" @reward="externalSearch.refreshStatus" />
 </template>
+
+<style scoped>
+@media (max-width: 639px) {
+    .hero-title {
+        font-size: clamp(1.25rem, 7vw, 1.875rem);
+        white-space: nowrap;
+    }
+}
+</style>
