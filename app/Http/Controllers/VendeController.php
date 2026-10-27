@@ -8,6 +8,7 @@ use App\Models\CarModel;
 use App\Models\CarStatus;
 use App\Models\Plan;
 use App\Models\Subscription;
+use App\Services\CarCatalog\CarVersionService;
 use App\Support\AgencyContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,13 +19,12 @@ use Illuminate\Validation\ValidationException;
 
 class VendeController extends Controller
 {
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, CarVersionService $carVersions): RedirectResponse
     {
         $validated = $request->validate([
             'brand_id' => ['required', 'uuid', 'exists:car_brands,id'],
-            'model_id' => ['nullable', 'uuid', 'exists:car_models,id'],
-            'version_id' => ['nullable', 'uuid', 'exists:car_versions,id'],
-            'version' => ['nullable', 'string', 'max:120'],
+            'model_id' => ['required', 'uuid', 'exists:car_models,id'],
+            'version_id' => ['required', 'uuid', 'exists:car_versions,id'],
             'year' => ['required', 'integer', 'min:1990', 'max:'.(date('Y') + 1)],
             'km' => ['required', 'integer', 'min:0', 'max:2000000'],
             'price' => ['required', 'numeric', 'min:1000', 'max:100000000'],
@@ -68,9 +68,21 @@ class VendeController extends Controller
         $status = CarStatus::query()->where('name', $requiresPayment ? 'pendiente' : 'en_venta')->first();
 
         $brand = CarBrand::query()->find($validated['brand_id']);
-        $model = isset($validated['model_id'])
-            ? CarModel::query()->find($validated['model_id'])
-            : null;
+        $model = CarModel::query()->find($validated['model_id']);
+
+        if (! $model || $model->brand_id !== $brand?->getKey()) {
+            throw ValidationException::withMessages([
+                'model_id' => 'El modelo no pertenece a la marca seleccionada.',
+            ]);
+        }
+
+        $version = $carVersions->validateForModel($model, $validated['version_id'], (int) $validated['year']);
+
+        if (! $version) {
+            throw ValidationException::withMessages([
+                'version_id' => 'La versión no pertenece al modelo o año seleccionado.',
+            ]);
+        }
 
         $baseSlug = Str::slug(implode('-', array_filter([
             $validated['year'],
@@ -79,7 +91,8 @@ class VendeController extends Controller
         ])));
 
         $car = Car::query()->create([
-            ...collect($validated)->except(['images', 'plan_key', 'version'])->all(),
+            ...collect($validated)->except(['images', 'plan_key', 'version_id'])->all(),
+            'version_id' => $version->getKey(),
             'owner_id' => $request->user()->getKey(),
             'agency_id' => $agency?->getKey(),
             'seller_id' => $agency ? $request->user()->getKey() : null,

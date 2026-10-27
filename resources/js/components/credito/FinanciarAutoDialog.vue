@@ -46,6 +46,7 @@ const props = withDefaults(
             term?: number;
             brand?: string;
             model?: string;
+            version?: string;
             year?: number;
             price?: number;
         };
@@ -86,7 +87,69 @@ const profile = reactive({
     model: props.car?.model ?? props.initial.model ?? '',
     year: props.car?.year ?? props.initial.year ?? new Date().getFullYear() - 3,
     price: props.car?.price ?? props.initial.price ?? 250000,
+    version: props.car?.version ?? props.initial.version ?? '',
 });
+
+const versionOptions = ref<{ id: string; name: string }[]>([]);
+const versionsLoading = ref(false);
+const versionsError = ref('');
+let versionsTimer: ReturnType<typeof setTimeout> | null = null;
+
+const loadVersions = async () => {
+    if (!profile.brand || !profile.model || !profile.year) {
+        versionOptions.value = [];
+        return;
+    }
+
+    versionsLoading.value = true;
+    versionsError.value = '';
+
+    try {
+        const params = new URLSearchParams({
+            brand: profile.brand,
+            model: profile.model,
+            year: String(profile.year),
+        });
+        const response = await fetch(`/api/car-versions?${params.toString()}`, {
+            headers: { Accept: 'application/json' },
+        });
+        const payload = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+            throw new Error(payload.error || 'No pudimos cargar las versiones.');
+        }
+
+        versionOptions.value = payload.versions ?? [];
+
+        const carVersion = props.car?.version;
+
+        if (carVersion && !versionOptions.value.some((version) => version.name === carVersion)) {
+            versionOptions.value = [{ id: 'car-version', name: carVersion }, ...versionOptions.value];
+        }
+
+        if (profile.version && !versionOptions.value.some((version) => version.name === profile.version) && !props.car?.version) {
+            profile.version = '';
+        }
+    } catch (error) {
+        versionOptions.value = props.car?.version ? [{ id: 'car-version', name: props.car.version }] : [];
+        versionsError.value = error instanceof Error ? error.message : 'No pudimos cargar las versiones.';
+    } finally {
+        versionsLoading.value = false;
+    }
+};
+
+watch(
+    () => [profile.brand, profile.model, profile.year],
+    (value, oldValue) => {
+        if (oldValue && (value[0] !== oldValue[0] || value[1] !== oldValue[1] || value[2] !== oldValue[2])) {
+            profile.version = props.car?.version ?? '';
+        }
+
+        if (versionsTimer) clearTimeout(versionsTimer);
+        versionsTimer = setTimeout(loadVersions, 600);
+    },
+    { immediate: true },
+);
 
 const application = reactive({
     full_name: user.value?.name ?? '',
@@ -243,6 +306,16 @@ const goToProfile = () => {
 };
 
 const evaluate = async () => {
+    if (!profile.version) {
+        submitError.value = 'Selecciona la versión del auto.';
+        return;
+    }
+
+    if (!props.car && versionOptions.value.length === 0) {
+        submitError.value = 'No hay versiones disponibles para este auto. Intenta de nuevo más tarde.';
+        return;
+    }
+
     if (!profile.income || profile.income <= 0) {
         submitError.value = 'Ingresa tu ingreso mensual.';
         return;
@@ -263,6 +336,7 @@ const evaluate = async () => {
                 auto: {
                     marca: profile.brand,
                     modelo: profile.model,
+                    version: profile.version,
                     anio: Number(profile.year),
                     precio: price.value,
                     km: props.car?.km ?? 0,
@@ -332,7 +406,7 @@ const submit = async () => {
             deuda_mensual: Number(profile.debts),
             car_brand: profile.brand,
             car_model: profile.model,
-            car_version: props.car?.version ?? null,
+            car_version: profile.version || props.car?.version || null,
             car_year: Number(profile.year),
             car_price: price.value,
             car_km: props.car?.km ?? 0,
@@ -346,7 +420,7 @@ const submit = async () => {
             cat: selectedOffer.value.cat,
             total_to_pay: selectedOffer.value.total,
             inputs: {
-                vehicle: { ...props.car, brand_name: profile.brand, model_name: profile.model },
+                vehicle: { ...props.car, brand_name: profile.brand, model_name: profile.model, version_name: profile.version },
                 enganche: downPaymentAmount.value,
                 plazo: basics.term,
                 financiera: selectedOffer.value.nombre,
@@ -525,6 +599,30 @@ const submit = async () => {
                                     <Input id="price" v-model.number="profile.price" type="number" min="1" class="mt-1.5" />
                                 </div>
                             </template>
+
+                            <div>
+                                <Label for="version">Versión *</Label>
+                                <select
+                                    id="version"
+                                    v-model="profile.version"
+                                    :disabled="versionsLoading || versionOptions.length === 0"
+                                    class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"
+                                >
+                                    <option value="">
+                                        {{ versionsLoading ? 'Cargando versiones…' : versionOptions.length ? 'Selecciona la versión' : 'Sin versiones disponibles' }}
+                                    </option>
+                                    <option v-for="version in versionOptions" :key="version.id" :value="version.name">{{ version.name }}</option>
+                                </select>
+                                <p v-if="versionsError" class="mt-1 text-[11px] font-semibold text-destructive">{{ versionsError }}</p>
+                                <button
+                                    v-if="!versionsLoading && versionOptions.length === 0 && profile.model"
+                                    type="button"
+                                    class="mt-1 text-[11px] font-bold text-primary hover:underline"
+                                    @click="loadVersions"
+                                >
+                                    Reintentar
+                                </button>
+                            </div>
                         </div>
 
                         <!-- Paso 3 -->

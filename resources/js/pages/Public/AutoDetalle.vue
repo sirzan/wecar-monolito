@@ -133,7 +133,7 @@ const productSpecs = computed(() => [
     { icon: DoorOpen, label: 'Puertas', value: '4' },
     { icon: Gauge, label: 'Kilometraje', value: formatKm(props.car.km) },
     { icon: Snowflake, label: 'Aire', value: 'Acondicionado' },
-    { icon: Tag, label: 'Versión', value: props.car.version || 'Advance' },
+    { icon: Tag, label: 'Versión', value: props.car.version || 'No especificada' },
     { icon: Palette, label: 'Color', value: props.car.color || 'Plata' },
 ]);
 

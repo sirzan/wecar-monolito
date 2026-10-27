@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AiSearchController;
 use App\Http\Controllers\Auth\GoogleController;
+use App\Http\Controllers\CarVersionController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\CreditController;
@@ -65,6 +66,7 @@ Route::get('/api/external-search/status', [ExternalSearchController::class, 'sta
 Route::get('/api/external-search/cached', [ExternalSearchController::class, 'cached'])->middleware('throttle:60,1')->name('external-search.cached');
 Route::post('/api/external-search/resolve', [ExternalSearchController::class, 'resolve'])->middleware('throttle:30,1')->name('external-search.resolve');
 Route::post('/api/external-search', [ExternalSearchController::class, 'search'])->middleware('throttle:10,1')->name('external-search');
+Route::get('/api/car-versions', CarVersionController::class)->middleware('throttle:30,1')->name('car-versions');
 
 Route::get('/sitemap.xml', SitemapController::class)->name('sitemap');
 

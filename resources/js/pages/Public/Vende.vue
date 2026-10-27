@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useForm, usePage } from '@inertiajs/vue3';
 import {
     BadgeDollarSign,
@@ -56,7 +56,7 @@ const ANIOS = Array.from({ length: 16 }, (_, i) => new Date().getFullYear() + 1 
 const form = useForm({
     brand_id: '',
     model_id: '',
-    version: '',
+    version_id: '',
     year: new Date().getFullYear() - 2,
     km: 45000,
     price: 250000,
@@ -97,6 +97,10 @@ const removeCoupon = () => {
 };
 
 const models = computed(() => props.brands.find((brand) => brand.id === form.brand_id)?.models ?? []);
+const versions = ref<{ id: string; name: string }[]>([]);
+const versionsLoading = ref(false);
+const versionsError = ref('');
+let versionsTimer: ReturnType<typeof setTimeout> | null = null;
 const selectedPlan = computed(() => props.plans.find((plan) => plan.key_name === form.plan_key) ?? null);
 
 const finalPlanPrice = computed(() => {
@@ -118,11 +122,62 @@ const libroAzulSuggested = computed(() => {
 });
 
 const canContinue = computed(() => {
-    if (step.value === 1) return form.brand_id !== '' && form.year > 0 && form.transmission !== '';
+    if (step.value === 1) return form.brand_id !== '' && form.model_id !== '' && form.version_id !== '' && form.year > 0 && form.transmission !== '';
     if (step.value === 2) return form.price >= 1000 && form.km >= 0 && form.description.length >= 20;
     if (step.value === 3) return form.images.length >= 1;
     return true;
 });
+
+const loadVersions = async () => {
+    if (!form.model_id || !form.year) {
+        versions.value = [];
+        form.version_id = '';
+        return;
+    }
+
+    versionsLoading.value = true;
+    versionsError.value = '';
+
+    try {
+        const params = new URLSearchParams({
+            model_id: form.model_id,
+            brand_id: form.brand_id,
+            year: String(form.year),
+        });
+        const response = await fetch(`/api/car-versions?${params.toString()}`, {
+            headers: { Accept: 'application/json' },
+        });
+        const payload = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+            throw new Error(payload.error || 'No pudimos cargar las versiones.');
+        }
+
+        versions.value = payload.versions ?? [];
+
+        if (form.version_id && !versions.value.some((version) => version.id === form.version_id)) {
+            form.version_id = '';
+        }
+    } catch (error) {
+        versions.value = [];
+        form.version_id = '';
+        versionsError.value = error instanceof Error ? error.message : 'No pudimos cargar las versiones.';
+    } finally {
+        versionsLoading.value = false;
+    }
+};
+
+watch(
+    () => [form.brand_id, form.model_id, form.year],
+    () => {
+        versions.value = [];
+        form.version_id = '';
+        versionsError.value = '';
+
+        if (versionsTimer) clearTimeout(versionsTimer);
+        versionsTimer = setTimeout(loadVersions, 600);
+    },
+);
 
 const onFiles = (event: Event) => {
     const input = event.target as HTMLInputElement;
@@ -269,8 +324,26 @@ const submit = () => {
                     </div>
 
                     <div>
-                        <Label>Versión (opcional)</Label>
-                        <Input v-model="form.version" placeholder="Ej. Advance, Touring, XLE" class="mt-1.5 h-11" />
+                        <Label>Versión *</Label>
+                        <select
+                            v-model="form.version_id"
+                            :disabled="!form.model_id || versionsLoading || versions.length === 0"
+                            class="mt-1.5 h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus:border-primary outline-none disabled:opacity-50"
+                        >
+                            <option value="">
+                                {{ versionsLoading ? 'Cargando versiones…' : versions.length ? 'Selecciona la versión' : 'Sin versiones disponibles' }}
+                            </option>
+                            <option v-for="version in versions" :key="version.id" :value="version.id">{{ version.name }}</option>
+                        </select>
+                        <p v-if="versionsError" class="mt-1 text-[11px] font-semibold text-destructive">{{ versionsError }}</p>
+                        <button
+                            v-if="!versionsLoading && versions.length === 0 && form.model_id"
+                            type="button"
+                            class="mt-1 text-[11px] font-bold text-primary hover:underline"
+                            @click="loadVersions"
+                        >
+                            Reintentar
+                        </button>
                     </div>
 
                     <div>

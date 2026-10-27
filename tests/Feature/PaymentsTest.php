@@ -4,6 +4,7 @@ use App\Models\Car;
 use App\Models\CarBrand;
 use App\Models\CarModel;
 use App\Models\CarStatus;
+use App\Models\CarVersion;
 use App\Models\Payment;
 use App\Models\Plan;
 use App\Models\Profile;
@@ -144,10 +145,16 @@ it('publishes paid-plan cars only after checkout', function () {
         ['name' => 'Corolla'],
     );
     CarStatus::query()->firstOrCreate(['name' => 'pendiente'], ['label' => 'Pendiente']);
+    $version = CarVersion::query()->create([
+        'model_id' => $model->getKey(),
+        'name' => 'LE',
+        'year' => '2023',
+    ]);
 
     $response = $this->actingAs($user)->post('/vende', [
         'brand_id' => $brand->getKey(),
         'model_id' => $model->getKey(),
+        'version_id' => $version->getKey(),
         'year' => 2023,
         'km' => 12000,
         'price' => 350000,
