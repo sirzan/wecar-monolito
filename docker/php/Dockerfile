@@ -1,20 +1,3 @@
-FROM composer:2 AS vendor
-
-WORKDIR /app
-
-COPY composer.json composer.lock ./
-RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist --no-interaction --ignore-platform-reqs
-
-FROM node:22-alpine AS assets
-
-WORKDIR /app
-
-COPY package.json package-lock.json ./
-RUN npm ci --legacy-peer-deps --no-audit --no-fund
-
-COPY . .
-RUN npm run build
-
 FROM php:8.3-fpm-alpine AS base
 
 RUN apk add --no-cache \
@@ -55,14 +38,24 @@ RUN mkdir -p storage/framework/cache storage/framework/sessions storage/framewor
 CMD ["php-fpm"]
 
 # ---------------------------------------------------------------
+# Dependencias Composer (secuencial tras base para no saturar RAM)
+# ---------------------------------------------------------------
+FROM base AS vendor
+
+WORKDIR /app
+
+COPY composer.json composer.lock ./
+RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist --no-interaction
+
+# ---------------------------------------------------------------
 # Producción: código inmutable dentro de la imagen
 # ---------------------------------------------------------------
 FROM base AS production
 
 COPY . .
 COPY --from=vendor /app/vendor ./vendor
-COPY --from=assets /app/public/build ./public/build
-COPY --from=assets /app/bootstrap/ssr ./bootstrap/ssr
+COPY --from=wecar-ssr:latest /app/public/build ./public/build
+COPY --from=wecar-ssr:latest /app/bootstrap/ssr ./bootstrap/ssr
 
 RUN composer dump-autoload --optimize --no-dev \
     && mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
