@@ -2,6 +2,7 @@ services:
   app:
     build:
       target: production
+      network: host
     image: wecar-app:latest
     environment:
       APP_ENV: production
@@ -39,6 +40,7 @@ services:
     build:
       context: .
       dockerfile: docker/nginx/Dockerfile
+      network: host
     image: wecar-nginx:latest
     restart: unless-stopped
     environment:
@@ -58,6 +60,7 @@ services:
     build:
       context: .
       dockerfile: docker/ssr/Dockerfile
+      network: host
     image: wecar-ssr:latest
     restart: unless-stopped
     environment:

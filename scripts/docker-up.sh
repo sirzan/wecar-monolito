@@ -12,7 +12,14 @@ fi
 source "$(dirname "$0")/_compose.sh" "$ENVIRONMENT"
 
 echo "==> Entorno: $COMPOSE_ENV | DB_REMOTE=$DB_REMOTE_VALUE"
-compose up -d --build --remove-orphans
+if [ "$COMPOSE_ENV" = "prod" ]; then
+    compose build app
+    compose build nginx
+    compose build ssr
+    compose up -d --remove-orphans
+else
+    compose up -d --build --remove-orphans
+fi
 
 if [ "$COMPOSE_ENV" = "dev" ]; then
     echo "App:     http://localhost:$(env_value APP_PORT 8000)"
