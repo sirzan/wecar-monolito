@@ -7,16 +7,22 @@ services:
     environment:
       MAIL_HOST: mailpit
       MAIL_PORT: "1025"
+    volumes:
+      - ./:/var/www/html
 
   queue:
     environment:
       MAIL_HOST: mailpit
       MAIL_PORT: "1025"
+    volumes:
+      - ./:/var/www/html
 
   scheduler:
     environment:
       MAIL_HOST: mailpit
       MAIL_PORT: "1025"
+    volumes:
+      - ./:/var/www/html
 
   nginx:
     image: nginx:1.27-alpine
