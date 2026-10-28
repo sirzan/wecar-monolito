@@ -13,9 +13,12 @@ source "$(dirname "$0")/_compose.sh" "$ENVIRONMENT"
 
 echo "==> Entorno: $COMPOSE_ENV | DB_REMOTE=$DB_REMOTE_VALUE"
 if [ "$COMPOSE_ENV" = "prod" ]; then
-    compose build ssr
-    compose build app
-    compose build nginx
+    echo "==> Construyendo imágenes (1/3: SSR y Assets)"
+    docker build --network=host -t wecar-ssr:latest -f docker/ssr/Dockerfile .
+    echo "==> Construyendo imágenes (2/3: App PHP)"
+    docker build --network=host --target production -t wecar-app:latest -f docker/php/Dockerfile .
+    echo "==> Construyendo imágenes (3/3: Nginx)"
+    docker build --network=host -t wecar-nginx:latest -f docker/nginx/Dockerfile .
     compose up -d --remove-orphans
 else
     compose up -d --build --remove-orphans

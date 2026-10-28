@@ -13,10 +13,14 @@ echo "==> Activando mantenimiento"
 compose exec -T app php artisan down --retry=60 >/dev/null 2>&1 || true
 trap 'compose exec -T app php artisan up >/dev/null 2>&1 || true' EXIT
 
-echo "==> Construyendo imágenes"
-compose build ssr
-compose build app
-compose build nginx
+echo "==> Construyendo imágenes (1/3: SSR y Assets)"
+docker build --network=host -t wecar-ssr:latest -f docker/ssr/Dockerfile .
+
+echo "==> Construyendo imágenes (2/3: App PHP)"
+docker build --network=host --target production -t wecar-app:latest -f docker/php/Dockerfile .
+
+echo "==> Construyendo imágenes (3/3: Nginx)"
+docker build --network=host -t wecar-nginx:latest -f docker/nginx/Dockerfile .
 
 echo "==> Levantando servicios"
 compose up -d --remove-orphans --wait --wait-timeout 180
