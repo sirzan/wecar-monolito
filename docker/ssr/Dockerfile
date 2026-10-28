@@ -5,7 +5,7 @@ WORKDIR /app
 ENV NODE_OPTIONS="--max-old-space-size=1536 --dns-result-order=ipv4first --no-network-family-autoselection"
 
 COPY package.json package-lock.json ./
-RUN npm ci --legacy-peer-deps --no-audit --no-fund --maxsockets=5
+RUN npm install --legacy-peer-deps --no-audit --no-fund --maxsockets=5
 
 COPY . .
 RUN npm run build \
