@@ -1,0 +1,14 @@
+# Producción detrás de Cloudflare con Origin Certificate (SSL Full strict).
+# Se incluye automáticamente desde scripts/_compose.sh cuando
+# CLOUDFLARE_ORIGIN=true y el entorno es prod.
+services:
+  nginx:
+    volumes:
+      - ${CLOUDFLARE_CERT_DIR:-/etc/wecar/cloudflare/wecar.mx}:/etc/letsencrypt/live/wecar.mx:ro
+      - ./docker/nginx/cloudflare-realip.conf:/etc/nginx/conf.d/00-cloudflare-realip.conf:ro
+
+  # Ya no se usa Let's Encrypt: el certificado lo emite Cloudflare.
+  # Queda disponible solo si se levanta con --profile certbot.
+  certbot:
+    profiles:
+      - certbot
