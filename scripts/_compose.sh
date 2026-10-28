@@ -44,7 +44,7 @@ if [ "$COMPOSE_ENV" = "prod" ] && [ "$CLOUDFLARE_ORIGIN_VALUE" = "true" ]; then
 fi
 
 compose() {
-    docker compose "${COMPOSE_FILES[@]}" "$@"
+    COMPOSE_BAKE=false docker compose "${COMPOSE_FILES[@]}" "$@"
 }
 
-export COMPOSE_ENV DB_REMOTE_VALUE CLOUDFLARE_ORIGIN_VALUE ROOT_DIR
+export COMPOSE_BAKE=false COMPOSE_ENV DB_REMOTE_VALUE CLOUDFLARE_ORIGIN_VALUE ROOT_DIR
