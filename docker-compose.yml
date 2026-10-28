@@ -7,9 +7,6 @@ x-app-environment: &app-environment
   WAIT_FOR_DB: "true"
   RUN_MIGRATIONS: "false"
 
-x-app-volumes: &app-volumes
-  - ./:/var/www/html
-
 services:
   app:
     build:
@@ -23,7 +20,6 @@ services:
       <<: *app-environment
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
     working_dir: /var/www/html
-    volumes: *app-volumes
     depends_on:
       redis:
         condition: service_healthy
@@ -41,7 +37,6 @@ services:
       <<: *app-environment
     working_dir: /var/www/html
     command: php artisan queue:work --queue=emails,notifications,payments,credits,external-search,default --sleep=3 --tries=3 --max-time=3600
-    volumes: *app-volumes
     depends_on:
       redis:
         condition: service_healthy
@@ -54,7 +49,6 @@ services:
       <<: *app-environment
     working_dir: /var/www/html
     command: php artisan schedule:work
-    volumes: *app-volumes
     depends_on:
       redis:
         condition: service_healthy
