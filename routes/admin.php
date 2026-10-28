@@ -14,12 +14,15 @@ use App\Http\Controllers\Admin\PlanController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\VendeController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'verified', 'role:superadmin|manager|viewer', 'admin.write'])->group(function () {
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 
     Route::get('/autos', [CarController::class, 'index'])->name('cars');
+    Route::get('/autos/crear', [CarController::class, 'create'])->middleware('role:superadmin|manager')->name('cars.create');
+    Route::post('/autos', [VendeController::class, 'store'])->name('cars.store');
     Route::patch('/autos/{car:id}', [CarController::class, 'update'])->name('cars.update');
     Route::delete('/autos/{car:id}', [CarController::class, 'destroy'])->name('cars.destroy');
 

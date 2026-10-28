@@ -115,6 +115,9 @@ class CreditController extends Controller
                     'rate' => (float) $application->rate,
                     'cat' => (float) $application->cat,
                     'total_to_pay' => (float) $application->total_to_pay,
+                    'service_fee' => (float) $application->service_fee,
+                    'financiera_id' => $application->financiera_id,
+                    'car_id' => $application->car_id,
                 ],
                 'documents' => $application->documents->map(fn (CreditDocument $document) => [
                     'slot' => $document->slot,

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\DiditController;
 use App\Http\Controllers\Panel\AgencyController;
 use App\Http\Controllers\Panel\BillingController;
 use App\Http\Controllers\Panel\CreditController;
@@ -29,7 +30,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/avatar', [ProfileController::class, 'updateAvatar'])->name('avatar.update');
     Route::delete('/avatar', [ProfileController::class, 'destroyAvatar'])->name('avatar.destroy');
 
+    Route::get('/verificacion/retorno', [DiditController::class, 'callback'])->name('identity.callback');
+
     Route::get('/facturacion', [BillingController::class, 'index'])->name('billing');
+    Route::post('/facturacion/renovar', [BillingController::class, 'renew'])->name('billing.renew');
 
     Route::get('/membresia', [MembershipController::class, 'index'])->name('membership');
     Route::post('/membresia/checkout', [MembershipController::class, 'checkout'])->name('membership.checkout');
@@ -55,6 +59,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('/perfil', [AgencyController::class, 'profile'])->name('profile');
             Route::post('/perfil', [AgencyController::class, 'updateProfile'])->name('profile.update');
             Route::get('/facturacion', [AgencyController::class, 'billing'])->name('billing');
+            Route::post('/facturacion/renovar', [AgencyController::class, 'renew'])->name('billing.renew');
             Route::get('/configuracion', [AgencyController::class, 'settings'])->name('settings');
         });
     });

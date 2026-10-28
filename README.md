@@ -77,6 +77,11 @@ DB_REMOTE_SSLMODE=require
 Los scripts eligen automáticamente `docker-compose.db-local.yml` o `docker-compose.db-remote.yml`.
 
 
+
+## Versiones de autos
+
+Las versiones se consultan en `car_versions` y, si no existen para modelo/año, se obtienen con Firecrawl y se guardan automáticamente. Vende y el simulador de crédito usan un selector obligatorio; no se captura texto libre. Configura `FIRECRAWL_API_KEY` para el autocompletado.
+
 ## Búsqueda externa y membresía
 
 - Búsqueda en Mercado Libre, Facebook, Seminuevos, Kavak y Autocosmos con Firecrawl/Apify.

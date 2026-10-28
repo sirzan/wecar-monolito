@@ -75,6 +75,20 @@ class Car extends Model
             ->whereDoesntHave('status', fn (Builder $query) => $query->whereIn('name', ['pendiente', 'pausado', 'cancelado']));
     }
 
+    public function scopeSeoIndexable(Builder $query): Builder
+    {
+        return $query->published()
+            ->whereNotNull('slug')
+            ->whereHas('status', fn (Builder $query) => $query->whereIn('name', ['en_venta', 'promocion', 'nuevo']));
+    }
+
+    public function isSeoIndexable(): bool
+    {
+        return $this->is_published
+            && filled($this->slug)
+            && in_array($this->status?->name, ['en_venta', 'promocion', 'nuevo'], true);
+    }
+
     public function getRouteKeyName(): string
     {
         return 'slug';

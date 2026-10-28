@@ -16,6 +16,8 @@ interface AdminAgency {
     owner_email: string | null;
     city: string | null;
     plan: string;
+    plan_id: string | null;
+    plan_name: string | null;
     plan_expires_at: string | null;
     max_cars: number;
     cars_count: number;
@@ -27,17 +29,18 @@ interface AdminAgency {
 const props = defineProps<{
     agencies: { data: AdminAgency[]; current_page: number; last_page: number; total: number };
     filters: Record<string, string>;
+    plans: { id: string; key_name: string; name: string; max_cars: number; duration_weeks: number }[];
 }>();
 
 const q = ref(props.filters.q ?? '');
 const active = ref(props.filters.active ?? '');
 
-const state = reactive<Record<string, { plan: string; max_cars: number; plan_expires_at: string; is_active: boolean }>>(
+const state = reactive<Record<string, { plan_id: string; max_cars: number; plan_expires_at: string; is_active: boolean }>>(
     Object.fromEntries(
         props.agencies.data.map((agency) => [
             agency.id,
             {
-                plan: agency.plan,
+                plan_id: agency.plan_id ?? '',
                 max_cars: agency.max_cars,
                 plan_expires_at: agency.plan_expires_at ? agency.plan_expires_at.slice(0, 10) : '',
                 is_active: agency.is_active,
@@ -55,6 +58,11 @@ const applyFilters = () => {
 
 const save = (agency: AdminAgency) => {
     router.patch(`/admin/agencias/${agency.id}`, state[agency.id], { preserveScroll: true });
+};
+
+const onPlanChange = (agency: AdminAgency) => {
+    const plan = props.plans.find((item) => item.id === state[agency.id].plan_id);
+    if (plan) state[agency.id].max_cars = plan.max_cars;
 };
 </script>
 
@@ -99,7 +107,10 @@ const save = (agency: AdminAgency) => {
                         </td>
                         <td class="p-4 text-xs text-muted-foreground">{{ agency.cars_count }} autos · {{ agency.members_count }} miembros</td>
                         <td class="p-4">
-                            <input v-model="state[agency.id].plan" class="h-8 w-28 rounded-lg border border-input bg-background px-2 text-xs" />
+                            <select v-model="state[agency.id].plan_id" class="h-8 w-36 rounded-lg border border-input bg-background px-2 text-xs" @change="onPlanChange(agency)">
+                                <option value="">{{ agency.plan_name ?? agency.plan }}</option>
+                                <option v-for="plan in plans" :key="plan.id" :value="plan.id">{{ plan.name }}</option>
+                            </select>
                         </td>
                         <td class="p-4">
                             <input v-model.number="state[agency.id].max_cars" type="number" min="1" class="h-8 w-20 rounded-lg border border-input bg-background px-2 text-xs" />

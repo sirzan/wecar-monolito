@@ -60,10 +60,12 @@ return [
     ],
 
     'didit' => [
-        'api_url' => env('DIDIT_API_URL', 'https://apx.didit.me'),
+        'api_url' => env('DIDIT_API_URL', 'https://verification.didit.me'),
         'api_key' => env('DIDIT_API_KEY'),
         'workflow_id' => env('DIDIT_WORKFLOW_ID'),
+        'callback_url' => env('DIDIT_CALLBACK_URL'),
         'shared_secret' => env('DIDIT_SHARED_SECRET'),
+        'webhook_secret' => env('DIDIT_WEBHOOK_SECRET'),
     ],
 
     'ses' => [

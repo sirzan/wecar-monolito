@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { Link, router } from '@inertiajs/vue3';
 import { Pencil, Plus, Trash2 } from '@lucide/vue';
 import AdminLayout from '@/layouts/AdminLayout.vue';
@@ -27,6 +27,7 @@ interface CatalogItem {
 
 const props = defineProps<{
     resource: 'brands' | 'models' | 'versions' | 'statuses';
+    filters: { brand_id?: string; model_id?: string };
     items: CatalogItem[];
     options: {
         brands: { id: string; name: string }[];
@@ -42,6 +43,9 @@ const tabs = [
 ];
 
 const editingId = ref<string | null>(null);
+const filterBrand = ref(props.filters.brand_id ?? '');
+const filterModel = ref(props.filters.model_id ?? '');
+const filterModels = computed(() => props.options.models.filter((model) => !filterBrand.value || model.brand_id === filterBrand.value));
 
 const form = reactive({
     name: '',
@@ -73,6 +77,13 @@ const edit = (item: CatalogItem) => {
     });
 };
 
+const applyFilters = () => {
+    router.get(`/admin/catalogos/${props.resource}`, {
+        brand_id: filterBrand.value || undefined,
+        model_id: filterModel.value || undefined,
+    }, { preserveState: true, preserveScroll: true, replace: true });
+};
+
 const submit = () => {
     if (editingId.value) {
         router.patch(`/admin/catalogos/${props.resource}/${editingId.value}`, form, { preserveScroll: true, onSuccess: reset });
@@ -101,6 +112,24 @@ const destroy = (item: CatalogItem) => {
             >
                 {{ tab.label }}
             </Link>
+        </div>
+
+        <div v-if="resource === 'versions'" class="mt-4 flex flex-wrap items-end gap-3 rounded-2xl border border-border bg-card/50 p-4">
+            <div class="min-w-48 flex-1">
+                <Label>Filtrar por marca</Label>
+                <select v-model="filterBrand" class="mt-1.5 h-10 w-full rounded-xl border border-input bg-background px-3 text-sm" @change="filterModel = ''">
+                    <option value="">Todas las marcas</option>
+                    <option v-for="brand in options.brands" :key="brand.id" :value="brand.id">{{ brand.name }}</option>
+                </select>
+            </div>
+            <div class="min-w-48 flex-1">
+                <Label>Filtrar por modelo</Label>
+                <select v-model="filterModel" class="mt-1.5 h-10 w-full rounded-xl border border-input bg-background px-3 text-sm">
+                    <option value="">Todos los modelos</option>
+                    <option v-for="model in filterModels" :key="model.id" :value="model.id">{{ model.name }}</option>
+                </select>
+            </div>
+            <Button type="button" variant="outline" @click="applyFilters">Aplicar filtros</Button>
         </div>
 
         <div class="mt-6 grid gap-6 lg:grid-cols-[380px_1fr]">
@@ -145,8 +174,8 @@ const destroy = (item: CatalogItem) => {
                     </div>
 
                     <div v-if="resource === 'versions'">
-                        <Label for="year">Año</Label>
-                        <Input id="year" v-model="form.year" class="mt-1.5" />
+                        <Label for="year">Año(s) *</Label>
+                        <Input id="year" v-model="form.year" class="mt-1.5" placeholder="2020 o 2018-2022" />
                     </div>
 
                     <div v-if="resource !== 'versions'">

@@ -4,6 +4,7 @@ use App\Models\Car;
 use App\Models\CarBrand;
 use App\Models\CarModel;
 use App\Models\CarStatus;
+use App\Models\CarVersion;
 use App\Models\Financiera;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -74,6 +75,8 @@ it('renders a car detail page with slug and seo', function () {
             ->component('Public/AutoDetalle')
             ->where('car.slug', $car->slug)
             ->has('seo.title')
+            ->where('financing.min_rate', fn ($rate) => (float) $rate > 0)
+            ->where('financing.max_term', fn ($term) => (int) $term >= 12)
         );
 });
 
@@ -102,9 +105,16 @@ it('publishes a car with images for a verified user', function () {
         ['name' => 'Corolla'],
     );
 
+    $version = CarVersion::query()->create([
+        'model_id' => $model->getKey(),
+        'name' => 'LE',
+        'year' => '2023',
+    ]);
+
     $response = $this->actingAs($user)->post('/vende', [
         'brand_id' => $brand->getKey(),
         'model_id' => $model->getKey(),
+        'version_id' => $version->getKey(),
         'year' => 2023,
         'km' => 12000,
         'price' => 350000,
@@ -114,6 +124,7 @@ it('publishes a car with images for a verified user', function () {
         'body' => 'Sedán',
         'color' => 'Blanco',
         'city' => 'Monterrey, NL',
+        'plan_key' => 'basico',
         'images' => [UploadedFile::fake()->image('carro.jpg')],
     ]);
 
@@ -121,6 +132,7 @@ it('publishes a car with images for a verified user', function () {
 
     expect($car)->not->toBeNull();
     expect($car->gallery)->toHaveCount(1);
+    expect($car->version_id)->toBe($version->getKey());
 
     $response->assertRedirect('/auto/'.$car->slug);
 });

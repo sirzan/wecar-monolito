@@ -23,6 +23,7 @@ env_value() {
 
 COMPOSE_ENV="${1:-dev}"
 DB_REMOTE_VALUE="$(env_value DB_REMOTE false)"
+CLOUDFLARE_ORIGIN_VALUE="$(env_value CLOUDFLARE_ORIGIN false)"
 
 COMPOSE_FILES=(-f docker-compose.yml)
 
@@ -38,8 +39,12 @@ else
     COMPOSE_FILES+=(-f docker-compose.db-local.yml)
 fi
 
+if [ "$COMPOSE_ENV" = "prod" ] && [ "$CLOUDFLARE_ORIGIN_VALUE" = "true" ]; then
+    COMPOSE_FILES+=(-f docker-compose.cloudflare.yml)
+fi
+
 compose() {
     docker compose "${COMPOSE_FILES[@]}" "$@"
 }
 
-export COMPOSE_ENV DB_REMOTE_VALUE ROOT_DIR
+export COMPOSE_ENV DB_REMOTE_VALUE CLOUDFLARE_ORIGIN_VALUE ROOT_DIR

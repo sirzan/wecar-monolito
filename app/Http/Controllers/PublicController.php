@@ -10,9 +10,13 @@ use App\Models\Financiera;
 use App\Models\Plan;
 use App\Models\SiteSetting;
 use App\Services\ExternalSearch\ExternalSearchService;
+use App\Services\Pricing\CarPriceSuggestionService;
+use App\Services\PublicationPlanService;
+use App\Support\AgencyContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -36,12 +40,6 @@ class PublicController extends Controller
             ->limit(16)
             ->get(['id', 'name', 'slug', 'logo']);
 
-        $plans = Plan::query()
-            ->where('is_active', true)
-            ->where('type', 'publication')
-            ->orderBy('sort_order')
-            ->get();
-
         $financieras = Financiera::query()
             ->where('activo', true)
             ->orderByDesc('destacado')
@@ -49,12 +47,19 @@ class PublicController extends Controller
             ->limit(8)
             ->get();
 
+        $plans = Plan::query()
+            ->where('is_active', true)
+            ->where('type', 'publication')
+            ->orderBy('sort_order')
+            ->limit(3)
+            ->get(['id', 'key_name', 'name', 'price', 'duration', 'max_cars', 'highlight']);
+
         return Inertia::render('Public/Home', [
             'featuredCars' => CarResource::collection($featured)->resolve(request()),
             'externalCars' => $this->externalSearch->cached($request->user(), 8)['results'],
+            'financieras' => $financieras,
             'brands' => $brands,
             'plans' => $plans,
-            'financieras' => $financieras,
             'seo' => [
                 'title' => 'Wecar — Compra y vende autos seminuevos en México',
                 'description' => 'Wecar: compra, vende y financia autos seminuevos en México. Búsqueda inteligente, certificación de 160 puntos y compra segura garantizada.',
@@ -97,7 +102,7 @@ class PublicController extends Controller
         return $this->catalogResponse($request, ['city' => $city], [
             'title' => 'Autos seminuevos en '.$city.' — Wecar',
             'description' => 'Compra y vende autos seminuevos en '.$city.'. Catálogo certificado con financiamiento y compra segura.',
-            'canonical' => route('comprar.city', rawurlencode($city)),
+            'canonical' => route('comprar.city', $city),
             'noindex' => false,
         ]);
     }
@@ -109,7 +114,7 @@ class PublicController extends Controller
         return $this->catalogResponse($request, ['body' => $body], [
             'title' => 'Autos '.$body.' seminuevos en México — Wecar',
             'description' => 'Explora autos tipo '.$body.' seminuevos certificados con financiamiento y compra segura en Wecar.',
-            'canonical' => route('comprar.body', rawurlencode($body)),
+            'canonical' => route('comprar.body', $body),
             'noindex' => false,
         ]);
     }
@@ -188,7 +193,7 @@ class PublicController extends Controller
         ]);
     }
 
-    public function autoShow(string $car): Response|RedirectResponse
+    public function autoShow(string $car, CarPriceSuggestionService $priceSuggestions): Response|RedirectResponse
     {
         $model = Car::query()
             ->published()
@@ -215,15 +220,72 @@ class PublicController extends Controller
             ->limit(4)
             ->get();
 
+        $priceReference = $model->model
+            ? $priceSuggestions->comparables(
+                $model->model,
+                (int) $model->year,
+                $model->version_id,
+                (int) $model->km,
+                $model->getKey(),
+            )
+            : ['samples' => 0, 'min' => null, 'p25' => null, 'median' => null, 'p75' => null, 'max' => null, 'confidence' => 'none', 'scope' => 'model'];
+
+        $financing = [
+            'min_rate' => (float) (Financiera::query()
+                ->where('activo', true)
+                ->whereNotNull('tasa_min')
+                ->where('tasa_min', '>', 0)
+                ->min('tasa_min') ?? 12.5),
+            'max_term' => max(12, (int) (Financiera::query()
+                ->where('activo', true)
+                ->where('plazo_max', '>', 0)
+                ->max('plazo_max') ?? 72)),
+            'service_fee_rate' => 0.025,
+        ];
+
+        $indexable = $model->isSeoIndexable();
+        $location = $model->city ?: $model->state;
+        $fallbackTitle = trim(implode(' ', array_filter([
+            $model->brand?->name,
+            $model->model?->name,
+            $model->version?->name,
+            $model->year,
+        ])));
+
+        if ($location) {
+            $fallbackTitle .= ' en '.$location;
+        }
+
+        $fallbackTitle = Str::limit(trim($fallbackTitle).' | Wecar', 72, '');
+        $descriptionSuffix = trim(implode(' · ', array_filter([
+            $location,
+            number_format((int) $model->km, 0, '.', ',').' km',
+            number_format((float) $model->price, 0, '.', ',').' MXN',
+        ])));
+
+        $description = $model->seo_description
+            ?: trim(Str::limit(strip_tags((string) $model->description), 120).' '.$descriptionSuffix);
+
         return Inertia::render('Public/AutoDetalle', [
             'car' => (new CarResource($model))->resolve(request()),
             'similar' => CarResource::collection($similar)->resolve(request()),
+            'priceReference' => $priceReference,
+            'financing' => $financing,
             'seo' => [
-                'title' => trim(($model->brand?->name ?? '').' '.($model->model?->name ?? '').' '.$model->year).' — Wecar',
-                'description' => $model->seo_description
-                    ?? str($model->description ?? 'Auto seminuevo certificado en Wecar.')->limit(155)->toString(),
+                'title' => $model->seo_title ?: $fallbackTitle,
+                'description' => Str::limit($description ?: 'Auto seminuevo certificado en Wecar.', 160, ''),
                 'canonical' => route('autos.show', $model->slug),
-                'image' => $model->image,
+                'image' => $this->absoluteImage($model->image ?? data_get($model->gallery, 0)),
+                'images' => collect($model->gallery ?? [])
+                    ->map(fn (string $image) => $this->absoluteImage($image))
+                    ->filter()
+                    ->values()
+                    ->all(),
+                'noindex' => ! $indexable,
+                'robots' => $indexable ? 'index,follow,max-image-preview:large' : 'noindex,follow',
+                'availability' => $model->status?->name === 'vendido'
+                    ? 'https://schema.org/SoldOut'
+                    : 'https://schema.org/InStock',
             ],
         ]);
     }
@@ -280,11 +342,42 @@ class PublicController extends Controller
         ]);
     }
 
-    public function vende(Request $request): Response
+    public function vende(Request $request, PublicationPlanService $publicationPlans): Response
     {
+        $user = $request->user();
+        $agency = $user ? app(AgencyContext::class)->current($request) : null;
+        $agency = $agency && $user?->belongsToAgency($agency) ? $agency : null;
+
+        $plans = Plan::query()
+            ->where('is_active', true)
+            ->where('type', 'publication')
+            ->whereIn('audience', $agency ? ['agency', 'both'] : ['user', 'both'])
+            ->orderBy('sort_order')
+            ->get();
+
+        $activeSubscription = $user && ! $agency ? $publicationPlans->activeForUser($user) : null;
+        $activePlan = $activeSubscription ? [
+            'name' => $publicationPlans->planFor($activeSubscription)?->name ?? data_get($activeSubscription->metadata, 'plan_name'),
+            'key' => $publicationPlans->planFor($activeSubscription)?->key_name,
+            'ends_at' => $activeSubscription->ends_at?->toIso8601String(),
+            'max_cars' => $publicationPlans->maxCars($activeSubscription),
+            'used_cars' => $publicationPlans->activeCarsCount($user),
+        ] : null;
+
+        $agencyPlan = $agency ? $publicationPlans->planForAgency($agency) : null;
+        $agencyPlanData = $agency ? [
+            'name' => $agencyPlan?->name ?? ucfirst($agency->plan),
+            'ends_at' => $agency->plan_expires_at?->toIso8601String(),
+            'max_cars' => max((int) $agency->max_cars, 1),
+            'used_cars' => $publicationPlans->activeAgencyCarsCount($agency),
+            'active' => $agency->isPlanActive(),
+        ] : null;
+
         return Inertia::render('Public/Vende', [
             'brands' => CarBrand::query()->with('models:id,brand_id,name')->orderBy('name')->get(['id', 'name', 'slug']),
-            'plans' => Plan::query()->where('is_active', true)->where('type', 'publication')->orderBy('sort_order')->get(),
+            'plans' => $plans,
+            'activePlan' => $activePlan,
+            'agencyPlan' => $agencyPlanData,
             'filters' => [
                 'bodies' => ['Sedán', 'SUV', 'Hatchback', 'Pickup', 'Coupé', 'Van'],
                 'transmissions' => ['Automática', 'Manual', 'CVT'],
@@ -416,6 +509,30 @@ class PublicController extends Controller
                 'image' => $agency->logo,
             ],
         ]);
+    }
+
+    private function absoluteImage(?string $image): ?string
+    {
+        if (! filled($image)) {
+            return null;
+        }
+
+        $base = rtrim((string) config('seo.base_url', config('app.url')), '/');
+
+        if (Str::startsWith($image, ['http://', 'https://'])) {
+            $host = parse_url($image, PHP_URL_HOST);
+            $path = parse_url($image, PHP_URL_PATH) ?: '/';
+
+            $isIp = filter_var($host, FILTER_VALIDATE_IP) !== false;
+
+            if ($host === 'localhost' || $host === '127.0.0.1' || ($isIp && filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false)) {
+                return $base.'/'.ltrim($path, '/');
+            }
+
+            return $image;
+        }
+
+        return $base.'/'.ltrim($image, '/');
     }
 
     /**

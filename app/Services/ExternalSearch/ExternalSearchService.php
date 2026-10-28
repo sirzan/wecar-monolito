@@ -32,10 +32,13 @@ class ExternalSearchService
         $identity = $this->usage->identity($user, $ip);
         $counts = $this->usage->counts($identity);
         $subscribed = $this->membership->isSubscribed($user);
+        $isAdmin = $user?->hasAdminPrivileges() ?? false;
 
         return [
             'enabled' => $this->platforms->available(),
             'subscribed' => $subscribed,
+            'unlimited' => $this->hasUnlimitedAccess($user),
+            'is_admin' => $isAdmin,
             'membership_ends_at' => $user ? $this->membership->active($user)?->ends_at?->toIso8601String() : null,
             'token_balance' => $user ? $this->tokens->balance($user) : 0,
             'searches' => [
@@ -74,12 +77,12 @@ class ExternalSearchService
             ];
         }
 
-        $subscribed = $this->membership->isSubscribed($user);
+        $unlimited = $this->hasUnlimitedAccess($user);
         $identity = $this->usage->identity($user, $ip);
         $usageCount = null;
         $tokenUsed = false;
 
-        if (! $subscribed) {
+        if (! $unlimited) {
             $usage = $this->usage->increment($identity, 'search');
             $usageCount = $usage['search'];
 
@@ -104,7 +107,7 @@ class ExternalSearchService
         $cached = Cache::get($memoryKey);
 
         if (is_array($cached) && isset($cached['results'])) {
-            return $this->searchResponse($cached, $subscribed, $usageCount, $tokenUsed);
+            return $this->searchResponse($cached, $unlimited, $usageCount, $tokenUsed);
         }
 
         $databaseCache = $this->cache->get($cacheKey);
@@ -119,7 +122,7 @@ class ExternalSearchService
                 ];
                 Cache::put($memoryKey, $payload, now()->addMinutes((int) config('external_search.memory_ttl_minutes', 30)));
 
-                return $this->searchResponse($payload, $subscribed, $usageCount, $tokenUsed);
+                return $this->searchResponse($payload, $unlimited, $usageCount, $tokenUsed);
             }
         }
 
@@ -150,7 +153,7 @@ class ExternalSearchService
             $payload['platformsSearched'],
         );
 
-        return $this->searchResponse($payload, $subscribed, $usageCount, $tokenUsed);
+        return $this->searchResponse($payload, $unlimited, $usageCount, $tokenUsed);
     }
 
     /**
@@ -158,11 +161,11 @@ class ExternalSearchService
      */
     public function cached(?User $user, int $limit = 24): array
     {
-        $subscribed = $this->membership->isSubscribed($user);
+        $unlimited = $this->hasUnlimitedAccess($user);
         $cars = $this->cache->recentCars(max(1, min(60, $limit)));
 
         return [
-            'results' => $this->normalizer->toClient($cars, $subscribed),
+            'results' => $this->normalizer->toClient($cars, $unlimited),
         ];
     }
 
@@ -181,7 +184,7 @@ class ExternalSearchService
             return ['allowed' => false, 'remaining' => 0, 'dead' => true];
         }
 
-        if ($this->membership->isSubscribed($user)) {
+        if ($this->hasUnlimitedAccess($user)) {
             return [
                 'allowed' => true,
                 'sourceUrl' => $sourceUrl,
@@ -215,9 +218,9 @@ class ExternalSearchService
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */
-    private function searchResponse(array $payload, bool $subscribed, ?int $usageCount, bool $tokenUsed): array
+    private function searchResponse(array $payload, bool $allowSource, ?int $usageCount, bool $tokenUsed): array
     {
-        $results = $this->normalizer->toClient($payload['results'] ?? [], $subscribed);
+        $results = $this->normalizer->toClient($payload['results'] ?? [], $allowSource);
 
         return [
             'results' => $results,
@@ -255,5 +258,11 @@ class ExternalSearchService
         }
 
         return $this->normalizer->sortByPlatform(array_values($cars));
+    }
+
+    private function hasUnlimitedAccess(?User $user): bool
+    {
+        return $user !== null
+            && ($user->hasAdminPrivileges() || $this->membership->isSubscribed($user));
     }
 }

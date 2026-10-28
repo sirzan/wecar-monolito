@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Check, CreditCard } from '@lucide/vue';
+import { router } from '@inertiajs/vue3';
 import PanelLayout from '@/layouts/PanelLayout.vue';
 import Button from '@/components/ui/Button.vue';
 
@@ -7,12 +8,17 @@ defineOptions({ layout: PanelLayout });
 
 const props = defineProps<{
     plans: { id: string; key_name: string; name: string; price: number; duration: string; max_cars: number; highlight: boolean; features: string[] | null }[];
-    activePlan: string | null;
+    activePlan: { key: string | null; name: string | null; ends_at: string | null; max_cars: number; used_cars: number; subscription_id: string; active: boolean } | null;
     invoices: { id: string; date: string; amount: number; status: string }[];
 }>();
 
 const formatPrice = (value: number) =>
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(value);
+
+const formatDate = (value: string | null) =>
+    value ? new Date(value).toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: '2-digit' }) : 'Sin fecha';
+
+const renew = () => router.post('/panel/facturacion/renovar');
 </script>
 
 <template>
@@ -24,10 +30,26 @@ const formatPrice = (value: number) =>
             <div class="flex items-center gap-3">
                 <span class="grid h-11 w-11 place-items-center rounded-xl bg-accent text-accent-foreground"><CreditCard class="h-5 w-5" /></span>
                 <div>
-                    <p class="text-sm font-semibold text-muted-foreground">Plan actual</p>
-                    <p class="text-lg font-black text-secondary">{{ activePlan ?? 'Sin plan activo' }}</p>
+                    <p class="text-sm font-semibold text-muted-foreground">{{ activePlan?.active ? 'Plan actual' : 'Plan por renovar' }}</p>
+                    <p class="text-lg font-black text-secondary">{{ activePlan?.name ?? 'Sin plan activo' }}</p>
                 </div>
             </div>
+            <dl v-if="activePlan" class="mt-5 grid gap-4 sm:grid-cols-3">
+                <div class="rounded-xl bg-muted/50 p-4">
+                    <dt class="text-xs text-muted-foreground">Vigencia</dt>
+                    <dd class="mt-1 font-bold text-secondary">{{ formatDate(activePlan.ends_at) }}</dd>
+                </div>
+                <div class="rounded-xl bg-muted/50 p-4">
+                    <dt class="text-xs text-muted-foreground">Autos usados</dt>
+                    <dd class="mt-1 font-bold text-secondary">{{ activePlan.used_cars }} / {{ activePlan.max_cars }}</dd>
+                </div>
+                <div class="rounded-xl bg-muted/50 p-4">
+                    <dt class="text-xs text-muted-foreground">Cupos disponibles</dt>
+                    <dd class="mt-1 font-bold text-secondary">{{ Math.max(activePlan.max_cars - activePlan.used_cars, 0) }}</dd>
+                </div>
+            </dl>
+            <Button v-if="activePlan" class="mt-5" @click="renew">Renovar plan</Button>
+            <p v-if="activePlan && !activePlan.active" class="mt-2 text-xs font-bold text-destructive">Tu plan venció. Tus autos están pausados hasta que renueves.</p>
         </div>
 
         <h2 class="mt-8 text-xl font-black text-secondary">Planes disponibles</h2>
