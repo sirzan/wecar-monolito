@@ -14,9 +14,9 @@ compose exec -T app php artisan down --retry=60 >/dev/null 2>&1 || true
 trap 'compose exec -T app php artisan up >/dev/null 2>&1 || true' EXIT
 
 echo "==> Construyendo imágenes"
+compose build ssr
 compose build app
 compose build nginx
-compose build ssr
 
 echo "==> Levantando servicios"
 compose up -d --remove-orphans --wait --wait-timeout 180

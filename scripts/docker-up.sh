@@ -13,9 +13,9 @@ source "$(dirname "$0")/_compose.sh" "$ENVIRONMENT"
 
 echo "==> Entorno: $COMPOSE_ENV | DB_REMOTE=$DB_REMOTE_VALUE"
 if [ "$COMPOSE_ENV" = "prod" ]; then
+    compose build ssr
     compose build app
     compose build nginx
-    compose build ssr
     compose up -d --remove-orphans
 else
     compose up -d --build --remove-orphans
