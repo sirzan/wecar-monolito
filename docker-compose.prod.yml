@@ -23,6 +23,9 @@ services:
     command: php artisan horizon
     volumes:
       - storage:/var/www/html/storage
+    depends_on:
+      app:
+        condition: service_healthy
 
   scheduler:
     image: wecar-app:latest
@@ -34,6 +37,9 @@ services:
       RUN_MIGRATIONS: "false"
     volumes:
       - storage:/var/www/html/storage
+    depends_on:
+      app:
+        condition: service_healthy
 
   nginx:
     build:
