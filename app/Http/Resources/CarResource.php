@@ -45,7 +45,10 @@ class CarResource extends JsonResource
             'body' => $this->body,
             'color' => $this->color,
             'featured' => (bool) $this->featured,
-            'verified' => filled($this->vin) || filled($this->serial_number) || filled($this->plates),
+            'verified' => filled($this->vin)
+                && filled($this->serial_number)
+                && filled($this->plates)
+                && preg_match('/^[A-Za-z0-9]{17}$/', (string) $this->vin) === 1,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
             'accepts_trade' => (bool) $this->accepts_trade,

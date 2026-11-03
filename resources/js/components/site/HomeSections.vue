@@ -313,12 +313,16 @@ onUnmounted(() => {
                 <div v-for="(b, index) in carouselBenefits" :key="`${b.title}-${index}`"
                     class="group relative flex shrink-0 snap-start basis-full flex-col rounded-3xl border border-border bg-card p-6 shadow-soft transition-all duration-300 hover:-translate-y-1 hover:border-primary/40 hover:shadow-elegant sm:basis-[calc((100%-1.5rem)/2)] lg:basis-[calc((100%-3rem)/3)]"
                     :aria-hidden="index >= beneficios.length ? 'true' : undefined">
-                    <div
-                        class="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/20 transition-transform duration-300 group-hover:scale-110">
-                        <component :is="b.icon" class="h-7 w-7" stroke-width="2.2" />
+                    <div class="flex items-start gap-[0.8rem]">
+                        <div
+                            class="grid h-[2.8rem] w-[2.8rem] shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/20 transition-transform duration-300 group-hover:scale-110">
+                            <component :is="b.icon" class="h-[1.4rem] w-[1.4rem]" stroke-width="2.2" />
+                        </div>
+                        <div class="min-w-0">
+                            <h3 class="text-[0.88rem] font-bold leading-snug text-secondary">{{ b.title }}</h3>
+                            <p class="mt-1 text-[0.66rem] leading-relaxed text-muted-foreground sm:text-[0.77rem]">{{ b.desc }}</p>
+                        </div>
                     </div>
-                    <h3 class="mt-5 text-base font-bold text-secondary">{{ b.title }}</h3>
-                    <p class="mt-2 text-xs leading-relaxed text-muted-foreground sm:text-sm">{{ b.desc }}</p>
                 </div>
             </div>
 

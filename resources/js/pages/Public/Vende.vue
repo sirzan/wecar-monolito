@@ -17,6 +17,7 @@ import {
     ImagePlus,
     Info,
     LoaderCircle,
+    MapPin,
     ShieldCheck,
     Sparkles,
     Star,
@@ -52,10 +53,10 @@ const isAdmin = computed(() => {
     return roles.includes('superadmin') || roles.includes('manager');
 });
 const steps = [
-    { n: 1, label: 'Datos del auto', icon: CarIcon },
-    { n: 2, label: 'Precio y detalles', icon: CircleDollarSign },
-    { n: 3, label: 'Fotos (hasta 12)', icon: Camera },
-    { n: 4, label: 'Elige tu plan', icon: ClipboardCheck },
+    { n: 1, label: 'Datos', icon: CarIcon },
+    { n: 2, label: 'Precio', icon: CircleDollarSign },
+    { n: 3, label: 'Imágenes', icon: Camera },
+    { n: 4, label: 'Publica', icon: ClipboardCheck },
 ];
 
 const ANIOS = Array.from({ length: 16 }, (_, i) => new Date().getFullYear() + 1 - i);
@@ -72,18 +73,36 @@ const form = useForm({
     fuel: 'Gasolina',
     body: 'Sedán',
     color: 'Blanco',
+    invoice_type: '',
+    owners_count: '',
+    insurance_status: '',
     city: 'Monterrey, NL',
     state: 'Nuevo León',
     accepts_trade: false,
     trade_preference: '',
     vin: '',
+    serial_number: '',
+    plates: '',
     plan_key: props.activePlan?.key || props.plans.find(p => p.price === 0)?.key_name || props.plans[0]?.key_name || 'basico',
     images: [] as File[],
 });
 
+const acceptsTrade = computed({
+    get: () => (form.accepts_trade ? '1' : '0'),
+    set: (value: string) => {
+        form.accepts_trade = value === '1';
+    },
+});
+
+const invoiceTypes = ['Factura original', 'Factura de agencia', 'Factura de particular', 'Sin factura'];
+const insuranceStatuses = ['Vigente', 'Vencido', 'Sin seguro'];
+const ownerOptions = Array.from({ length: 8 }, (_, index) => index + 1);
+
+const fieldClass =
+    'mt-1.5 h-[52px] w-full rounded-full border border-input bg-[#FAF9F7] px-4 text-sm font-medium text-secondary outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50';
+
 // Coupons
-const couponCode = ref('');
-const appliedCoupon = ref<{ code: string; discountPct: number } | null>(null);
+const couponCode = ref('');const appliedCoupon = ref<{ code: string; discountPct: number } | null>(null);
 const couponError = ref('');
 
 const applyCoupon = () => {
@@ -104,7 +123,19 @@ const removeCoupon = () => {
 };
 
 const models = computed(() => props.brands.find((brand) => brand.id === form.brand_id)?.models ?? []);
+const selectedBrand = computed(() => props.brands.find((brand) => brand.id === form.brand_id) ?? null);
+const selectedModel = computed(() => selectedBrand.value?.models.find((model) => model.id === form.model_id) ?? null);
 const versions = ref<{ id: string; name: string }[]>([]);
+const selectedVersion = computed(() => versions.value.find((version) => version.id === form.version_id) ?? null);
+const previewTitle = computed(
+    () =>
+        [form.year, selectedBrand.value?.name, selectedModel.value?.name, selectedVersion.value?.name]
+            .filter(Boolean)
+            .join(' ') || 'Tu auto',
+);
+const previewVerified = computed(
+    () => Boolean(form.vin && form.serial_number && form.plates && /^[A-Za-z0-9]{17}$/.test(form.vin)),
+);
 const versionsLoading = ref(false);
 const versionsError = ref('');
 let versionsTimer: ReturnType<typeof setTimeout> | null = null;
@@ -254,8 +285,18 @@ onBeforeUnmount(() => {
 });
 
 const canContinue = computed(() => {
-    if (step.value === 1) return form.brand_id !== '' && form.model_id !== '' && form.version_id !== '' && form.year > 0 && form.transmission !== '';
-    if (step.value === 2) return form.price >= 1000 && form.km >= 0 && form.description.length >= 20;
+    if (step.value === 1) {
+        return form.brand_id !== ''
+            && form.model_id !== ''
+            && form.version_id !== ''
+            && form.year > 0
+            && form.transmission !== ''
+            && form.km >= 0
+            && form.description.length >= 20;
+    }
+    if (step.value === 2) {
+        return form.price >= 1000 && form.city.trim() !== '';
+    }
     if (step.value === 3) return form.images.length >= 1;
     return true;
 });
@@ -353,17 +394,17 @@ const submit = () => {
             </Link>
         </div>
 
-        <section v-if="!adminMode" class="bg-gradient-dark py-12 px-4 sm:px-6 text-white text-center">
-        <div class="mx-auto max-w-4xl">
-            <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/20 px-3.5 py-1 text-xs font-bold text-primary uppercase tracking-wider">
-                <Sparkles class="h-3.5 w-3.5" /> Vende sin complicaciones
-            </span>
-            <h1 class="text-3xl font-black mt-3 sm:text-4xl text-white">Publica tu auto en WeCar</h1>
-            <p class="mt-2 text-sm text-white/70 max-w-xl mx-auto">
-                Llega a miles de compradores calificados en todo México. Proceso seguro, rápido y transparente.
-            </p>
-        </div>
-    </section>
+        <section v-if="!adminMode" class="bg-background px-4 pt-12 pb-8 text-center sm:px-6 sm:pt-16">
+            <div class="mx-auto max-w-3xl">
+                <p class="text-xs font-bold uppercase tracking-[0.18em] text-primary sm:text-sm">
+                    Publica tu auto en menos de 2 minutos
+                </p>
+                <h1 class="mt-3 text-3xl font-black text-secondary sm:text-4xl">Vende en 4 simples pasos</h1>
+                <p class="mt-2 text-sm text-muted-foreground sm:text-base">
+                    Llena los datos, sube fotos y elige tu plan.
+                </p>
+            </div>
+        </section>
 
     <!-- Requiere autenticación -->
     <section v-if="!page.props.auth.user" class="mx-auto max-w-lg px-4 py-20 text-center sm:px-6">
@@ -387,7 +428,7 @@ const submit = () => {
     </section>
 
     <!-- Wizard Form -->
-    <section v-else class="mx-auto max-w-4xl px-4 py-10 sm:px-6">
+    <section v-else class="mx-auto px-4 py-10 sm:px-6" :class="step === 4 ? 'max-w-6xl' : 'max-w-4xl'">
         <!-- Indicador de agencia si aplica -->
         <div v-if="page.props.currentAgency" class="mb-6 flex items-center gap-3 rounded-2xl border border-primary/40 bg-accent/50 p-4 text-sm text-secondary">
             <Building2 class="h-5 w-5 text-primary shrink-0" />
@@ -398,26 +439,27 @@ const submit = () => {
 
         <!-- Barra de Progreso de 4 Pasos -->
         <div class="mb-10">
-            <ol class="grid grid-cols-4 gap-2 sm:gap-4">
+            <ol class="relative grid grid-cols-4 gap-2 sm:gap-4">
+                <div class="absolute left-[12.5%] right-[12.5%] top-5 h-0.5 -translate-y-1/2 bg-border sm:top-6" aria-hidden="true" />
                 <li
                     v-for="item in steps"
                     :key="item.n"
-                    class="flex flex-col items-center gap-2 text-center cursor-pointer"
+                    class="relative z-10 flex flex-col items-center gap-2 text-center cursor-pointer"
                     @click="item.n < step ? step = item.n : null"
                 >
                     <div
-                        class="grid h-11 w-11 place-items-center rounded-2xl border-2 transition-all font-black text-sm"
+                        class="grid h-10 w-10 place-items-center rounded-full border-2 transition-all sm:h-12 sm:w-12"
                         :class="step === item.n
-                            ? 'border-primary bg-primary text-primary-foreground shadow-soft scale-105'
+                            ? 'border-primary bg-primary text-primary-foreground shadow-soft'
                             : step > item.n
-                            ? 'border-emerald-500 bg-emerald-500 text-white'
-                            : 'border-border bg-card text-muted-foreground'"
+                            ? 'border-primary/40 bg-card text-primary'
+                            : 'border-border bg-card text-secondary/60'"
                     >
                         <Check v-if="step > item.n" class="h-5 w-5" />
                         <component :is="item.icon" v-else class="h-5 w-5" />
                     </div>
                     <span
-                        class="text-[11px] font-bold tracking-tight sm:text-xs"
+                        class="text-[11px] font-semibold tracking-tight sm:text-xs"
                         :class="step >= item.n ? 'text-secondary' : 'text-muted-foreground'"
                     >
                         {{ item.label }}
@@ -428,56 +470,56 @@ const submit = () => {
 
         <form @submit.prevent="submit">
             <!-- ════════════ PASO 1: DATOS DEL VEHÍCULO ════════════ -->
-            <div v-if="step === 1" class="rounded-3xl border border-border bg-card p-6 sm:p-8 shadow-soft space-y-6">
+            <div v-if="step === 1" class="space-y-6 rounded-[28px] border border-border bg-card p-6 shadow-soft sm:p-8">
                 <div>
-                    <h2 class="text-xl font-black text-secondary">Paso 1: Identificación del auto</h2>
-                    <p class="text-xs text-muted-foreground mt-0.5">Ingresa los datos generales de tu vehículo.</p>
+                    <h2 class="text-xl font-black text-secondary sm:text-2xl">Datos del auto</h2>
+                    <p class="mt-1 text-xs text-muted-foreground sm:text-sm">Selecciona las características de tu vehículo.</p>
                 </div>
 
                 <div class="grid gap-4 sm:grid-cols-2">
                     <div>
-                        <Label>Marca *</Label>
-                        <select
-                            v-model="form.brand_id"
-                            class="mt-1.5 h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus:border-primary outline-none"
-                            @change="form.model_id = ''"
-                        >
-                            <option value="">Selecciona la marca</option>
-                            <option v-for="b in brands" :key="b.id" :value="b.id">{{ b.name }}</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <Label>Modelo *</Label>
-                        <select
-                            v-model="form.model_id"
-                            :disabled="!form.brand_id"
-                            class="mt-1.5 h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus:border-primary outline-none disabled:opacity-50"
-                        >
-                            <option value="">Selecciona el modelo</option>
-                            <option v-for="m in models" :key="m.id" :value="m.id">{{ m.name }}</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <Label>Año *</Label>
-                        <select
-                            v-model.number="form.year"
-                            class="mt-1.5 h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus:border-primary outline-none"
-                        >
+                        <Label class="text-xs font-bold text-secondary">Año *</Label>
+                        <select v-model.number="form.year" :class="fieldClass">
                             <option v-for="a in ANIOS" :key="a" :value="a">{{ a }}</option>
                         </select>
                     </div>
 
                     <div>
-                        <Label>Versión *</Label>
+                        <Label class="text-xs font-bold text-secondary">Marca *</Label>
+                        <select
+                            v-model="form.brand_id"
+                            :disabled="!form.year"
+                            :class="fieldClass"
+                            @change="form.model_id = ''"
+                        >
+                            <option value="">{{ form.year ? 'Selecciona la marca' : 'Selecciona el año primero' }}</option>
+                            <option v-for="b in brands" :key="b.id" :value="b.id">{{ b.name }}</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <Label class="text-xs font-bold text-secondary">Modelo *</Label>
+                        <select v-model="form.model_id" :disabled="!form.brand_id" :class="fieldClass">
+                            <option value="">{{ form.brand_id ? 'Selecciona el modelo' : 'Selecciona la marca primero' }}</option>
+                            <option v-for="m in models" :key="m.id" :value="m.id">{{ m.name }}</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <Label class="text-xs font-bold text-secondary">Versión *</Label>
                         <select
                             v-model="form.version_id"
                             :disabled="!form.model_id || versionsLoading || versions.length === 0"
-                            class="mt-1.5 h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus:border-primary outline-none disabled:opacity-50"
+                            :class="fieldClass"
                         >
                             <option value="">
-                                {{ versionsLoading ? 'Cargando versiones…' : versions.length ? 'Selecciona la versión' : 'Sin versiones disponibles' }}
+                                {{ !form.model_id
+                                    ? 'Selecciona el modelo primero'
+                                    : versionsLoading
+                                    ? 'Cargando versiones…'
+                                    : versions.length
+                                    ? 'Selecciona la versión'
+                                    : 'Sin versiones disponibles' }}
                             </option>
                             <option v-for="version in versions" :key="version.id" :value="version.id">{{ version.name }}</option>
                         </select>
@@ -493,11 +535,8 @@ const submit = () => {
                     </div>
 
                     <div>
-                        <Label>Carrocería</Label>
-                        <select
-                            v-model="form.body"
-                            class="mt-1.5 h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus:border-primary outline-none"
-                        >
+                        <Label class="text-xs font-bold text-secondary">Tipo de carrocería</Label>
+                        <select v-model="form.body" :class="fieldClass">
                             <option v-for="body in (filters.bodies.length ? filters.bodies : ['Sedán', 'SUV', 'Hatchback', 'Pickup', 'Coupé'])" :key="body" :value="body">
                                 {{ body }}
                             </option>
@@ -505,11 +544,8 @@ const submit = () => {
                     </div>
 
                     <div>
-                        <Label>Transmisión</Label>
-                        <select
-                            v-model="form.transmission"
-                            class="mt-1.5 h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus:border-primary outline-none"
-                        >
+                        <Label class="text-xs font-bold text-secondary">Transmisión</Label>
+                        <select v-model="form.transmission" :class="fieldClass">
                             <option value="Automática">Automática</option>
                             <option value="Manual">Manual</option>
                             <option value="CVT">CVT</option>
@@ -517,11 +553,8 @@ const submit = () => {
                     </div>
 
                     <div>
-                        <Label>Combustible</Label>
-                        <select
-                            v-model="form.fuel"
-                            class="mt-1.5 h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus:border-primary outline-none"
-                        >
+                        <Label class="text-xs font-bold text-secondary">Combustible</Label>
+                        <select v-model="form.fuel" :class="fieldClass">
                             <option value="Gasolina">Gasolina</option>
                             <option value="Híbrido">Híbrido</option>
                             <option value="Diésel">Diésel</option>
@@ -530,66 +563,142 @@ const submit = () => {
                     </div>
 
                     <div>
-                        <Label>Color exterior</Label>
-                        <Input v-model="form.color" placeholder="Ej. Blanco perla, Gris oxford" class="mt-1.5 h-11" />
+                        <Label class="text-xs font-bold text-secondary">Color</Label>
+                        <Input v-model="form.color" placeholder="Ej. Blanco perla, Gris oxford" :class="fieldClass" />
                     </div>
 
                     <div>
-                        <Label>Número de serie / VIN (opcional)</Label>
-                        <Input v-model="form.vin" placeholder="17 caracteres del VIN" maxlength="17" class="mt-1.5 h-11" />
+                        <Label class="text-xs font-bold text-secondary">Kilometraje</Label>
+                        <Input v-model.number="form.km" type="number" min="0" placeholder="ej. 45000" :class="fieldClass" />
                     </div>
 
-                    <div class="flex items-center gap-3 pt-6">
-                        <input
-                            id="accepts_trade"
-                            v-model="form.accepts_trade"
-                            type="checkbox"
-                            class="h-5 w-5 rounded border-gray-300 text-primary focus:ring-primary"
-                        />
-                        <Label for="accepts_trade" class="text-xs cursor-pointer font-bold">
-                            ¿Aceptas auto a cuenta o cambio?
-                        </Label>
+                    <div>
+                        <Label class="text-xs font-bold text-secondary">Tipo de factura</Label>
+                        <select v-model="form.invoice_type" :class="fieldClass">
+                            <option value="">Selecciona una opción</option>
+                            <option v-for="type in invoiceTypes" :key="type" :value="type">{{ type }}</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <Label class="text-xs font-bold text-secondary">Número de dueños</Label>
+                        <select v-model.number="form.owners_count" :class="fieldClass">
+                            <option value="">Selecciona una opción</option>
+                            <option v-for="owner in ownerOptions" :key="owner" :value="owner">{{ owner }}</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <Label class="text-xs font-bold text-secondary">Seguro vigente</Label>
+                        <select v-model="form.insurance_status" :class="fieldClass">
+                            <option value="">Selecciona una opción</option>
+                            <option v-for="status in insuranceStatuses" :key="status" :value="status">{{ status }}</option>
+                        </select>
                     </div>
                 </div>
 
-                <div v-if="form.accepts_trade" class="mt-2">
-                    <Label>Preferencia de cambio</Label>
-                    <Input v-model="form.trade_preference" placeholder="Ej. Acepto sedán menor valor y diferencia a favor" class="mt-1.5 h-11" />
+                <div>
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <Label class="text-xs font-bold text-secondary">Descripción *</Label>
+                        <span class="text-[11px] text-muted-foreground" :class="form.description.length < 20 ? 'text-destructive font-bold' : ''">
+                            {{ form.description.length }} / mín. 20 caracteres
+                        </span>
+                    </div>
+                    <textarea
+                        v-model="form.description"
+                        rows="5"
+                        placeholder="Cuéntanos detalles relevantes: equipamiento, mantenimientos, etc."
+                        class="mt-1.5 min-h-[130px] w-full rounded-[22px] border border-input bg-[#FAF9F7] p-4 text-sm text-secondary outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    />
+                </div>
+
+                <!-- ¿Aceptas cambios? -->
+                <div class="rounded-[22px] border border-border bg-card p-6 sm:p-7">
+                    <h3 class="text-sm font-black uppercase tracking-wide text-secondary">¿Aceptas cambios?</h3>
+                    <p class="mt-1 text-xs text-muted-foreground sm:text-sm">
+                        Indica si estarías dispuesto a aceptar otro auto como parte del pago.
+                    </p>
+                    <div class="mt-4 sm:w-1/2">
+                        <Label class="text-xs font-bold text-secondary">¿Aceptas cambios?</Label>
+                        <select v-model="acceptsTrade" :class="fieldClass">
+                            <option value="0">No</option>
+                            <option value="1">Sí</option>
+                        </select>
+                    </div>
+                    <div v-if="form.accepts_trade" class="mt-4">
+                        <Label class="text-xs font-bold text-secondary">Preferencia de cambio</Label>
+                        <Input v-model="form.trade_preference" placeholder="Ej. Acepto sedán menor valor y diferencia a favor" :class="fieldClass" />
+                    </div>
+                </div>
+
+                <!-- Datos legales -->
+                <div class="rounded-[22px] border border-emerald-200 bg-emerald-50/70 p-6 sm:p-7">
+                    <div class="flex items-start gap-3">
+                        <div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-emerald-100 text-emerald-600">
+                            <ClipboardCheck class="h-5 w-5" />
+                        </div>
+                        <div class="min-w-0">
+                            <h3 class="text-sm font-black uppercase tracking-wide text-emerald-800">Datos legales (opcionales)</h3>
+                            <p class="mt-1 text-xs leading-relaxed text-emerald-900/70 sm:text-sm">
+                                No se muestran a los usuarios. Se usan únicamente para revisión legal de tu auto.
+                                Al completar al menos uno, tu publicación recibe la etiqueta de Verificado.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="mt-5 grid gap-4 sm:grid-cols-3">
+                        <div>
+                            <Label class="text-xs font-bold text-secondary">NIV</Label>
+                            <Input v-model="form.vin" placeholder="17 caracteres" maxlength="17" :class="fieldClass" />
+                        </div>
+                        <div>
+                            <Label class="text-xs font-bold text-secondary">Número de serie</Label>
+                            <Input v-model="form.serial_number" placeholder="opcional" :class="fieldClass" />
+                        </div>
+                        <div>
+                            <Label class="text-xs font-bold text-secondary">Placas</Label>
+                            <Input v-model="form.plates" placeholder="opcional" :class="fieldClass" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between gap-3 border-t border-border pt-6">
+                    <span />
+                    <Button
+                        type="button"
+                        variant="hero"
+                        class="gap-1.5 rounded-full px-6 shadow-glow"
+                        :disabled="!canContinue"
+                        @click="step++"
+                    >
+                        Continuar <ChevronRight class="h-4 w-4" />
+                    </Button>
                 </div>
             </div>
 
             <!-- ════════════ PASO 2: PRECIO Y CONDICIÓN ════════════ -->
-            <div v-if="step === 2" class="rounded-3xl border border-border bg-card p-6 sm:p-8 shadow-soft space-y-6">
+            <div v-if="step === 2" class="space-y-6 rounded-[28px] border border-border bg-card p-6 shadow-soft sm:p-8">
                 <div>
-                    <h2 class="text-xl font-black text-secondary">Paso 2: Precio y descripción</h2>
-                    <p class="text-xs text-muted-foreground mt-0.5">Define el valor de tu auto y cuéntanos sobre su estado.</p>
+                    <h2 class="text-xl font-black text-secondary sm:text-2xl">Precio y ubicación</h2>
+                    <p class="mt-1 text-xs text-muted-foreground sm:text-sm">Define el valor de tu auto y dónde se encuentra.</p>
                 </div>
 
                 <div class="grid gap-4 sm:grid-cols-2">
                     <div>
-                        <Label>Kilometraje actual *</Label>
+                        <Label class="text-xs font-bold text-secondary">Precio deseado de venta (MXN) *</Label>
                         <div class="relative mt-1.5">
-                            <Input v-model.number="form.km" type="number" min="0" class="h-11 pr-12" />
-                            <span class="absolute right-3.5 top-3 text-xs font-bold text-muted-foreground">km</span>
+                            <Input v-model.number="form.price" type="number" min="1000" :class="`${fieldClass} mt-0 pr-16`" />
+                            <span class="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">MXN</span>
                         </div>
                     </div>
 
                     <div>
-                        <Label>Precio deseado de venta (MXN) *</Label>
-                        <div class="relative mt-1.5">
-                            <Input v-model.number="form.price" type="number" min="1000" class="h-11 pr-12" />
-                            <span class="absolute right-3.5 top-3 text-xs font-bold text-muted-foreground">MXN</span>
-                        </div>
+                        <Label class="text-xs font-bold text-secondary">Ciudad *</Label>
+                        <Input v-model="form.city" placeholder="Ej. Monterrey, NL" :class="fieldClass" />
                     </div>
 
                     <div>
-                        <Label>Ciudad *</Label>
-                        <Input v-model="form.city" placeholder="Ej. Monterrey, NL" class="mt-1.5 h-11" />
-                    </div>
-
-                    <div>
-                        <Label>Estado *</Label>
-                        <Input v-model="form.state" placeholder="Ej. Nuevo León" class="mt-1.5 h-11" />
+                        <Label class="text-xs font-bold text-secondary">Estado</Label>
+                        <Input v-model="form.state" placeholder="Ej. Nuevo León" :class="fieldClass" />
                     </div>
                 </div>
 
@@ -674,27 +783,32 @@ const submit = () => {
                     </div>
                 </div>
 
-                <div>
-                    <div class="flex justify-between items-center">
-                        <Label>Descripción detallada del vehículo *</Label>
-                        <span class="text-[11px] text-muted-foreground" :class="form.description.length < 20 ? 'text-destructive font-bold' : ''">
-                            {{ form.description.length }} / mín. 20 caracteres
-                        </span>
-                    </div>
-                    <textarea
-                        v-model="form.description"
-                        rows="5"
-                        placeholder="Menciona servicios de mantenimiento, equipamiento especial, estado de llantas, interiores, si tiene factura original de agencia, etc."
-                        class="mt-1.5 w-full rounded-2xl border border-input bg-background p-3.5 text-sm outline-none focus:border-primary"
-                    />
+                <div class="flex items-center justify-between gap-3 border-t border-border pt-6">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        class="gap-1.5 rounded-full"
+                        @click="step--"
+                    >
+                        <ChevronLeft class="h-4 w-4" /> Atrás
+                    </Button>
+                    <Button
+                        type="button"
+                        variant="hero"
+                        class="gap-1.5 rounded-full px-6 shadow-glow"
+                        :disabled="!canContinue"
+                        @click="step++"
+                    >
+                        Continuar <ChevronRight class="h-4 w-4" />
+                    </Button>
                 </div>
             </div>
 
             <!-- ════════════ PASO 3: FOTOS ════════════ -->
-            <div v-if="step === 3" class="rounded-3xl border border-border bg-card p-6 sm:p-8 shadow-soft space-y-6">
+            <div v-if="step === 3" class="space-y-6 rounded-[28px] border border-border bg-card p-6 shadow-soft sm:p-8">
                 <div>
-                    <h2 class="text-xl font-black text-secondary">Paso 3: Fotografías del auto</h2>
-                    <p class="text-xs text-muted-foreground mt-0.5">Sube hasta 12 fotos nítidas (la primera foto será la portada).</p>
+                    <h2 class="text-xl font-black text-secondary sm:text-2xl">Imágenes del auto</h2>
+                    <p class="mt-1 text-xs text-muted-foreground sm:text-sm">Sube hasta 12 fotos nítidas (la primera foto será la portada).</p>
                 </div>
 
                 <div class="rounded-2xl border-2 border-dashed border-border bg-muted/20 p-8 text-center hover:border-primary/50 transition">
@@ -734,172 +848,247 @@ const submit = () => {
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- ════════════ PASO 4: PLANES Y PUBLICACIÓN ════════════ -->
-            <div v-if="step === 4" class="rounded-3xl border border-border bg-card p-6 sm:p-8 shadow-soft space-y-6">
-                <div>
-                    <h2 class="text-xl font-black text-secondary">Paso 4: {{ coveredPlan ? 'Confirma tu publicación' : 'Elige tu plan de publicación' }}</h2>
-                    <p class="text-xs text-muted-foreground mt-0.5">{{ coveredPlan ? 'Tu plan ya está activo y cubre esta publicación.' : 'Selecciona el nivel de visibilidad para tu anuncio.' }}</p>
-                </div>
-
-                <div v-if="isAdmin" class="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm font-semibold text-emerald-700">
-                    Modo administrador: la publicación no genera cobro ni suscripción.
-                </div>
-
-                <div v-if="activePlan" class="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-800">
-                    <p class="font-black">Plan activo: {{ activePlan.name }}</p>
-                    <p class="mt-1 text-xs">
-                        Publicaciones usadas: <strong>{{ activePlan.used_cars }} / {{ activePlan.max_cars }}</strong>.
-                        No se generará un cobro adicional.
-                    </p>
-                    <p v-if="activePlan.used_cars >= activePlan.max_cars" class="mt-2 text-xs font-bold text-destructive">
-                        Alcanzaste el límite de autos. Renueva o cambia de plan antes de publicar.
-                    </p>
-                </div>
-
-                <div v-if="agencyPlan" class="rounded-2xl border p-4 text-sm" :class="agencyPlan.active ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-800' : 'border-destructive/30 bg-destructive/10 text-destructive'">
-                    <p class="font-black">Plan de agencia: {{ agencyPlan.name }}</p>
-                    <p class="mt-1 text-xs">
-                        Publicaciones usadas: <strong>{{ agencyPlan.used_cars }} / {{ agencyPlan.max_cars }}</strong>.
-                        La publicación no genera un cobro individual.
-                    </p>
-                    <p v-if="!agencyPlan.active" class="mt-2 text-xs font-bold">
-                        El plan de la agencia venció. Renueva desde Facturación antes de publicar.
-                    </p>
-                    <p v-else-if="agencyPlan.used_cars >= agencyPlan.max_cars" class="mt-2 text-xs font-bold">
-                        La agencia alcanzó su límite de autos. Actualiza el plan para publicar más.
-                    </p>
-                </div>
-
-                <div v-if="!coveredPlan" class="grid gap-5 md:grid-cols-3">
-                    <div
-                        v-for="plan in plans.filter(p => !p.key_name.startsWith('search_') && !p.key_name.startsWith('membresia_'))"
-                        :key="plan.id"
-                        class="rounded-3xl border p-6 cursor-pointer transition-all duration-300 relative flex flex-col justify-between"
-                        :class="form.plan_key === plan.key_name
-                            ? 'border-primary ring-2 ring-primary/40 bg-accent/40 shadow-elegant -translate-y-1'
-                            : 'border-border bg-card hover:border-primary/40'"
-                        @click="form.plan_key = plan.key_name"
-                    >
-                        <div>
-                            <div class="flex items-center justify-between">
-                                <span class="text-xs font-black uppercase tracking-wider text-primary">{{ plan.name }}</span>
-                                <span
-                                    class="grid h-5 w-5 place-items-center rounded-full border"
-                                    :class="form.plan_key === plan.key_name ? 'border-primary bg-primary text-primary-foreground' : 'border-border'"
-                                >
-                                    <Check v-if="form.plan_key === plan.key_name" class="h-3 w-3" />
-                                </span>
-                            </div>
-                            <p class="mt-3 text-3xl font-black text-secondary">
-                                {{ isAdmin || plan.price === 0 ? 'Gratis' : formatPrice(plan.price) }}
-                            </p>
-                            <p class="mt-1 text-xs text-muted-foreground">{{ plan.duration || '30 días' }} de exposición activa</p>
-                        </div>
-
-                        <div class="mt-6 border-t border-border/60 pt-4 text-xs space-y-2 text-secondary/80">
-                            <p class="flex items-center gap-2">
-                                <CheckCircle2 class="h-4 w-4 text-emerald-500 shrink-0" /> Hasta {{ plan.max_cars }} auto publicado
-                            </p>
-                            <p class="flex items-center gap-2">
-                                <CheckCircle2 class="h-4 w-4 text-emerald-500 shrink-0" /> Fotos y ficha técnica completa
-                            </p>
-                            <p v-if="plan.highlight" class="flex items-center gap-2 font-bold text-primary">
-                                <Sparkles class="h-4 w-4 text-primary shrink-0" /> Posición destacada en catálogo
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Cupones de descuento para planes de pago -->
-                <div v-if="!coveredPlan && selectedPlan && selectedPlan.price > 0" class="rounded-2xl border border-border bg-muted/30 p-4">
-                    <Label class="text-xs font-bold text-secondary">¿Tienes un cupón de descuento?</Label>
-                    <div class="mt-2 flex gap-2 max-w-sm">
-                        <Input
-                            v-model="couponCode"
-                            placeholder="Ej. WECAR10"
-                            class="h-10 text-xs uppercase"
-                            :disabled="appliedCoupon !== null"
-                        />
-                        <Button
-                            v-if="!appliedCoupon"
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            @click="applyCoupon"
-                        >
-                            Aplicar
-                        </Button>
-                        <Button
-                            v-else
-                            type="button"
-                            variant="destructive"
-                            size="sm"
-                            @click="removeCoupon"
-                        >
-                            Quitar
-                        </Button>
-                    </div>
-                    <p v-if="appliedCoupon" class="mt-2 text-xs font-bold text-emerald-600 flex items-center gap-1.5">
-                        <CheckCircle2 class="h-3.5 w-3.5" /> Cupón {{ appliedCoupon.code }} aplicado ({{ appliedCoupon.discountPct }}% de descuento).
-                    </p>
-                    <p v-if="couponError" class="mt-2 text-xs font-bold text-destructive">
-                        {{ couponError }}
-                    </p>
-                </div>
-
-                <!-- Resumen final de cobro -->
-                <div class="rounded-2xl bg-secondary p-5 text-white flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <div>
-                        <p class="text-xs text-white/70">{{ isAdmin ? 'Costo de publicación:' : coveredPlan ? 'Costo de publicación:' : 'Total a pagar al publicar:' }}</p>
-                        <p class="text-2xl font-black text-primary">
-                            {{ coveredPlan ? 'Incluido en tu plan' : finalPlanPrice === 0 ? 'Gratis' : formatPrice(finalPlanPrice) }}
-                        </p>
-                        <p v-if="isAdmin" class="text-[11px] text-white/60">
-                            Sin cargo por ser administrador. No se creará una suscripción.
-                        </p>
-                        <p v-else-if="finalPlanPrice > 0" class="text-[11px] text-white/60">
-                            Se abrirá la pasarela segura (Stripe / PayPal / SPEI) tras confirmar.
-                        </p>
-                    </div>
-
+                <div class="flex items-center justify-between gap-3 border-t border-border pt-6">
+                    <Button type="button" variant="outline" class="gap-1.5 rounded-full" @click="step--">
+                        <ChevronLeft class="h-4 w-4" /> Atrás
+                    </Button>
                     <Button
-                        type="submit"
+                        type="button"
                         variant="hero"
-                        size="lg"
-                        class="w-full sm:w-auto shadow-elegant font-bold gap-2"
-                        :disabled="form.processing"
+                        class="gap-1.5 rounded-full px-6 shadow-glow"
+                        :disabled="!canContinue"
+                        @click="step++"
                     >
-                        <LoaderCircle v-if="form.processing" class="h-5 w-5 animate-spin" />
-                        <span v-else>{{ isAdmin ? 'Publicar auto sin cargo' : coveredPlan ? 'Publicar con mi plan' : 'Confirmar y publicar auto' }}</span>
+                        Continuar <ChevronRight class="h-4 w-4" />
                     </Button>
                 </div>
             </div>
 
-            <!-- Navegación entre pasos -->
-            <div class="mt-8 flex justify-between items-center">
-                <Button
-                    v-if="step > 1"
-                    type="button"
-                    variant="outline"
-                    class="gap-1.5"
-                    @click="step--"
-                >
-                    <ChevronLeft class="h-4 w-4" /> Anterior
-                </Button>
-                <div v-else />
+            <!-- ════════════ PASO 4: PLANES Y PUBLICACIÓN ════════════ -->
+            <div v-if="step === 4" class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+                <div class="space-y-6 rounded-[28px] border border-border bg-card p-6 shadow-soft sm:p-8">
+                    <div>
+                        <h2 class="text-xl font-black text-secondary sm:text-2xl">{{ coveredPlan ? 'Confirma tu publicación' : 'Elige tu plan de publicación' }}</h2>
+                        <p class="mt-1 text-xs text-muted-foreground sm:text-sm">{{ coveredPlan ? 'Tu plan ya está activo y cubre esta publicación.' : 'Selecciona el nivel de visibilidad para tu anuncio.' }}</p>
+                    </div>
 
-                <Button
-                    v-if="step < 4"
-                    type="button"
-                    variant="hero"
-                    class="gap-1.5 shadow-elegant"
-                    :disabled="!canContinue"
-                    @click="step++"
-                >
-                    Siguiente <ChevronRight class="h-4 w-4" />
-                </Button>
+                    <div v-if="isAdmin" class="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm font-semibold text-emerald-700">
+                        Modo administrador: la publicación no genera cobro ni suscripción.
+                    </div>
+
+                    <div v-if="activePlan" class="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-800">
+                        <p class="font-black">Plan activo: {{ activePlan.name }}</p>
+                        <p class="mt-1 text-xs">
+                            Publicaciones usadas: <strong>{{ activePlan.used_cars }} / {{ activePlan.max_cars }}</strong>.
+                            No se generará un cobro adicional.
+                        </p>
+                        <p v-if="activePlan.used_cars >= activePlan.max_cars" class="mt-2 text-xs font-bold text-destructive">
+                            Alcanzaste el límite de autos. Renueva o cambia de plan antes de publicar.
+                        </p>
+                    </div>
+
+                    <div v-if="agencyPlan" class="rounded-2xl border p-4 text-sm" :class="agencyPlan.active ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-800' : 'border-destructive/30 bg-destructive/10 text-destructive'">
+                        <p class="font-black">Plan de agencia: {{ agencyPlan.name }}</p>
+                        <p class="mt-1 text-xs">
+                            Publicaciones usadas: <strong>{{ agencyPlan.used_cars }} / {{ agencyPlan.max_cars }}</strong>.
+                            La publicación no genera un cobro individual.
+                        </p>
+                        <p v-if="!agencyPlan.active" class="mt-2 text-xs font-bold">
+                            El plan de la agencia venció. Renueva desde Facturación antes de publicar.
+                        </p>
+                        <p v-else-if="agencyPlan.used_cars >= agencyPlan.max_cars" class="mt-2 text-xs font-bold">
+                            La agencia alcanzó su límite de autos. Actualiza el plan para publicar más.
+                        </p>
+                    </div>
+
+                    <div v-if="!coveredPlan" class="grid gap-5 md:grid-cols-3">
+                        <div
+                            v-for="plan in plans.filter(p => !p.key_name.startsWith('search_') && !p.key_name.startsWith('membresia_'))"
+                            :key="plan.id"
+                            class="rounded-3xl border p-6 cursor-pointer transition-all duration-300 relative flex flex-col justify-between"
+                            :class="form.plan_key === plan.key_name
+                                ? 'border-primary ring-2 ring-primary/40 bg-accent/40 shadow-elegant -translate-y-1'
+                                : 'border-border bg-card hover:border-primary/40'"
+                            @click="form.plan_key = plan.key_name"
+                        >
+                            <div>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-black uppercase tracking-wider text-primary">{{ plan.name }}</span>
+                                    <span
+                                        class="grid h-5 w-5 place-items-center rounded-full border"
+                                        :class="form.plan_key === plan.key_name ? 'border-primary bg-primary text-primary-foreground' : 'border-border'"
+                                    >
+                                        <Check v-if="form.plan_key === plan.key_name" class="h-3 w-3" />
+                                    </span>
+                                </div>
+                                <p class="mt-3 text-3xl font-black text-secondary">
+                                    {{ isAdmin || plan.price === 0 ? 'Gratis' : formatPrice(plan.price) }}
+                                </p>
+                                <p class="mt-1 text-xs text-muted-foreground">{{ plan.duration || '30 días' }} de exposición activa</p>
+                            </div>
+
+                            <div class="mt-6 border-t border-border/60 pt-4 text-xs space-y-2 text-secondary/80">
+                                <p class="flex items-center gap-2">
+                                    <CheckCircle2 class="h-4 w-4 text-emerald-500 shrink-0" /> Hasta {{ plan.max_cars }} auto publicado
+                                </p>
+                                <p class="flex items-center gap-2">
+                                    <CheckCircle2 class="h-4 w-4 text-emerald-500 shrink-0" /> Fotos y ficha técnica completa
+                                </p>
+                                <p v-if="plan.highlight" class="flex items-center gap-2 font-bold text-primary">
+                                    <Sparkles class="h-4 w-4 text-primary shrink-0" /> Posición destacada en catálogo
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Cupones de descuento para planes de pago -->
+                    <div v-if="!coveredPlan && selectedPlan && selectedPlan.price > 0" class="rounded-2xl border border-border bg-muted/30 p-4">
+                        <Label class="text-xs font-bold text-secondary">¿Tienes un cupón de descuento?</Label>
+                        <div class="mt-2 flex gap-2 max-w-sm">
+                            <Input
+                                v-model="couponCode"
+                                placeholder="Ej. WECAR10"
+                                class="h-10 text-xs uppercase"
+                                :disabled="appliedCoupon !== null"
+                            />
+                            <Button
+                                v-if="!appliedCoupon"
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                @click="applyCoupon"
+                            >
+                                Aplicar
+                            </Button>
+                            <Button
+                                v-else
+                                type="button"
+                                variant="destructive"
+                                size="sm"
+                                @click="removeCoupon"
+                            >
+                                Quitar
+                            </Button>
+                        </div>
+                        <p v-if="appliedCoupon" class="mt-2 text-xs font-bold text-emerald-600 flex items-center gap-1.5">
+                            <CheckCircle2 class="h-3.5 w-3.5" /> Cupón {{ appliedCoupon.code }} aplicado ({{ appliedCoupon.discountPct }}% de descuento).
+                        </p>
+                        <p v-if="couponError" class="mt-2 text-xs font-bold text-destructive">
+                            {{ couponError }}
+                        </p>
+                    </div>
+
+                    <!-- Resumen final de cobro -->
+                    <div class="rounded-2xl bg-secondary p-5 text-white flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div>
+                            <p class="text-xs text-white/70">{{ isAdmin ? 'Costo de publicación:' : coveredPlan ? 'Costo de publicación:' : 'Total a pagar al publicar:' }}</p>
+                            <p class="text-2xl font-black text-primary">
+                                {{ coveredPlan ? 'Incluido en tu plan' : finalPlanPrice === 0 ? 'Gratis' : formatPrice(finalPlanPrice) }}
+                            </p>
+                            <p v-if="isAdmin" class="text-[11px] text-white/60">
+                                Sin cargo por ser administrador. No se creará una suscripción.
+                            </p>
+                            <p v-else-if="finalPlanPrice > 0" class="text-[11px] text-white/60">
+                                Se abrirá la pasarela segura (Stripe / PayPal / SPEI) tras confirmar.
+                            </p>
+                        </div>
+
+                        <Button
+                            type="submit"
+                            variant="hero"
+                            size="lg"
+                            class="w-full gap-2 rounded-full shadow-elegant font-bold sm:w-auto"
+                            :disabled="form.processing"
+                        >
+                            <LoaderCircle v-if="form.processing" class="h-5 w-5 animate-spin" />
+                            <span v-else>{{ isAdmin ? 'Publicar auto sin cargo' : coveredPlan ? 'Publicar con mi plan' : 'Confirmar y publicar auto' }}</span>
+                        </Button>
+                    </div>
+
+                    <div class="flex items-center justify-between gap-3 border-t border-border pt-6">
+                        <Button type="button" variant="outline" class="gap-1.5 rounded-full" @click="step--">
+                            <ChevronLeft class="h-4 w-4" /> Atrás
+                        </Button>
+                        <span />
+                    </div>
+                </div>
+
+                <!-- Vista previa del anuncio -->
+                <aside class="space-y-3 lg:sticky lg:top-24">
+                    <div class="flex items-center justify-between">
+                        <p class="text-xs font-black uppercase tracking-wider text-secondary">Vista previa</p>
+                        <span class="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-primary">
+                            {{ selectedPlan?.name || 'Tu anuncio' }}
+                        </span>
+                    </div>
+
+                    <div class="overflow-hidden rounded-[24px] border border-border bg-card shadow-soft">
+                        <div class="relative aspect-[4/3] bg-muted">
+                            <img
+                                v-if="previewUrls.length"
+                                :src="previewUrls[0]"
+                                alt="Vista previa del auto"
+                                class="h-full w-full object-cover"
+                            />
+                            <div v-else class="grid h-full place-items-center text-muted-foreground">
+                                <div class="flex flex-col items-center gap-2">
+                                    <ImagePlus class="h-8 w-8" />
+                                    <span class="text-[11px] font-semibold">Agrega fotos en el paso anterior</span>
+                                </div>
+                            </div>
+
+                            <span
+                                v-if="selectedPlan?.highlight"
+                                class="absolute left-3 top-3 rounded-full bg-primary px-2.5 py-1 text-[10px] font-black uppercase text-primary-foreground shadow-soft"
+                            >
+                                Destacado
+                            </span>
+                            <span
+                                v-if="previewVerified"
+                                class="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-bold text-white shadow-soft"
+                            >
+                                <ShieldCheck class="h-3 w-3" /> Verificado
+                            </span>
+                            <span
+                                v-if="form.images.length"
+                                class="absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-full bg-secondary/80 px-2 py-0.5 text-[10px] font-bold text-white"
+                            >
+                                <Camera class="h-3 w-3" /> {{ form.images.length }}
+                            </span>
+                        </div>
+
+                        <div class="p-5">
+                            <p class="text-[10px] font-bold uppercase tracking-wider text-primary">
+                                {{ selectedBrand?.name || 'Marca' }}
+                            </p>
+                            <h3 class="mt-1 line-clamp-2 text-sm font-black leading-snug text-secondary">{{ previewTitle }}</h3>
+                            <p class="mt-2 text-xl font-black text-secondary">{{ formatPrice(Number(form.price) || 0) }}</p>
+
+                            <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-muted-foreground">
+                                <span>{{ form.km ? `${new Intl.NumberFormat('es-MX').format(Number(form.km))} km` : 'Sin km' }}</span>
+                                <span v-if="form.transmission">{{ form.transmission }}</span>
+                                <span v-if="form.fuel">{{ form.fuel }}</span>
+                                <span v-if="form.body">{{ form.body }}</span>
+                            </div>
+
+                            <div class="mt-3 flex flex-wrap gap-1.5">
+                                <span class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-secondary">{{ form.year }}</span>
+                                <span v-if="form.accepts_trade" class="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">Acepta cambios</span>
+                                <span v-if="form.invoice_type" class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-secondary">{{ form.invoice_type }}</span>
+                                <span v-if="form.insurance_status" class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-secondary">Seguro {{ form.insurance_status.toLowerCase() }}</span>
+                            </div>
+
+                            <p v-if="form.city" class="mt-3 flex items-center gap-1 text-[11px] text-muted-foreground">
+                                <MapPin class="h-3.5 w-3.5" /> {{ form.city }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <p class="px-1 text-center text-[11px] leading-relaxed text-muted-foreground">
+                        Así se verá tu publicación en el catálogo de WeCar.
+                    </p>
+                </aside>
             </div>
         </form>
         </section>
