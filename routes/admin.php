@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\AdvertisementController;
 use App\Http\Controllers\Admin\AgencyController;
 use App\Http\Controllers\Admin\CarController;
 use App\Http\Controllers\Admin\CatalogController;
+use App\Http\Controllers\Admin\CertificationController as AdminCertificationController;
 use App\Http\Controllers\Admin\CouponRecipientController;
 use App\Http\Controllers\Admin\CreditController;
 use App\Http\Controllers\Admin\DashboardController;
@@ -71,6 +72,9 @@ Route::middleware(['auth', 'verified', 'role:superadmin|manager|viewer', 'admin.
     Route::get('/creditos/{application}', [CreditController::class, 'show'])->name('credits.show');
     Route::patch('/creditos/{application}', [CreditController::class, 'update'])->name('credits.update');
     Route::get('/creditos/{application}/documentos/{slot}', [CreditController::class, 'document'])->name('credits.document');
+
+    Route::get('/certificaciones', [AdminCertificationController::class, 'index'])->name('certifications');
+    Route::patch('/certificaciones/{appointment}', [AdminCertificationController::class, 'update'])->name('certifications.update');
 
     Route::get('/pagos', [PaymentController::class, 'index'])->name('payments');
     Route::patch('/pagos/{payment}', [PaymentController::class, 'update'])->name('payments.update');
