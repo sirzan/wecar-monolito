@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue';
 import { router } from '@inertiajs/vue3';
-import { CreditCard, FileText, Info, Mail, PanelBottom, ShieldCheck } from '@lucide/vue';
+import { CalendarDays, CreditCard, FileText, Info, Mail, PanelBottom, ShieldCheck } from '@lucide/vue';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
@@ -20,6 +20,7 @@ const tabs = [
     { key: 'about_page', label: 'Nosotros', icon: Info },
     { key: 'footer_config', label: 'Footer', icon: PanelBottom },
     { key: 'warranty_config', label: 'Garantía', icon: ShieldCheck },
+    { key: 'certification_config', label: 'Certificaciones', icon: CalendarDays },
     { key: 'legal', label: 'Legal', icon: FileText },
 ];
 
@@ -62,6 +63,53 @@ const warranty = reactive({
     contact_email: String(props.settings.warranty_config?.contact_email ?? ''),
 });
 
+type BusinessHour = { enabled: boolean; start: string; end: string };
+
+const weekDays = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const certificationSource = (props.settings.certification_config ?? {}) as Record<string, unknown>;
+const storedHours = (certificationSource.business_hours ?? {}) as Record<string, BusinessHour>;
+
+const certification = reactive({
+    business_hours: Object.fromEntries(
+        weekDays.map((_, index) => {
+            const day = storedHours[index];
+
+            return [
+                index,
+                {
+                    enabled: Boolean(day?.enabled),
+                    start: String(day?.start ?? '09:00'),
+                    end: String(day?.end ?? '18:00'),
+                },
+            ];
+        }),
+    ) as Record<number, BusinessHour>,
+    duration_minutes: Number(certificationSource.duration_minutes ?? 60),
+    slot_interval_minutes: Number(certificationSource.slot_interval_minutes ?? 60),
+    capacity_per_slot: Number(certificationSource.capacity_per_slot ?? 1),
+    min_notice_hours: Number(certificationSource.min_notice_hours ?? 24),
+    closed_dates_text: Array.isArray(certificationSource.closed_dates)
+        ? certificationSource.closed_dates
+              .map((entry) => (typeof entry === 'string' ? entry : (entry as { date?: string })?.date))
+              .filter(Boolean)
+              .join('\n')
+        : '',
+});
+
+const saveCertification = () => {
+    save('certification_config', {
+        business_hours: certification.business_hours,
+        duration_minutes: certification.duration_minutes,
+        slot_interval_minutes: certification.slot_interval_minutes,
+        capacity_per_slot: certification.capacity_per_slot,
+        min_notice_hours: certification.min_notice_hours,
+        closed_dates: certification.closed_dates_text
+            .split(/\r?\n/)
+            .map((date) => date.trim())
+            .filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date)),
+    });
+};
+
 const privacy = reactive({
     title: String(props.settings.privacy_policy?.title ?? ''),
     effective_date: String(props.settings.privacy_policy?.effective_date ?? ''),
@@ -74,7 +122,7 @@ const terms = reactive({
     content: String(props.settings.terms_conditions?.content ?? ''),
 });
 
-const save = (key: string, value: Record<string, string | boolean | number | null>) => {
+const save = (key: string, value: Record<string, any>) => {
     router.patch('/admin/configuracion', { key, value }, { preserveScroll: true });
 };
 </script>
@@ -151,6 +199,62 @@ const save = (key: string, value: Record<string, string | boolean | number | nul
                     <div><Label>Email de contacto</Label><Input v-model="warranty.contact_email" class="mt-1.5" /></div>
                 </div>
                 <Button class="mt-5" @click="save('warranty_config', { ...warranty })">Guardar garantía</Button>
+            </template>
+
+            <template v-else-if="active === 'certification_config'">
+                <h2 class="font-semibold">Certificaciones</h2>
+                <p class="mt-1 text-sm text-muted-foreground">
+                    Define los horarios de atención del taller, duración del servicio y capacidad por franja. La página
+                    pública mostrará disponibilidad únicamente con los horarios activos aquí.
+                </p>
+
+                <div class="mt-5 overflow-hidden rounded-xl border border-border">
+                    <div
+                        v-for="(label, index) in weekDays"
+                        :key="index"
+                        class="grid items-center gap-3 border-b border-border p-3 last:border-b-0 sm:grid-cols-[140px_auto_1fr_1fr]"
+                    >
+                        <label class="flex items-center gap-2 text-sm font-semibold">
+                            <input v-model="certification.business_hours[index].enabled" type="checkbox" class="h-4 w-4" />
+                            {{ label }}
+                        </label>
+                        <span class="text-xs text-muted-foreground">{{ certification.business_hours[index].enabled ? 'Abierto' : 'Cerrado' }}</span>
+                        <Input v-model="certification.business_hours[index].start" type="time" :disabled="!certification.business_hours[index].enabled" />
+                        <Input v-model="certification.business_hours[index].end" type="time" :disabled="!certification.business_hours[index].enabled" />
+                    </div>
+                </div>
+
+                <div class="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <div>
+                        <Label>Duración del servicio (min)</Label>
+                        <Input v-model.number="certification.duration_minutes" type="number" min="15" step="15" class="mt-1.5" />
+                    </div>
+                    <div>
+                        <Label>Intervalo entre citas (min)</Label>
+                        <Input v-model.number="certification.slot_interval_minutes" type="number" min="15" step="15" class="mt-1.5" />
+                    </div>
+                    <div>
+                        <Label>Capacidad por franja</Label>
+                        <Input v-model.number="certification.capacity_per_slot" type="number" min="1" class="mt-1.5" />
+                    </div>
+                    <div>
+                        <Label>Anticipación mínima (horas)</Label>
+                        <Input v-model.number="certification.min_notice_hours" type="number" min="0" class="mt-1.5" />
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <Label>Fechas cerradas</Label>
+                    <textarea
+                        v-model="certification.closed_dates_text"
+                        rows="4"
+                        placeholder="Una fecha por línea, formato AAAA-MM-DD"
+                        class="mt-1.5 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                    />
+                    <p class="mt-1 text-xs text-muted-foreground">Se usarán para bloquear días festivos o cierres del taller.</p>
+                </div>
+
+                <Button class="mt-5" @click="saveCertification">Guardar certificaciones</Button>
             </template>
 
             <template v-else>

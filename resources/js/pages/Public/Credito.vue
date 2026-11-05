@@ -178,21 +178,21 @@ const benefits = [
                         <div>
                             <div class="flex items-end justify-between gap-3">
                                 <Label>Precio del auto</Label>
-                                <span class="text-sm font-black text-secondary">{{ formatPrice(price) }}</span>
+                                <span class="text-sm text-gray-700">{{ formatPrice(price) }}</span>
                             </div>
                             <input v-model.number="price" type="range" min="100000" max="2000000" step="10000" class="mt-2 w-full accent-[hsl(var(--primary))]" />
                         </div>
                         <div>
                             <div class="flex items-end justify-between gap-3">
-                                <Label>Enganche</Label>
-                                <span class="text-sm font-black text-secondary">{{ formatPrice(downPayment) }} · {{ downPaymentPct }}%</span>
+                                <Label>Enganche {{ downPaymentPct }}%</Label>
+                                <span class="text-sm text-gray-700">{{ formatPrice(downPayment) }}</span>
                             </div>
                             <input v-model.number="downPaymentPct" type="range" min="10" max="80" step="5" class="mt-2 w-full accent-[hsl(var(--primary))]" />
                         </div>
                         <div>
                             <div class="flex items-end justify-between gap-3">
                                 <Label>Plazo</Label>
-                                <span class="text-sm font-black text-secondary">{{ term }} meses</span>
+                                <span class="text-sm text-gray-700">{{ term }} meses</span>
                             </div>
                             <input v-model.number="term" type="range" min="12" max="72" step="12" class="mt-2 w-full accent-[hsl(var(--primary))]" />
                         </div>
