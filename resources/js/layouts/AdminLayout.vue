@@ -5,6 +5,7 @@ import { Toaster, toast } from 'vue-sonner';
 import {
     Boxes,
     Building2,
+    CalendarDays,
     Car,
     ChevronDown,
     CreditCard,
@@ -52,6 +53,7 @@ const mobileMenuOpen = ref(false);
 const mainItems = [
     { label: 'Dashboard', href: '/admin', icon: LayoutDashboard },
     { label: 'Créditos', href: '/admin/creditos', icon: CreditCard },
+    { label: 'Certificaciones', href: '/admin/certificaciones', icon: CalendarDays },
     { label: 'Autos', href: '/admin/autos', icon: Car },
     { label: 'Financieras', href: '/admin/financieras', icon: Building2 },
     { label: 'Usuarios', href: '/admin/usuarios', icon: Users },

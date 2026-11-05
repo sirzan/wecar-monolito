@@ -656,8 +656,8 @@ const jsonLd = computed(() => [
                 ¿Por qué comprar con WeCar?
             </h2>
             <div class="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
-                <div v-for="item in whyBuy" :key="item.title" class="flex flex-col items-start gap-3">
-                    <span class="grid h-12 w-12 place-items-center rounded-2xl bg-card text-primary shadow-soft">
+                <div v-for="item in whyBuy" :key="item.title" class="flex items-start gap-3">
+                    <span class="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-card text-primary shadow-soft">
                         <component :is="item.icon" class="h-6 w-6" />
                     </span>
                     <div>

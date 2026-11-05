@@ -121,7 +121,7 @@ const jsonLd = [
                     </h2>
                 </div>
                 <div
-                    class="grid min-w-0 grid-cols-2 gap-x-4 gap-y-2 text-xs font-semibold text-secondary-foreground/80 lg:flex lg:flex-1 lg:gap-x-6">
+                    class="grid min-w-0 grid-cols-2 gap-x-4 gap-y-2 text-xs font-semibold text-secondary-foreground/80 lg:flex-1 lg:gap-x-6">
                     <span
                         v-for="text in ['+35 bancos y financieras', 'Desde 10% de enganche', 'Trámite 100% digital', 'Aprobación de 24 a 48 hrs']"
                         :key="text" class="flex min-w-0 items-center gap-1.5">
@@ -136,10 +136,6 @@ const jsonLd = [
             </div>
 
             <div class="mt-5">
-                <p
-                    class="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-secondary-foreground/60 sm:text-xs">
-                    Aliados bancarios y financieros
-                </p>
                 <FinancialPartnersCarousel :inverse="true" />
             </div>
         </div>

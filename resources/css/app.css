@@ -134,7 +134,7 @@
     --secondary: oklch(0.22 0.005 285);
     --secondary-foreground: oklch(0.985 0 0);
     --muted: oklch(0.22 0.005 285);
-    --muted-foreground: oklch(0.65 0.01 285);
+    --muted-foreground: oklch(0.75 0.01 285);
     --accent: oklch(0.24 0.005 285);
     --accent-foreground: oklch(0.985 0 0);
     --destructive: oklch(0.62 0.22 25);
@@ -151,6 +151,7 @@
     --sidebar-border: oklch(0.24 0.005 285 / 0.6);
     --sidebar-ring: oklch(0.78 0.16 65 / 0.6);
 
+    color-scheme: dark;
     font-family: var(--font-sans);
     font-feature-settings: 'cv11', 'ss01';
     background-color: var(--background);
@@ -164,6 +165,69 @@
 .theme-admin h5,
 .theme-admin h6 {
     font-family: var(--font-sans);
+}
+
+/* ============================================================
+   Tema público encapsulado (para reutilizar vistas públicas
+   dentro del panel administrativo sin heredar el tema oscuro)
+   ============================================================ */
+.theme-public {
+    --background: hsl(30 40% 98%);
+    --foreground: hsl(222 47% 11%);
+    --card: hsl(0 0% 100%);
+    --card-foreground: hsl(222 47% 11%);
+    --popover: hsl(0 0% 100%);
+    --popover-foreground: hsl(222 47% 11%);
+    --primary: hsl(22 100% 54%);
+    --primary-foreground: hsl(0 0% 100%);
+    --primary-glow: hsl(30 100% 62%);
+    --secondary: hsl(222 47% 11%);
+    --secondary-foreground: hsl(0 0% 100%);
+    --muted: hsl(30 20% 95%);
+    --muted-foreground: hsl(222 18% 16%);
+    --accent: hsl(22 100% 96%);
+    --accent-foreground: hsl(22 90% 35%);
+    --success: hsl(142 70% 36%);
+    --link: hsl(211 95% 60%);
+    --destructive: hsl(0 84% 60%);
+    --destructive-foreground: hsl(0 0% 100%);
+    --border: hsl(30 20% 90%);
+    --input: hsl(30 20% 90%);
+    --ring: hsl(22 100% 54%);
+    --radius: 1.25rem;
+
+    color-scheme: light;
+    color: var(--foreground);
+    background-color: var(--background);
+    font-family: var(--font-sans);
+}
+
+.theme-public input,
+.theme-public select,
+.theme-public textarea {
+    color: var(--foreground);
+}
+
+.theme-public select option {
+    background-color: var(--card);
+    color: var(--card-foreground);
+}
+
+.theme-admin input,
+.theme-admin select,
+.theme-admin textarea {
+    color: var(--foreground);
+    color-scheme: dark;
+}
+
+.theme-admin select option {
+    background-color: var(--card);
+    color: var(--card-foreground);
+}
+
+.theme-admin input::placeholder,
+.theme-admin textarea::placeholder {
+    color: color-mix(in oklch, var(--muted-foreground) 85%, transparent);
 }
 
 /* ============================================================

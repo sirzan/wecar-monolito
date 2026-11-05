@@ -9,6 +9,7 @@ use App\Models\CarBrand;
 use App\Models\Financiera;
 use App\Models\Plan;
 use App\Models\SiteSetting;
+use App\Services\Certifications\CertificationConfig;
 use App\Services\ExternalSearch\ExternalSearchService;
 use App\Services\Pricing\CarPriceSuggestionService;
 use App\Services\PublicationPlanService;
@@ -22,7 +23,10 @@ use Inertia\Response;
 
 class PublicController extends Controller
 {
-    public function __construct(private readonly ExternalSearchService $externalSearch) {}
+    public function __construct(
+        private readonly ExternalSearchService $externalSearch,
+        private readonly CertificationConfig $certifications,
+    ) {}
 
     public function home(Request $request): Response
     {
@@ -417,9 +421,19 @@ class PublicController extends Controller
         ]);
     }
 
-    public function certificaciones(): Response
+    public function certificaciones(Request $request): Response
     {
+        $user = $request->user();
+
         return Inertia::render('Public/Certificaciones', [
+            'brands' => CarBrand::query()->with('models:id,brand_id,name')->orderBy('name')->get(['id', 'name', 'slug']),
+            'certification' => $this->certifications->publicPayload(),
+            'profile' => $user ? [
+                'full_name' => $user->profile?->full_name ?? $user->name,
+                'email' => $user->email,
+                'whatsapp' => $user->profile?->phone ?? $user->phone ?? '',
+                'state' => $user->profile?->state ?? '',
+            ] : null,
             'seo' => [
                 'title' => 'Certificaciones Wecar',
                 'description' => 'Inspección de 160 puntos mecánicos y legales para autos aprobados.',
