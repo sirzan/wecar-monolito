@@ -137,6 +137,66 @@ it('publishes a car with images for a verified user', function () {
     $response->assertRedirect('/auto/'.$car->slug);
 });
 
+it('filters the catalog by model, version and color', function () {
+    $this->seed();
+
+    $status = CarStatus::query()->firstOrCreate(['name' => 'en_venta'], ['label' => 'En Venta']);
+
+    $toyota = CarBrand::query()->firstOrCreate(['slug' => 'toyota'], ['name' => 'Toyota']);
+    $corolla = CarModel::query()->firstOrCreate(['brand_id' => $toyota->getKey(), 'slug' => 'corolla'], ['name' => 'Corolla']);
+    $le = CarVersion::query()->create(['model_id' => $corolla->getKey(), 'name' => 'LE', 'year' => '2022']);
+
+    $honda = CarBrand::query()->firstOrCreate(['slug' => 'honda'], ['name' => 'Honda']);
+    $civic = CarModel::query()->firstOrCreate(['brand_id' => $honda->getKey(), 'slug' => 'civic'], ['name' => 'Civic']);
+    $ex = CarVersion::query()->create(['model_id' => $civic->getKey(), 'name' => 'EX', 'year' => '2022']);
+
+    foreach ([
+        [$toyota, $corolla, $le, 'Blanco', 'toyota-corolla-2022'],
+        [$honda, $civic, $ex, 'Negro', 'honda-civic-2022'],
+    ] as [$brand, $model, $version, $color, $slug]) {
+        Car::query()->create([
+            'brand_id' => $brand->getKey(),
+            'model_id' => $model->getKey(),
+            'version_id' => $version->getKey(),
+            'status_id' => $status->getKey(),
+            'slug' => $slug,
+            'year' => 2022,
+            'km' => 40000,
+            'price' => 300000,
+            'city' => 'Monterrey, NL',
+            'description' => 'Auto de prueba en excelente estado.',
+            'body' => 'Sedán',
+            'color' => $color,
+            'is_published' => true,
+            'published_at' => now(),
+        ]);
+    }
+
+    $this->get('/comprar?model='.$corolla->getKey())
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('cars.data', 1)
+            ->where('cars.data.0.slug', 'toyota-corolla-2022')
+            ->has('options.models')
+            ->has('options.versions')
+            ->has('options.colors')
+        );
+
+    $this->get('/comprar?version='.$ex->getKey())
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('cars.data', 1)
+            ->where('cars.data.0.slug', 'honda-civic-2022')
+        );
+
+    $this->get('/comprar?color=Negro')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('cars.data', 1)
+            ->where('cars.data.0.slug', 'honda-civic-2022')
+        );
+});
+
 it('seeds all 39 financieras correctly from FinancieraSeeder', function () {
     $this->seed();
 

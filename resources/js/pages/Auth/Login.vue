@@ -53,7 +53,7 @@ const submit = () =>
             <form class="grid gap-4" @submit.prevent="submit">
                 <div>
                     <Label for="email">Correo electrónico</Label>
-                    <Input id="email" v-model="form.email" type="email" class="mt-1.5" autocomplete="email" placeholder="tu@correo.com" />
+                    <Input id="email" v-model="form.email" type="email" class="mt-1.5 placeholder:text-muted-foreground/60" autocomplete="email" placeholder="tu@correo.com" />
                     <p v-if="form.errors.email" class="mt-1 text-xs font-medium text-destructive">{{ form.errors.email }}</p>
                 </div>
 
@@ -71,7 +71,6 @@ const submit = () =>
                             :type="showPassword ? 'text' : 'password'"
                             class="pr-11"
                             autocomplete="current-password"
-                            placeholder="••••••••"
                         />
                         <button
                             type="button"
