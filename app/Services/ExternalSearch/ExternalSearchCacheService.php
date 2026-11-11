@@ -5,6 +5,7 @@ namespace App\Services\ExternalSearch;
 use App\Models\ExternalSearchCache;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 
 class ExternalSearchCacheService
 {
@@ -132,10 +133,123 @@ class ExternalSearchCacheService
         return array_slice($this->normalizer->sortByPlatform($cars), 0, $limit);
     }
 
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function adminCars(ExternalSearchCache $cache): array
+    {
+        $cars = [];
+
+        foreach ($cache->results ?? [] as $rawCar) {
+            if (! is_array($rawCar)) {
+                continue;
+            }
+
+            $car = $this->adminCar($rawCar);
+
+            if ($car && ! isset($cars[$car['id']])) {
+                $cars[$car['id']] = $car;
+            }
+        }
+
+        return array_values($cars);
+    }
+
+    /**
+     * Removes external cars from every active search group where they appear.
+     *
+     * @param  array<int, string>  $ids
+     */
+    public function deleteCars(array $ids): int
+    {
+        $ids = array_fill_keys(array_values(array_unique($ids)), true);
+        $removed = 0;
+
+        ExternalSearchCache::query()->chunkById(100, function ($groups) use (&$removed, $ids): void {
+            foreach ($groups as $group) {
+                $remaining = [];
+
+                foreach ($group->results ?? [] as $rawCar) {
+                    if (! is_array($rawCar) || ! $this->matchesAnyId($rawCar, $ids)) {
+                        $remaining[] = $rawCar;
+
+                        continue;
+                    }
+
+                    $removed++;
+                }
+
+                if (count($remaining) === count($group->results ?? [])) {
+                    continue;
+                }
+
+                $this->forgetMemoryCache($group);
+
+                if ($remaining === []) {
+                    $group->delete();
+                } else {
+                    $group->update(['results' => array_values($remaining)]);
+                }
+            }
+        });
+
+        return $removed;
+    }
+
+    public function deleteGroup(ExternalSearchCache $group): void
+    {
+        $this->forgetMemoryCache($group);
+        $group->delete();
+    }
+
     public function prune(): void
     {
         ExternalSearchCache::query()
             ->where('updated_at', '<', Carbon::now()->subDays($this->days()))
             ->delete();
+    }
+
+    /**
+     * @param  array<string, mixed>  $rawCar
+     * @return array<string, mixed>|null
+     */
+    private function adminCar(array $rawCar): ?array
+    {
+        $sourceUrl = $this->normalizer->cleanUrl((string) ($rawCar['sourceUrl'] ?? ''));
+
+        if (! $sourceUrl) {
+            return null;
+        }
+
+        return [
+            'id' => $this->normalizer->externalId($sourceUrl),
+            'title' => trim((string) ($rawCar['title'] ?? 'Auto externo')),
+            'price' => is_numeric($rawCar['price'] ?? null) ? (int) round((float) $rawCar['price']) : null,
+            'year' => is_numeric($rawCar['year'] ?? null) ? (int) $rawCar['year'] : null,
+            'km' => is_numeric($rawCar['km'] ?? null) ? max(0, (int) $rawCar['km']) : null,
+            'location' => filled($rawCar['location'] ?? null) ? (string) $rawCar['location'] : null,
+            'imageUrl' => $rawCar['imageUrl'] ?? null,
+            'sourceUrl' => $sourceUrl,
+            'platformId' => (string) ($rawCar['platformId'] ?? ''),
+            'platformName' => (string) ($rawCar['platformName'] ?? $rawCar['platformId'] ?? 'Externo'),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $rawCar
+     * @param  array<string, bool>  $ids
+     */
+    private function matchesAnyId(array $rawCar, array $ids): bool
+    {
+        $sourceUrl = $this->normalizer->cleanUrl((string) ($rawCar['sourceUrl'] ?? ''));
+        $id = (string) ($rawCar['id'] ?? '');
+
+        return ($id !== '' && isset($ids[$id]))
+            || ($sourceUrl !== null && isset($ids[$this->normalizer->externalId($sourceUrl)]));
+    }
+
+    private function forgetMemoryCache(ExternalSearchCache $group): void
+    {
+        Cache::forget('external-search:'.$group->query_key);
     }
 }

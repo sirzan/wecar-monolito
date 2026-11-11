@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\CertificationController as AdminCertificationCont
 use App\Http\Controllers\Admin\CouponRecipientController;
 use App\Http\Controllers\Admin\CreditController;
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\ExternalCarController;
 use App\Http\Controllers\Admin\FinancieraController;
 use App\Http\Controllers\Admin\LeadController;
 use App\Http\Controllers\Admin\PaymentController;
@@ -22,6 +23,12 @@ Route::middleware(['auth', 'verified', 'role:superadmin|manager|viewer', 'admin.
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 
     Route::get('/autos', [CarController::class, 'index'])->name('cars');
+    Route::get('/autos-externos', [ExternalCarController::class, 'index'])->name('external-cars');
+    Route::post('/autos-externos/seleccion', [ExternalCarController::class, 'destroySelected'])->name('external-cars.destroy-selected');
+    Route::delete('/autos-externos/grupos/{group}', [ExternalCarController::class, 'destroyGroup'])->name('external-cars.destroy-group');
+    Route::delete('/autos-externos/{externalId}', [ExternalCarController::class, 'destroy'])
+        ->where('externalId', '[a-fA-F0-9]{32}')
+        ->name('external-cars.destroy');
     Route::get('/autos/crear', [CarController::class, 'create'])->middleware('role:superadmin|manager')->name('cars.create');
     Route::post('/autos', [VendeController::class, 'store'])->name('cars.store');
     Route::patch('/autos/{car:id}', [CarController::class, 'update'])->name('cars.update');
