@@ -8,6 +8,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -73,6 +74,23 @@ class FinancieraController extends Controller
 
         $validated['slug'] = empty($validated['slug']) ? Str::slug($validated['nombre']) : $validated['slug'];
         $validated['orden'] = $validated['orden'] ?? 0;
+
+        if (filled($validated['tasa_min'] ?? null)
+            && filled($validated['tasa_max'] ?? null)
+            && $validated['tasa_min'] > $validated['tasa_max']) {
+            throw ValidationException::withMessages([
+                'tasa_min' => 'La tasa mínima no puede ser mayor que la máxima.',
+            ]);
+        }
+
+        if (filled($validated['cat_min'] ?? null)
+            && filled($validated['cat_max'] ?? null)
+            && $validated['cat_min'] > $validated['cat_max']) {
+            throw ValidationException::withMessages([
+                'cat_min' => 'El CAT mínimo no puede ser mayor que el máximo.',
+            ]);
+        }
+
         $validated['brand_scope'] = filled($validated['brand_scope'] ?? null)
             ? collect(explode(',', (string) $validated['brand_scope']))->map(fn (string $brand) => Str::slug(trim($brand)))->filter()->unique()->values()->all()
             : null;

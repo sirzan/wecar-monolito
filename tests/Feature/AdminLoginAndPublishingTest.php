@@ -52,6 +52,22 @@ it('keeps normal users going to their panel', function () {
     ])->assertRedirect('/panel');
 });
 
+it('blocks inactive users from logging in', function () {
+    $this->seed();
+    $user = User::factory()->create([
+        'email' => 'inactive@example.com',
+        'password' => Hash::make('Password123'),
+        'is_active' => false,
+    ]);
+
+    $this->post('/login', [
+        'email' => $user->email,
+        'password' => 'Password123',
+    ])->assertRedirect('/');
+
+    $this->assertGuest();
+});
+
 it('respects an intended admin url for admins', function () {
     $this->seed();
     $user = loginUser('superadmin', 'admin-intended@example.com');

@@ -17,7 +17,7 @@ class CreditOfferService
      * @param  Collection<int, Financiera>  $financieras
      * @return array<int, array<string, mixed>>
      */
-    public function generate(array $input, int $score, Collection $financieras): array
+    public function generate(array $input, int $score, Collection $financieras, bool $hasMembership = false): array
     {
         $price = max((float) $input['precio'], 0);
         $downPayment = max((float) $input['enganche'], 0);
@@ -42,6 +42,7 @@ class CreditOfferService
             $brand,
             $condition,
             $serviceFee,
+            $hasMembership,
         ) {
             $rateMin = (float) ($financiera->tasa_min ?? 14.5);
             $rateMax = (float) ($financiera->tasa_max ?? 18.5);
@@ -84,6 +85,9 @@ class CreditOfferService
             } elseif ($downPct < (float) ($financiera->enganche_pct ?? 10)) {
                 $eligible = false;
                 $reason = 'Enganche mínimo de '.$financiera->enganche_pct.'% requerido.';
+            } elseif ($financiera->requires_membership && ! $hasMembership) {
+                $eligible = false;
+                $reason = 'Necesitas una membresía activa para solicitar esta opción.';
             }
 
             if (! $eligible) {

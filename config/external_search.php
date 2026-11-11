@@ -7,6 +7,8 @@ return [
     'free_views' => (int) env('EXTERNAL_SEARCH_FREE_VIEWS', 15),
     'cache_days' => (int) env('EXTERNAL_SEARCH_CACHE_DAYS', 7),
     'memory_ttl_minutes' => (int) env('EXTERNAL_SEARCH_MEMORY_TTL', 30),
+    'timeout' => (int) env('EXTERNAL_SEARCH_TIMEOUT', 15),
+    'connect_timeout' => (int) env('EXTERNAL_SEARCH_CONNECT_TIMEOUT', 5),
     'timezone' => env('EXTERNAL_SEARCH_TIMEZONE', 'America/Monterrey'),
     'token_coupon_code' => env('TOKEN_COUPON_CODE', 'TKNS50'),
     'token_coupon_discount' => 0.5,

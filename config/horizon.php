@@ -98,6 +98,11 @@ return [
 
     'waits' => [
         'redis:default' => 60,
+        'redis:emails' => 60,
+        'redis:notifications' => 60,
+        'redis:payments' => 30,
+        'redis:credits' => 60,
+        'redis:external-search' => 30,
     ],
 
     /*

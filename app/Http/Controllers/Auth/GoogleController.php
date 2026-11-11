@@ -26,6 +26,8 @@ class GoogleController extends Controller
 
         $user = User::query()->firstOrNew(['email' => $googleUser->getEmail()]);
 
+        abort_if($user->exists && ! $user->is_active, 403, 'Esta cuenta está desactivada.');
+
         if (! $user->exists) {
             $user->name = $googleUser->getName() ?: $googleUser->getNickname() ?: 'Usuario Wecar';
             $user->password = Hash::make(Str::random(32));

@@ -200,7 +200,7 @@ it('extends an active membership from its current end date', function () {
     app(MembershipService::class)->fulfill($purchase);
 
     expect($purchase->fresh()->status)->toBe('completed')
-        ->and($purchase->fresh()->ends_at?->timestamp)->toBe($previousEnd->copy()->addDays(30)->timestamp);
+        ->and($purchase->fresh()->ends_at?->timestamp)->toBe($previousEnd->copy()->addWeeks(4)->timestamp);
 });
 
 it('credits purchased tokens only once', function () {

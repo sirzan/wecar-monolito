@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AiSearchController;
+use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\GoogleController;
 use App\Http\Controllers\CarPriceSuggestionController;
 use App\Http\Controllers\CarVersionController;
@@ -34,6 +35,9 @@ Route::post('/vende', [VendeController::class, 'store'])
 Route::get('/registro', [RegisteredUserController::class, 'create'])
     ->middleware('guest:'.config('fortify.guard'))
     ->name('registro');
+Route::put('/email/verification-email', [EmailVerificationController::class, 'update'])
+    ->middleware(['auth', 'throttle:email-change'])
+    ->name('verification.email.update');
 Route::get('/credito', [PublicController::class, 'credito'])->name('credito');
 Route::get('/garantia', [PublicController::class, 'garantia'])->name('garantia');
 Route::get('/certificaciones', [PublicController::class, 'certificaciones'])->name('certificaciones');

@@ -39,11 +39,12 @@ class MembershipService
         return $user !== null && $this->active($user) !== null;
     }
 
-    public function begin(User $user): Subscription
+    public function begin(User $user, ?Plan $selectedPlan = null): Subscription
     {
-        $plan = $this->plan();
+        $plan = $selectedPlan ?? $this->plan();
 
         abort_if(! $plan, 422, 'La membresía no está configurada.');
+        abort_unless($plan->isMembership() && $plan->is_active, 422, 'El plan de membresía no está disponible.');
 
         return Subscription::query()->create([
             'user_id' => $user->getKey(),
@@ -52,8 +53,13 @@ class MembershipService
             'car_id' => null,
             'status' => 'pending',
             'billing_cycle' => 'monthly',
-            'amount' => (float) $plan->price,
-            'metadata' => ['plan_key' => $plan->key_name, 'kind' => 'membership'],
+            'amount' => $plan->price,
+            'metadata' => [
+                'plan_key' => $plan->key_name,
+                'plan_name' => $plan->name,
+                'duration_weeks' => (int) $plan->duration_weeks,
+                'kind' => 'membership',
+            ],
         ]);
     }
 
@@ -61,9 +67,21 @@ class MembershipService
     {
         $purchase->loadMissing('plan');
 
-        $days = self::DURATION_DAYS;
+        return DB::transaction(function () use ($purchase): Subscription {
+            User::query()->whereKey($purchase->user_id)->lockForUpdate()->firstOrFail();
 
-        return DB::transaction(function () use ($purchase, $days): Subscription {
+            $purchase = Subscription::query()
+                ->with('plan')
+                ->whereKey($purchase->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (in_array($purchase->status, ['active', 'completed'], true)) {
+                return $purchase->fresh();
+            }
+
+            $weeks = (int) ($purchase->plan?->duration_weeks ?? 0);
+
             $existing = Subscription::query()
                 ->where('user_id', $purchase->user_id)
                 ->where('kind', 'membership')
@@ -80,7 +98,9 @@ class MembershipService
                 $base = $existing->ends_at && $existing->ends_at->isFuture()
                     ? $existing->ends_at->copy()
                     : now();
-                $newEnd = $base->copy()->addDays($days);
+                $newEnd = $weeks > 0
+                    ? $base->copy()->addWeeks($weeks)
+                    : $base->copy()->addDays(self::DURATION_DAYS);
 
                 $existing->update(['ends_at' => $newEnd]);
 
@@ -94,11 +114,14 @@ class MembershipService
             }
 
             $start = now();
+            $end = $weeks > 0
+                ? $start->copy()->addWeeks($weeks)
+                : $start->copy()->addDays(self::DURATION_DAYS);
 
             $purchase->update([
                 'status' => 'active',
                 'starts_at' => $start,
-                'ends_at' => $start->copy()->addDays($days),
+                'ends_at' => $end,
             ]);
 
             return $purchase->fresh();

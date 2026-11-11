@@ -57,9 +57,7 @@ class MembershipController extends Controller
             ->where('is_active', true)
             ->firstOrFail();
 
-        $subscription = $this->memberships->begin($request->user());
-
-        abort_unless($subscription->plan_id === $plan->getKey(), 422, 'La membresía no coincide con el plan.');
+        $subscription = $this->memberships->begin($request->user(), $plan);
 
         return redirect()
             ->route('checkout.show', $subscription)

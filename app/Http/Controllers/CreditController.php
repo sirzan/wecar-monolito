@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Car;
 use App\Models\CreditApplication;
 use App\Models\CreditDocument;
 use App\Models\Financiera;
@@ -10,6 +11,7 @@ use App\Services\CreditDocumentService;
 use App\Services\CreditEvaluationService;
 use App\Services\CreditOfferService;
 use App\Services\CreditScoringService;
+use App\Services\MembershipService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -24,6 +26,7 @@ class CreditController extends Controller
         private readonly CreditDocumentService $documents,
         private readonly CreditScoringService $scoring,
         private readonly CreditOfferService $offers,
+        private readonly MembershipService $memberships,
     ) {}
 
     public function financieras(): JsonResponse
@@ -150,6 +153,33 @@ class CreditController extends Controller
             ->where('activo', true)
             ->firstOrFail();
 
+        if ($validated['car_id'] ?? null) {
+            $car = Car::query()
+                ->with(['brand', 'model', 'version'])
+                ->whereKey($validated['car_id'])
+                ->where('owner_id', $request->user()->getKey())
+                ->first();
+
+            if (! $car) {
+                throw ValidationException::withMessages([
+                    'car_id' => 'El auto seleccionado no pertenece a tu cuenta.',
+                ]);
+            }
+
+            $validated['car_brand'] = $car->brand?->name ?? $validated['car_brand'];
+            $validated['car_model'] = $car->model?->name ?? $validated['car_model'];
+            $validated['car_version'] = $car->version?->name ?? $validated['car_version'];
+            $validated['car_year'] = (int) $car->year;
+            $validated['car_price'] = (float) $car->price;
+            $validated['car_km'] = $car->km;
+        }
+
+        if ((float) $validated['down_payment'] > (float) $validated['car_price']) {
+            throw ValidationException::withMessages([
+                'down_payment' => 'El enganche no puede ser mayor que el precio del auto.',
+            ]);
+        }
+
         $input = [
             'ingreso' => (float) $validated['ingreso_mensual'],
             'edad' => (int) ($validated['age'] ?? 30),
@@ -166,7 +196,12 @@ class CreditController extends Controller
         ];
 
         $score = $this->scoring->calculate($input);
-        $offer = collect($this->offers->generate($input, $score['score'], collect([$financiera])))->first();
+        $offer = collect($this->offers->generate(
+            $input,
+            $score['score'],
+            collect([$financiera]),
+            $this->memberships->isSubscribed($request->user()),
+        ))->first();
 
         if (! $offer || ! $offer['elegible']) {
             throw ValidationException::withMessages([
@@ -187,6 +222,8 @@ class CreditController extends Controller
             'ine', 'domicilio', 'estado_cuenta',
             'reuse_ine', 'reuse_domicilio', 'reuse_estado_cuenta',
             'car_condition', 'bureau', 'employment', 'tenure', 'age',
+            'score', 'risk_level', 'monthly_payment', 'rate', 'cat', 'total_to_pay',
+            'inputs', 'offers', 'financiera_name',
         ])->all();
 
         $data = [
@@ -202,7 +239,6 @@ class CreditController extends Controller
             'term_months' => $offer['plazo_efectivo'],
             'service_fee' => $offer['cargo_servicio'],
             'inputs' => [
-                ...($validated['inputs'] ?? []),
                 'quote' => [
                     'financiera_id' => $financiera->getKey(),
                     'tasa' => $offer['tasa'],
@@ -213,6 +249,7 @@ class CreditController extends Controller
                     'total' => $offer['total'],
                 ],
             ],
+            'offers' => [$offer],
         ];
 
         $application = $this->applications->submit(

@@ -14,41 +14,63 @@ class PlanExpirationService
      */
     public function expire(): array
     {
+        $expiredSubscriptions = 0;
+        $expiredAgencies = 0;
+        $carsPaused = 0;
+
         $subscriptions = Subscription::query()
             ->where('status', 'active')
             ->whereNotNull('ends_at')
             ->where('ends_at', '<=', now())
-            ->get();
+            ->with(['agency', 'car'])
+            ->chunkById(500, function ($batch) use (&$expiredSubscriptions, &$carsPaused): void {
+                foreach ($batch as $subscription) {
+                    $updated = Subscription::query()
+                        ->whereKey($subscription->getKey())
+                        ->where('status', 'active')
+                        ->update(['status' => 'expired']);
 
-        $carsPaused = 0;
+                    if ($updated === 0) {
+                        continue;
+                    }
 
-        foreach ($subscriptions as $subscription) {
-            $subscription->update(['status' => 'expired']);
+                    $expiredSubscriptions++;
+                    $subscription->status = 'expired';
 
-            if ($subscription->kind === 'publication') {
-                $carsPaused += $this->pausePublicationCars($subscription);
-            }
+                    if ($subscription->kind === 'publication') {
+                        $carsPaused += $this->pausePublicationCars($subscription);
+                    }
 
-            if ($subscription->kind === 'agency' && $subscription->agency) {
-                $subscription->agency->update(['is_active' => false]);
-                $carsPaused += $this->pauseAgencyCars($subscription->agency);
-            }
-        }
+                    if (
+                        $subscription->kind === 'agency'
+                        && $subscription->agency
+                        && ! $this->hasActiveReplacement($subscription)
+                    ) {
+                        $subscription->agency->update(['is_active' => false]);
+                        $carsPaused += $this->pauseAgencyCars($subscription->agency);
+                    }
+                }
+            });
 
         $agencies = Agency::query()
             ->where('is_active', true)
             ->whereNotNull('plan_expires_at')
             ->where('plan_expires_at', '<=', now())
-            ->get();
-
-        foreach ($agencies as $agency) {
-            $agency->update(['is_active' => false]);
-            $carsPaused += $this->pauseAgencyCars($agency);
-        }
+            ->whereDoesntHave('subscriptions', fn ($query) => $query
+                ->where('kind', 'agency')
+                ->where('status', 'active')
+                ->where(fn ($query) => $query->whereNull('ends_at')->orWhere('ends_at', '>', now())))
+            ->chunkById(500, function ($batch) use (&$carsPaused, &$expiredAgencies): void {
+                foreach ($batch as $agency) {
+                    $agency->update(['is_active' => false]);
+                    $expiredAgencies++;
+                    $carsPaused += $this->pauseAgencyCars($agency);
+                }
+            });
 
         return [
-            'subscriptions' => $subscriptions->count(),
-            'agencies' => $agencies->count(),
+            'subscriptions' => $expiredSubscriptions,
+            'agencies' => $expiredAgencies,
             'cars' => $carsPaused,
         ];
     }
@@ -64,13 +86,18 @@ class PlanExpirationService
             ]) ?? 0);
         }
 
-        return Car::query()
+        if ($this->hasActiveReplacement($subscription)) {
+            return 0;
+        }
+
+        $cars = Car::query()
             ->where('owner_id', $subscription->user_id)
-            ->where(fn ($query) => $query
-                ->whereNotNull('plan')
-                ->when($subscription->car_id, fn ($query) => $query->orWhereKey($subscription->car_id)))
+            ->when($subscription->car_id, fn ($query) => $query->whereKey($subscription->car_id))
+            ->when(! $subscription->car_id, fn ($query) => $query->whereNotNull('plan'))
             ->where('is_published', true)
-            ->whereDoesntHave('status', fn ($query) => $query->whereIn('name', ['pendiente', 'pausado', 'cancelado']))
+            ->whereDoesntHave('status', fn ($query) => $query->whereIn('name', ['pendiente', 'pausado', 'cancelado']));
+
+        return $cars
             ->update([
                 'status_id' => $status->getKey(),
                 'is_published' => false,
@@ -87,5 +114,17 @@ class PlanExpirationService
                 'status_id' => $status?->getKey(),
                 'is_published' => false,
             ]);
+    }
+
+    private function hasActiveReplacement(Subscription $subscription): bool
+    {
+        return Subscription::query()
+            ->where('kind', $subscription->kind)
+            ->where('status', 'active')
+            ->whereKeyNot($subscription->getKey())
+            ->where(fn ($query) => $query->whereNull('ends_at')->orWhere('ends_at', '>', now()))
+            ->when($subscription->agency_id, fn ($query) => $query->where('agency_id', $subscription->agency_id))
+            ->when(! $subscription->agency_id, fn ($query) => $query->where('user_id', $subscription->user_id))
+            ->exists();
     }
 }

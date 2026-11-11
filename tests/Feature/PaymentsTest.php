@@ -309,3 +309,31 @@ it('allows admin to approve a pending payment', function () {
     expect($payment->fresh()->status)->toBe('paid');
     expect($subscription->fresh()->status)->toBe('active');
 });
+
+it('does not allow an already paid payment to be changed manually', function () {
+    $this->seed();
+
+    $admin = paymentUser();
+    $admin->assignRole('superadmin');
+
+    $user = paymentUser();
+    $plan = paymentPlan();
+    $car = paymentCar($user);
+    $subscription = paymentSubscription($user, $car, $plan);
+    $payment = Payment::query()->create([
+        'user_id' => $user->getKey(),
+        'subscription_id' => $subscription->getKey(),
+        'provider' => 'spei',
+        'amount' => 1000,
+        'currency' => 'MXN',
+        'status' => 'paid',
+        'paid_at' => now(),
+    ]);
+
+    $this->actingAs($admin)
+        ->patch("/admin/pagos/{$payment->getKey()}", ['status' => 'refunded'])
+        ->assertRedirect()
+        ->assertSessionHasErrors('status');
+
+    expect($payment->fresh()->status)->toBe('paid');
+});

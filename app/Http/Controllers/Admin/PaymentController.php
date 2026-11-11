@@ -8,6 +8,7 @@ use App\Services\PaymentService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -56,6 +57,12 @@ class PaymentController extends Controller
         $validated = $request->validate([
             'status' => ['required', Rule::in(['paid', 'failed', 'refunded'])],
         ]);
+
+        if ($payment->status !== 'pending') {
+            throw ValidationException::withMessages([
+                'status' => 'Solo se puede cambiar un pago pendiente. Los pagos confirmados requieren un proceso de reversión.',
+            ]);
+        }
 
         if ($validated['status'] === 'paid') {
             $this->payments->markPaid($payment);

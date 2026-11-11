@@ -161,16 +161,22 @@ class CheckoutController extends Controller
 
         $session = $this->stripe->retrieveSession($sessionId);
 
-        if ($session->payment_status === 'paid') {
-            $payment = Payment::query()
-                ->where('subscription_id', $subscription->getKey())
-                ->where('provider', 'stripe')
-                ->where('provider_reference', $sessionId)
-                ->first()
-                ?? $this->payments->createPayment($subscription, 'stripe', (float) $subscription->amount, $sessionId);
+        abort_unless(
+            $session->payment_status === 'paid' && $this->stripeSessionMatches($session, $subscription),
+            422,
+            'La sesión de pago no corresponde a esta suscripción.',
+        );
 
-            $this->payments->markPaid($payment);
-        }
+        $payment = Payment::query()
+            ->where('provider', 'stripe')
+            ->where('provider_reference', $sessionId)
+            ->first();
+
+        abort_unless(! $payment || $payment->subscription_id === $subscription->getKey(), 422);
+
+        $payment ??= $this->payments->createPayment($subscription, 'stripe', (float) $subscription->amount, $sessionId);
+
+        $this->payments->markPaid($payment);
 
         return $this->afterPayment($subscription->fresh(), 'Pago confirmado. Tu auto ya está publicado.');
     }
@@ -182,18 +188,32 @@ class CheckoutController extends Controller
         $orderId = (string) $request->query('token');
         abort_if($orderId === '', 400);
 
+        $existingPayment = Payment::query()
+            ->where('provider', 'paypal')
+            ->where('provider_reference', $orderId)
+            ->first();
+
+        if ($existingPayment?->status === 'paid') {
+            abort_unless($existingPayment->subscription_id === $subscription->getKey(), 422);
+
+            return $this->afterPayment($subscription->fresh(), 'Tu pago ya está confirmado.');
+        }
+
+        abort_unless(! $existingPayment || $existingPayment->subscription_id === $subscription->getKey(), 422);
+
         $capture = $this->paypal->captureOrder($orderId);
 
-        if (($capture['status'] ?? null) === 'COMPLETED') {
-            $payment = Payment::query()
-                ->where('subscription_id', $subscription->getKey())
-                ->where('provider', 'paypal')
-                ->where('provider_reference', $orderId)
-                ->first()
-                ?? $this->payments->createPayment($subscription, 'paypal', (float) $subscription->amount, $orderId);
+        abort_unless(
+            ($capture['status'] ?? null) === 'COMPLETED'
+                && $this->paypalCaptureMatches($capture, $subscription),
+            422,
+            'La orden de pago no corresponde a esta suscripción.',
+        );
 
-            $this->payments->markPaid($payment);
-        }
+        $payment = $existingPayment
+            ?? $this->payments->createPayment($subscription, 'paypal', (float) $subscription->amount, $orderId);
+
+        $this->payments->markPaid($payment);
 
         return $this->afterPayment($subscription->fresh(), 'Pago confirmado. Tu auto ya está publicado.');
     }
@@ -215,20 +235,28 @@ class CheckoutController extends Controller
             $session = $event->data->object;
             $subscriptionId = $session->metadata->subscription_id ?? $session->client_reference_id ?? null;
 
-            if ($subscriptionId) {
-                $subscription = Subscription::query()->find($subscriptionId);
+            $subscription = $subscriptionId ? Subscription::query()->find($subscriptionId) : null;
 
-                if ($subscription) {
-                    $payment = Payment::query()
-                        ->where('subscription_id', $subscription->getKey())
-                        ->where('provider', 'stripe')
-                        ->where('provider_reference', $session->id)
-                        ->first()
-                        ?? $this->payments->createPayment($subscription, 'stripe', (float) $subscription->amount, $session->id);
+            if (! $subscription || ! $this->stripeSessionMatches($session, $subscription)) {
+                report(new \RuntimeException('Stripe session rejected because it does not match a subscription.'));
 
-                    $this->payments->markPaid($payment);
-                }
+                return response()->json(['error' => 'Invalid payment association'], 422);
             }
+
+            $payment = Payment::query()
+                ->where('provider', 'stripe')
+                ->where('provider_reference', $session->id)
+                ->first();
+
+            if ($payment && $payment->subscription_id !== $subscription->getKey()) {
+                report(new \RuntimeException('Stripe payment reference is associated with another subscription.'));
+
+                return response()->json(['error' => 'Invalid payment association'], 422);
+            }
+
+            $payment ??= $this->payments->createPayment($subscription, 'stripe', (float) $subscription->amount, $session->id);
+
+            $this->payments->markPaid($payment);
         }
 
         return response()->json(['received' => true]);
@@ -266,6 +294,35 @@ class CheckoutController extends Controller
         ]);
 
         return redirect()->away($order['approval_url']);
+    }
+
+    private function stripeSessionMatches(object $session, Subscription $subscription): bool
+    {
+        $expectedAmount = (int) round(((float) $subscription->amount) * 100);
+
+        return (string) ($session->client_reference_id ?? '') === $subscription->getKey()
+            && (string) data_get($session, 'metadata.subscription_id') === $subscription->getKey()
+            && (string) data_get($session, 'metadata.user_id') === $subscription->user_id
+            && strtolower((string) ($session->currency ?? '')) === 'mxn'
+            && (int) ($session->amount_total ?? 0) === $expectedAmount;
+    }
+
+    /**
+     * @param  array<string, mixed>  $capture
+     */
+    private function paypalCaptureMatches(array $capture, Subscription $subscription): bool
+    {
+        $purchaseUnit = data_get($capture, 'purchase_units.0', []);
+        $captureData = data_get($purchaseUnit, 'payments.captures.0', []);
+        $reference = data_get($purchaseUnit, 'reference_id')
+            ?? data_get($purchaseUnit, 'custom_id')
+            ?? data_get($captureData, 'custom_id');
+        $amount = data_get($captureData, 'amount.value') ?? data_get($purchaseUnit, 'amount.value');
+        $currency = data_get($captureData, 'amount.currency_code') ?? data_get($purchaseUnit, 'amount.currency_code');
+
+        return (string) $reference === $subscription->getKey()
+            && number_format((float) $amount, 2, '.', '') === number_format((float) $subscription->amount, 2, '.', '')
+            && strtoupper((string) $currency) === 'MXN';
     }
 
     private function payWithSpei(Subscription $subscription): RedirectResponse

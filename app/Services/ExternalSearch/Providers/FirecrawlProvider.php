@@ -30,7 +30,8 @@ class FirecrawlProvider
 
         try {
             $response = Http::withToken($apiKey)
-                ->timeout(30)
+                ->connectTimeout((int) config('external_search.connect_timeout', 5))
+                ->timeout((int) config('external_search.timeout', 15))
                 ->post('https://api.firecrawl.dev/v2/search', [
                     'query' => $searchQuery,
                     'limit' => 5,
