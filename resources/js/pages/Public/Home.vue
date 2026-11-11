@@ -107,7 +107,7 @@ const jsonLd = [
     </section>
 
     <!-- 2. Barra de financiamiento + carrusel de financieras -->
-    <section class="border-y border-border bg-secondary px-4 py-7 text-secondary-foreground sm:px-6 sm:py-8">
+    <section class="border-y border-border bg-secondary px-4 py-6 text-secondary-foreground sm:px-6 sm:py-7">
         <div class="mx-auto max-w-7xl">
             <div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:gap-5">
                 <div class="flex min-w-0 items-center gap-3 lg:shrink-0">
@@ -116,16 +116,16 @@ const jsonLd = [
                         <Landmark class="h-5 w-5" />
                     </div>
                     <h2
-                        class="whitespace-nowrap text-[15px] font-black leading-tight sm:text-lg lg:text-base xl:text-lg">
+                        class="whitespace-nowrap text-base font-black leading-tight sm:text-xl lg:text-lg xl:text-xl">
                         Financia tu próximo seminuevo ahora
                     </h2>
                 </div>
                 <div
-                    class="grid min-w-0 grid-cols-2 gap-x-4 gap-y-2 text-xs font-semibold text-secondary-foreground/80 lg:flex-1 lg:gap-x-6">
+                    class="grid min-w-0 grid-cols-2 gap-x-2.5 gap-y-0.5 text-[13px] font-semibold text-secondary-foreground/80 sm:text-sm lg:mx-auto lg:grid-cols-[max-content_max-content] lg:gap-x-6">
                     <span
                         v-for="text in ['+35 bancos y financieras', 'Desde 10% de enganche', 'Trámite 100% digital', 'Aprobación de 24 a 48 hrs']"
                         :key="text" class="flex min-w-0 items-center gap-1.5">
-                        <span class="h-1 w-1 shrink-0 rounded-full bg-primary" />
+                        <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
                         <span class="truncate">{{ text }}</span>
                     </span>
                 </div>
@@ -135,7 +135,7 @@ const jsonLd = [
                 </Button>
             </div>
 
-            <div class="mt-5">
+            <div class="mt-4">
                 <FinancialPartnersCarousel :inverse="true" />
             </div>
         </div>

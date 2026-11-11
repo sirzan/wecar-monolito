@@ -378,6 +378,16 @@ const confidenceLabel = (value?: string) =>
 const submit = () => {
     form.post(props.adminMode ? '/admin/autos' : '/vende', { forceFormData: true });
 };
+
+const goBack = () => {
+    if (window.history.length > 1) {
+        window.history.back();
+
+        return;
+    }
+
+    window.location.href = props.adminMode ? '/admin/autos' : '/panel/publicaciones';
+};
 </script>
 
 <template>
@@ -438,7 +448,17 @@ const submit = () => {
                 </p>
             </div>
 
-            <!-- Barra de Progreso de 4 Pasos -->
+            <div class="mb-1 flex items-center">
+            <button
+                type="button"
+                class="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3.5 py-2 text-xs font-semibold text-muted-foreground transition hover:border-primary/40 hover:text-primary"
+                @click="goBack"
+            >
+                <ChevronLeft class="h-3.5 w-3.5" /> Volver atrás
+            </button>
+        </div>
+
+        <!-- Barra de Progreso de 4 Pasos -->
             <div class="mb-10">
                 <ol class="relative grid grid-cols-4 gap-2 sm:gap-4">
                     <div class="absolute left-[12.5%] right-[12.5%] top-5 h-0.5 -translate-y-1/2 bg-border sm:top-6" aria-hidden="true" />

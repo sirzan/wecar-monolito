@@ -89,7 +89,7 @@ const faqs = [
     },
     {
         q: '¿Cómo se cotiza el costo del servicio de Compra Segura?',
-        a: 'El cargo por servicio parte desde el 2.5% sobre el valor acordado del vehículo, lo cual cubre todo el diagnóstico, gestoría y acompañamiento legal.',
+        a: 'El cargo por servicio es desde el 2.5% sobre el valor acordado del vehículo, lo cual cubre todo el diagnóstico, gestoría y acompañamiento legal.',
     },
     {
         q: '¿Qué pasa si el auto no pasa la inspección mecánica o legal?',
@@ -181,15 +181,15 @@ const faqJsonLd = {
             <div
                 v-for="item in includes"
                 :key="item.title"
-                class="rounded-3xl border border-border bg-card p-7 shadow-soft transition-all hover:-translate-y-1 hover:border-primary/40 hover:shadow-elegant flex flex-col justify-between"
+                class="rounded-3xl border border-border bg-card p-6 shadow-soft transition-all hover:-translate-y-1 hover:border-primary/40 hover:shadow-elegant"
             >
-                <div>
-                    <span class="grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary">
+                <div class="flex items-start gap-4">
+                    <span class="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary">
                         <component :is="item.icon" class="h-6 w-6" stroke-width="2.2" />
                     </span>
-                    <h3 class="mt-5 text-base font-black text-secondary">{{ item.title }}</h3>
-                    <p class="mt-2 text-xs leading-relaxed text-muted-foreground sm:text-sm">{{ item.description }}</p>
+                    <h3 class="min-w-0 text-base font-black text-secondary">{{ item.title }}</h3>
                 </div>
+                <p class="mt-3 text-xs leading-relaxed text-muted-foreground sm:text-sm">{{ item.description }}</p>
             </div>
         </div>
     </section>
@@ -207,13 +207,17 @@ const faqJsonLd = {
                 <li
                     v-for="item in process"
                     :key="item.title"
-                    class="relative rounded-3xl border border-white/10 bg-white/5 p-7 backdrop-blur"
+                    class="relative rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur"
                 >
-                    <span class="grid h-12 w-12 place-items-center rounded-2xl bg-primary text-primary-foreground font-black">
-                        <component :is="item.icon" class="h-6 w-6" />
-                    </span>
-                    <h3 class="mt-5 text-base font-bold text-white">{{ item.title }}</h3>
-                    <p class="mt-2 text-xs leading-relaxed text-white/75 sm:text-sm">{{ item.description }}</p>
+                    <div class="flex items-start gap-4">
+                        <span class="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground font-black">
+                            <component :is="item.icon" class="h-6 w-6" />
+                        </span>
+                        <div class="min-w-0">
+                            <h3 class="text-base font-bold text-white">{{ item.title }}</h3>
+                            <p class="mt-1.5 text-xs leading-relaxed text-white/75 sm:text-sm">{{ item.description }}</p>
+                        </div>
+                    </div>
                 </li>
             </ol>
         </div>
@@ -253,7 +257,7 @@ const faqJsonLd = {
 
                 <div class="rounded-2xl border border-primary/30 bg-accent/50 p-5 space-y-3">
                     <div class="flex justify-between text-sm">
-                        <span class="text-muted-foreground">Cargo por servicio (2.5%):</span>
+                        <span class="text-muted-foreground">Cargo por servicio desde 2.5%:</span>
                         <span class="font-bold text-secondary">{{ formatPrice(cargoServicio) }}</span>
                     </div>
                     <div class="flex justify-between text-sm">

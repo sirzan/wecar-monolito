@@ -75,6 +75,10 @@ const destroy = (id: string) => {
         <div v-else class="mt-6 grid place-items-center rounded-3xl border border-dashed border-border bg-card py-20 text-center">
             <CarIcon class="h-10 w-10 text-muted-foreground" />
             <h2 class="mt-4 text-lg font-bold text-secondary">Aún no tienes publicaciones</h2>
+            <p class="mt-2 max-w-md text-sm text-muted-foreground">
+                Cuando publiques un auto, aparecerá aquí con su estado, fotos y prospectos recibidos.
+                Publica gratis y comienza a recibir interesados.
+            </p>
             <Button as="a" href="/vende" class="mt-5">Publicar mi primer auto</Button>
         </div>
 

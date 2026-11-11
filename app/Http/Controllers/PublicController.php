@@ -6,6 +6,8 @@ use App\Http\Resources\CarResource;
 use App\Models\Agency;
 use App\Models\Car;
 use App\Models\CarBrand;
+use App\Models\CarModel;
+use App\Models\CarVersion;
 use App\Models\Financiera;
 use App\Models\Plan;
 use App\Models\SiteSetting;
@@ -75,7 +77,7 @@ class PublicController extends Controller
     public function comprar(Request $request): Response
     {
         $filters = $request->only([
-            'q', 'brand', 'city', 'body', 'transmission', 'fuel',
+            'q', 'brand', 'model', 'version', 'city', 'body', 'transmission', 'fuel', 'color',
             'min_price', 'max_price', 'min_year', 'max_year', 'sort',
         ]);
 
@@ -143,10 +145,13 @@ class PublicController extends Controller
         });
 
         $query->when($filters['brand'] ?? null, fn (Builder $query, string $brand) => $query->whereRelation('brand', 'slug', $brand));
+        $query->when($filters['model'] ?? null, fn (Builder $query, string $model) => $query->where('model_id', $model));
+        $query->when($filters['version'] ?? null, fn (Builder $query, string $version) => $query->where('version_id', $version));
         $query->when($filters['city'] ?? null, fn (Builder $query, string $city) => $query->where('city', $city));
         $query->when($filters['body'] ?? null, fn (Builder $query, string $body) => $query->where('body', $body));
         $query->when($filters['transmission'] ?? null, fn (Builder $query, string $transmission) => $query->where('transmission', $transmission));
         $query->when($filters['fuel'] ?? null, fn (Builder $query, string $fuel) => $query->where('fuel', $fuel));
+        $query->when($filters['color'] ?? null, fn (Builder $query, string $color) => $query->where('color', $color));
         $query->when($filters['min_price'] ?? null, fn (Builder $query, $min) => $query->where('price', '>=', (float) $min));
         $query->when($filters['max_price'] ?? null, fn (Builder $query, $max) => $query->where('price', '<=', (float) $max));
         $query->when($filters['min_year'] ?? null, fn (Builder $query, $min) => $query->where('year', '>=', (int) $min));
@@ -606,6 +611,34 @@ class PublicController extends Controller
             ->get()
             ->map(fn ($row) => ['value' => $row->fuel, 'count' => (int) $row->total]);
 
+        $models = CarModel::query()
+            ->whereIn('id', (clone $publishedCars)->select('model_id')->whereNotNull('model_id'))
+            ->orderBy('name')
+            ->get(['id', 'name', 'brand_id'])
+            ->map(fn (CarModel $model) => [
+                'id' => $model->getKey(),
+                'name' => $model->name,
+                'brand_id' => $model->brand_id,
+            ]);
+
+        $versions = CarVersion::query()
+            ->whereIn('id', (clone $publishedCars)->select('version_id')->whereNotNull('version_id'))
+            ->orderBy('name')
+            ->get(['id', 'name', 'model_id'])
+            ->map(fn (CarVersion $version) => [
+                'id' => $version->getKey(),
+                'name' => $version->name,
+                'model_id' => $version->model_id,
+            ]);
+
+        $colors = (clone $publishedCars)
+            ->selectRaw('color, count(*) as total')
+            ->whereNotNull('color')
+            ->groupBy('color')
+            ->orderByDesc('total')
+            ->get()
+            ->map(fn ($row) => ['value' => $row->color, 'count' => (int) $row->total]);
+
         $minPrice = (clone $publishedCars)->min('price') ?? 0;
         $maxPrice = (clone $publishedCars)->max('price') ?? 1000000;
         $minYear = (clone $publishedCars)->min('year') ?? 2000;
@@ -613,10 +646,13 @@ class PublicController extends Controller
 
         return [
             'brands' => $brands,
+            'models' => $models,
+            'versions' => $versions,
             'cities' => $cities,
             'bodies' => $bodies,
             'transmissions' => $transmissions,
             'fuels' => $fuels,
+            'colors' => $colors,
             'price' => ['min' => (float) $minPrice, 'max' => (float) $maxPrice],
             'year' => ['min' => (int) $minYear, 'max' => (int) $maxYear],
         ];

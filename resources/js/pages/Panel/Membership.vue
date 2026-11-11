@@ -37,8 +37,8 @@ const buyTokens = () => tokenForm.post('/panel/membresia/tokens');
 <template>
     <div class="mx-auto max-w-4xl space-y-6">
         <div>
-            <h1 class="text-2xl font-black text-secondary sm:text-3xl">Membresía Búsqueda Externa</h1>
-            <p class="mt-1 text-sm text-muted-foreground">Gestiona tu acceso al buscador de autos en otras plataformas.</p>
+            <h1 class="text-2xl font-black text-secondary sm:text-3xl">Membresía Inteligente</h1>
+            <p class="mt-1 text-sm text-muted-foreground">Gestiona tu acceso al buscador inteligente de autos en otras plataformas.</p>
         </div>
 
         <section class="overflow-hidden rounded-3xl border border-primary/30 bg-card shadow-soft">

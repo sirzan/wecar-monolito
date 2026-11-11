@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Panel;
 use App\Http\Controllers\Controller;
 use App\Models\Car;
 use App\Models\CarLead;
+use App\Models\Plan;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -64,6 +65,22 @@ class DashboardController extends Controller
                 'car' => trim(($lead->car?->brand?->name ?? '').' '.($lead->car?->model?->name ?? '')),
                 'created_at' => $lead->created_at?->toIso8601String(),
             ])->values(),
+            'plans' => Plan::query()
+                ->where('is_active', true)
+                ->where('type', 'publication')
+                ->whereIn('audience', ['user', 'both'])
+                ->orderBy('sort_order')
+                ->get()
+                ->map(fn (Plan $plan) => [
+                    'id' => $plan->getKey(),
+                    'key_name' => $plan->key_name,
+                    'name' => $plan->name,
+                    'price' => (float) $plan->price,
+                    'duration' => $plan->duration,
+                    'max_cars' => $plan->max_cars,
+                    'highlight' => $plan->highlight,
+                    'features' => $plan->benefits(),
+                ]),
         ]);
     }
 

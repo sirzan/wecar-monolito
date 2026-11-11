@@ -79,10 +79,11 @@ const personalItems = [
     { label: 'Mis publicaciones', href: '/panel/publicaciones', icon: Car },
     { label: 'Publicar auto', href: '/vende', icon: Plus },
     { label: 'Favoritos', href: '/panel/favoritos', icon: Heart },
-    { label: 'Membresía', href: '/panel/membresia', icon: Sparkles },
+    { label: 'Membresía Inteligente', href: '/panel/membresia', icon: Sparkles },
     { label: 'Mis trámites', href: '/panel/tramites', icon: FileText },
     { label: 'Perfil crediticio', href: '/panel/perfil-crediticio', icon: ShieldCheck },
     { label: 'Facturación', href: '/panel/facturacion', icon: CreditCard },
+    { label: 'Métodos de pago', href: '/panel/metodos-pago', icon: CreditCard },
     { label: 'Configuración', href: '/panel/configuracion', icon: Settings },
 ];
 
