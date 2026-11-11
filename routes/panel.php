@@ -7,6 +7,7 @@ use App\Http\Controllers\Panel\CreditController;
 use App\Http\Controllers\Panel\DashboardController;
 use App\Http\Controllers\Panel\InvitationController;
 use App\Http\Controllers\Panel\MembershipController;
+use App\Http\Controllers\Panel\PaymentMethodsController;
 use App\Http\Controllers\Panel\ProfileController;
 use App\Http\Controllers\Panel\PublicationController;
 use Illuminate\Support\Facades\Route;
@@ -27,6 +28,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('/configuracion', [ProfileController::class, 'edit'])->name('profile');
     Route::post('/configuracion', [ProfileController::class, 'update'])->name('profile.update');
+    Route::patch('/tipo-cuenta', [ProfileController::class, 'updateAccountType'])->name('account-type');
     Route::post('/avatar', [ProfileController::class, 'updateAvatar'])->name('avatar.update');
     Route::delete('/avatar', [ProfileController::class, 'destroyAvatar'])->name('avatar.destroy');
 
@@ -38,6 +40,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/membresia', [MembershipController::class, 'index'])->name('membership');
     Route::post('/membresia/checkout', [MembershipController::class, 'checkout'])->name('membership.checkout');
     Route::post('/membresia/tokens', [MembershipController::class, 'tokens'])->name('membership.tokens');
+
+    Route::get('/metodos-pago', [PaymentMethodsController::class, 'index'])->name('payment-methods');
+    Route::post('/metodos-pago/portal', [PaymentMethodsController::class, 'portal'])->name('payment-methods.portal');
+    Route::delete('/metodos-pago/{paymentMethod}', [PaymentMethodsController::class, 'destroy'])->name('payment-methods.destroy');
 
     Route::prefix('agencia')->name('agency.')->group(function () {
         Route::get('/', [AgencyController::class, 'current'])->name('current');

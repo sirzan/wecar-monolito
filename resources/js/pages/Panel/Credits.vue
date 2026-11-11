@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { ref } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import {
     ArrowRight,
@@ -11,20 +11,16 @@ import {
     FileCheck,
     FileText,
     HelpCircle,
-    Loader2,
     Plus,
     Printer,
     ShieldAlert,
     ShieldCheck,
-    Upload,
     X,
     XCircle,
 } from '@lucide/vue';
 import PanelLayout from '@/layouts/PanelLayout.vue';
 import Pagination from '@/components/site/Pagination.vue';
 import Button from '@/components/ui/Button.vue';
-import Badge from '@/components/ui/Badge.vue';
-import { toast } from 'vue-sonner';
 
 defineOptions({ layout: PanelLayout });
 
@@ -74,103 +70,11 @@ const statusMeta = (status: string) => {
     return { label: 'En revisión', icon: Clock, className: 'bg-amber-500/10 text-amber-600 border-amber-300' };
 };
 
-// Documentos globales del usuario
-interface SavedDoc {
-    slot: string;
-    label: string;
-    saved: boolean;
-    name: string | null;
-    url: string | null;
-}
-
-const docSlots = [
-    { slot: 'ine', label: 'INE / Identificación oficial' },
-    { slot: 'domicilio', label: 'Comprobante de domicilio' },
-    { slot: 'estado_cuenta', label: 'Estados de cuenta / Ingresos' },
-];
-
-const savedDocs = ref<Record<string, { saved: boolean; name: string | null; url: string | null }>>({
-    ine: { saved: false, name: null, url: null },
-    domicilio: { saved: false, name: null, url: null },
-    estado_cuenta: { saved: false, name: null, url: null },
-});
-const uploadingSlot = ref<string | null>(null);
-
-const loadUserDocuments = async () => {
-    try {
-        const res = await fetch('/api/credito/documentos');
-        if (res.ok) {
-            const data = await res.json();
-            const documents = (data.documents ?? []) as { slot: string; name: string | null; available: boolean }[];
-
-            for (const item of docSlots) {
-                const document = documents.find((doc) => doc.slot === item.slot);
-                savedDocs.value[item.slot] = {
-                    saved: Boolean(document?.available),
-                    name: document?.name ?? null,
-                    url: null,
-                };
-            }
-        }
-    } catch {
-        // Silencioso si no hay sesión iniciada
-    }
-};
-
-const handleUploadDoc = async (slot: string, e: Event) => {
-    const target = e.target as HTMLInputElement;
-    const file = target.files?.[0];
-    target.value = '';
-    if (!file) return;
-
-    if (file.type !== 'application/pdf') {
-        toast.error('Solo se admiten documentos en formato PDF');
-        return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-        toast.error('El archivo no debe exceder 5 MB');
-        return;
-    }
-
-    try {
-        uploadingSlot.value = slot;
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('slot', slot);
-
-        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-        const res = await fetch('/api/credito/documentos', {
-            method: 'POST',
-            headers: {
-                'X-CSRF-TOKEN': csrf,
-                'X-Requested-With': 'XMLHttpRequest',
-            },
-            body: formData,
-        });
-
-        if (res.ok) {
-            toast.success('Documento guardado en tu cuenta.');
-            await loadUserDocuments();
-        } else {
-            const err = await res.json().catch(() => ({}));
-            toast.error(err.message || 'Error al subir el documento.');
-        }
-    } catch {
-        toast.error('Error de conexión al subir documento.');
-    } finally {
-        uploadingSlot.value = null;
-    }
-};
-
 // Cotización modal
 const selectedApp = ref<Application | null>(null);
 const printQuote = () => {
     window.print();
 };
-
-onMounted(() => {
-    loadUserDocuments();
-});
 </script>
 
 <template>
@@ -217,67 +121,6 @@ onMounted(() => {
                 <div>
                     <p class="text-2xl font-black text-secondary">{{ counts.approved }}</p>
                     <p class="text-xs text-muted-foreground">Aprobadas</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Tarjeta: Expediente Digital de Documentos -->
-        <div class="overflow-hidden rounded-3xl border border-border/70 bg-card p-6 shadow-soft">
-            <div class="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
-                <div>
-                    <h2 class="text-base font-black text-secondary">Mi Expediente Digital</h2>
-                    <p class="text-xs text-muted-foreground">
-                        Estos documentos se guardan de forma encriptada y aceleran tus solicitudes de crédito. Solo PDF (máx. 5 MB).
-                    </p>
-                </div>
-                <Badge variant="outline" size="sm" class="w-fit text-[11px]">
-                    Reutilizable en todas las solicitudes
-                </Badge>
-            </div>
-
-            <div class="mt-4 grid gap-3 sm:grid-cols-3">
-                <div
-                    v-for="slot in docSlots"
-                    :key="slot.slot"
-                    class="group relative flex flex-col justify-between rounded-2xl border border-border/80 bg-background/50 p-4 transition hover:border-primary/50"
-                >
-                    <div class="flex items-start justify-between gap-2">
-                        <div class="flex items-center gap-2">
-                            <CheckCircle2
-                                v-if="savedDocs[slot.slot]?.saved"
-                                class="h-4 w-4 shrink-0 text-emerald-600"
-                            />
-                            <FileText v-else class="h-4 w-4 shrink-0 text-muted-foreground" />
-                            <span class="text-xs font-bold text-secondary">{{ slot.label }}</span>
-                        </div>
-                    </div>
-
-                    <div class="mt-3 flex items-center justify-between">
-                        <span class="text-[11px] text-muted-foreground">
-                            {{
-                                uploadingSlot === slot.slot
-                                    ? 'Subiendo...'
-                                    : savedDocs[slot.slot]?.saved
-                                      ? 'Guardado en tu cuenta'
-                                      : 'Pendiente de subir'
-                            }}
-                        </span>
-
-                        <label
-                            class="inline-flex cursor-pointer items-center gap-1 text-xs font-bold text-primary hover:underline"
-                        >
-                            <Loader2 v-if="uploadingSlot === slot.slot" class="h-3.5 w-3.5 animate-spin" />
-                            <Upload v-else class="h-3.5 w-3.5" />
-                            <span>{{ savedDocs[slot.slot]?.saved ? 'Remplazar' : 'Subir' }}</span>
-                            <input
-                                type="file"
-                                accept="application/pdf"
-                                class="hidden"
-                                :disabled="uploadingSlot === slot.slot"
-                                @change="handleUploadDoc(slot.slot, $event)"
-                            />
-                        </label>
-                    </div>
                 </div>
             </div>
         </div>

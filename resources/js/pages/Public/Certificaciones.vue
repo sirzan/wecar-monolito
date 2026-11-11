@@ -115,10 +115,10 @@ const toggleFaq = (index: number) => {
             <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-primary sm:text-sm">
                 Servicio gestionado por talleres certificados por wecar.mx
             </p>
-            <h1 class="page-title mt-4 text-secondary">
-                Certificaciones <span class="text-primary">WeCar</span>
+            <h1 class="page-title mt-4 text-secondary [text-shadow:0_2px_8px_rgba(15,23,42,0.18)]">
+                <span class="text-secondary">Certificaciones</span> <span class="text-primary">WeCar</span>
             </h1>
-            <p class="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
+            <p class="mx-auto mt-4 max-w-2xl text-sm font-bold leading-relaxed text-gray-700 sm:text-base">
                 Servicio de revisión mecánica y legal de {{ certification.points }} puntos. Compra con la tranquilidad
                 de saber exactamente qué estás comprando.
             </p>
@@ -180,11 +180,11 @@ const toggleFaq = (index: number) => {
 
                 <div class="flex flex-col justify-center border-t border-border bg-muted/40 p-6 sm:p-9 md:border-l md:border-t-0">
                     <p class="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Precio</p>
-                    <p class="mt-2 text-4xl font-black text-secondary">
+                    <p class="mt-2 flex flex-wrap items-baseline gap-x-2 text-4xl font-black text-secondary">
                         {{ formatPrice(certification.pricing.base_price) }}
                         <span class="text-base font-bold">{{ certification.pricing.currency }}</span>
+                        <span class="text-base font-semibold text-muted-foreground">+ IVA</span>
                     </p>
-                    <p class="mt-1 text-sm font-semibold text-muted-foreground">+ IVA</p>
 
                     <Button
                         variant="hero"

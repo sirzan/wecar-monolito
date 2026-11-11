@@ -25,6 +25,9 @@ const renew = () => router.post('/panel/facturacion/renovar');
     <div class="mx-auto max-w-6xl">
         <h1 class="text-2xl font-black text-secondary sm:text-3xl">Facturación</h1>
         <p class="mt-1 text-sm text-muted-foreground">Consulta tu plan y tus pagos.</p>
+        <a href="/panel/metodos-pago" class="mt-2 inline-flex text-xs font-bold text-primary hover:underline">
+            Administrar métodos de pago
+        </a>
 
         <div class="mt-6 rounded-3xl border border-border bg-card p-6 shadow-soft">
             <div class="flex items-center gap-3">

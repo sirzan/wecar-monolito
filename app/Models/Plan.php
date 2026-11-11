@@ -53,6 +53,23 @@ class Plan extends Model
         return $this->type === 'tokens';
     }
 
+    /**
+     * @return array<int, string>
+     */
+    public function benefits(): array
+    {
+        if (is_array($this->features) && $this->features !== []) {
+            return array_values($this->features);
+        }
+
+        return array_values(array_filter([
+            $this->max_cars > 0 ? 'Hasta '.$this->max_cars.' '.($this->max_cars === 1 ? 'auto publicado' : 'autos publicados') : null,
+            'Fotos y ficha técnica completa',
+            $this->highlight ? 'Posición destacada en el catálogo' : null,
+            $this->duration ? $this->duration.' de exposición' : null,
+        ]));
+    }
+
     public function isForUser(): bool
     {
         return in_array($this->audience, ['user', 'both'], true);

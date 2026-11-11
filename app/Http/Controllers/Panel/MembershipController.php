@@ -36,6 +36,7 @@ class MembershipController extends Controller
             'tokenBalance' => $this->tokens->balance($user),
             'tokenPlans' => Plan::query()
                 ->where('type', 'tokens')
+                ->where('key_name', '!=', 'search_tokens_15')
                 ->where('is_active', true)
                 ->orderBy('sort_order')
                 ->get(),

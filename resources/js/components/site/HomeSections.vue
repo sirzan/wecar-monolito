@@ -475,28 +475,26 @@ onUnmounted(() => {
     </section>
 
     <!-- ───────────────────────── 4. Marcas aliadas (marquee continuo) ───────────────────────── -->
-    <section class="border-t border-border bg-muted/20 py-10 px-4 sm:py-14 sm:px-6 overflow-hidden">
+    <section class="border-t border-border bg-muted/20 py-9 px-4 sm:py-12 sm:px-6 overflow-hidden">
         <div class="mx-auto max-w-7xl text-center">
-            <p class="text-xs font-bold text-primary tracking-wider uppercase">Aliados estratégicos</p>
-            <h2 class="mt-2 text-lg font-black leading-tight text-secondary sm:text-2xl md:text-3xl">
-                <span class="block">El buscador inteligente</span>
-                <span class="block">No. 1 de <span class="text-primary">México</span></span>
+            <h2 class="text-sm font-black leading-tight text-secondary whitespace-nowrap sm:text-lg md:text-2xl">
+                El buscador inteligente No. 1 de <span class="text-primary">México</span>
             </h2>
         </div>
 
-        <div class="brands-viewport relative mt-10 overflow-hidden">
+        <div class="brands-viewport relative mt-9 overflow-hidden">
             <div class="brands-track">
                 <div v-for="groupIndex in 2" :key="groupIndex" class="brands-group"
                     :aria-hidden="groupIndex === 2 ? 'true' : undefined">
                     <div v-for="(brand, bIdx) in partnerBrands" :key="`${groupIndex}-${brand.slug}-${bIdx}`"
                         class="brand-slot">
                         <a :href="brand.url" target="_blank" rel="noopener noreferrer"
-                            class="flex h-20 w-full items-center justify-center rounded-2xl border border-border bg-card px-4 shadow-soft transition hover:-translate-y-1 sm:h-24"
+                            class="flex h-[72px] w-full items-center justify-center rounded-2xl border border-border bg-card px-4 shadow-soft transition hover:-translate-y-1 sm:h-[86px]"
                             :title="`Visitar ${brand.name}`" :aria-label="`Visitar ${brand.name}`"
                             :tabindex="groupIndex === 2 ? -1 : undefined">
                             <img v-if="!failedBrands[`${groupIndex}-${bIdx}`]"
                                 :src="`https://cdn.simpleicons.org/${brand.slug}/${brand.color}`" :alt="brand.name"
-                                loading="lazy" class="max-h-10 max-w-[72%] object-contain sm:max-h-14"
+                                loading="lazy" class="max-h-9 max-w-[72%] object-contain sm:max-h-[50px]"
                                 @error="failedBrands[`${groupIndex}-${bIdx}`] = true" />
                             <span v-else class="text-sm font-extrabold text-secondary">{{ brand.name }}</span>
                         </a>
@@ -519,15 +517,15 @@ onUnmounted(() => {
 
 .brands-viewport {
     --visible: 2.5;
-    --gap: 1rem;
+    --gap: 0.9rem;
     --card-width: calc(100cqw / var(--visible));
     container-type: inline-size;
 }
 
 .brands-track {
     display: flex;
-    width: calc(var(--card-width) * 10);
-    animation: brands-step 20s ease-in-out infinite;
+    width: max-content;
+    animation: brands-marquee 25s linear infinite;
     will-change: transform;
 }
 
@@ -544,35 +542,13 @@ onUnmounted(() => {
     animation-play-state: paused;
 }
 
-@keyframes brands-step {
-
-    0%,
-    16% {
-        transform: translateX(0);
+@keyframes brands-marquee {
+    from {
+        transform: translate3d(0, 0, 0);
     }
 
-    20%,
-    36% {
-        transform: translateX(calc(var(--card-width) * -1));
-    }
-
-    40%,
-    56% {
-        transform: translateX(calc(var(--card-width) * -2));
-    }
-
-    60%,
-    76% {
-        transform: translateX(calc(var(--card-width) * -3));
-    }
-
-    80%,
-    96% {
-        transform: translateX(calc(var(--card-width) * -4));
-    }
-
-    100% {
-        transform: translateX(calc(var(--card-width) * -5));
+    to {
+        transform: translate3d(-50%, 0, 0);
     }
 }
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
-import { ArrowRight, Building2, Car, CreditCard, Inbox, Plus, ShieldCheck, Sparkles } from '@lucide/vue';
+import { ArrowRight, Building2, Car, Check, CreditCard, Inbox, Plus, ShieldCheck, Sparkles } from '@lucide/vue';
 import PanelLayout from '@/layouts/PanelLayout.vue';
 import Button from '@/components/ui/Button.vue';
 
@@ -11,6 +11,7 @@ defineProps<{
     agencies: { id: string; slug: string; name: string; role: string | null; cars: number; plan: string }[];
     recentCars: { id: string; slug: string; title: string; price: number; status?: string | null }[];
     recentLeads: { id: string; contact_name: string | null; contact_phone: string | null; status: string; car: string; created_at: string | null }[];
+    plans: { id: string; key_name: string; name: string; price: number; duration: string; max_cars: number; highlight: boolean; features: string[] }[];
 }>();
 
 const formatPrice = (value: number) =>
@@ -38,7 +39,7 @@ const formatPrice = (value: number) =>
                     <Button as="a" href="/vende" variant="hero" class="gap-2">
                         <Plus class="h-4 w-4" /> Publicar auto
                     </Button>
-                    <Button as="a" href="/panel/tramites" variant="outline" class="border-white/20 text-white hover:bg-white/10">
+                    <Button as="a" href="/panel/tramites" variant="outline" class="border-white bg-white text-secondary hover:bg-white/90">
                         <CreditCard class="h-4 w-4" /> Mis trámites de crédito
                     </Button>
                 </div>
@@ -68,7 +69,7 @@ const formatPrice = (value: number) =>
                 <p class="mt-2 text-xs text-muted-foreground">Visibles en el catálogo público</p>
             </div>
 
-            <div class="rounded-3xl border border-border/70 bg-card p-5 shadow-soft">
+            <div v-if="agencies.length" class="rounded-3xl border border-border/70 bg-card p-5 shadow-soft">
                 <div class="flex items-center justify-between">
                     <p class="text-xs font-bold text-muted-foreground">Autos de agencia</p>
                     <Building2 class="h-4 w-4 text-primary" />
@@ -87,8 +88,24 @@ const formatPrice = (value: number) =>
             </div>
         </div>
 
+        <!-- Invitación a perfil de agencia para usuarios personales -->
+        <div v-if="!agencies.length" class="flex flex-col items-start justify-between gap-4 rounded-3xl border border-dashed border-border bg-card p-6 shadow-soft sm:flex-row sm:items-center">
+            <div class="flex items-start gap-3">
+                <span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                    <Building2 class="h-5 w-5" />
+                </span>
+                <div>
+                    <h2 class="text-base font-black text-secondary">¿Eres lote o concesionaria?</h2>
+                    <p class="mt-1 text-sm text-muted-foreground">
+                        Cambia a un perfil de agencia para administrar inventario, leads y equipo.
+                    </p>
+                </div>
+            </div>
+            <Button as="a" href="/panel/configuracion" variant="outline" class="shrink-0">Cambiar a perfil de agencia</Button>
+        </div>
+
         <!-- Secciones de Agencia y Leads -->
-        <div class="grid gap-6 lg:grid-cols-2">
+        <div v-if="agencies.length" class="grid gap-6 lg:grid-cols-2">
             <section class="rounded-3xl border border-border/70 bg-card p-6 shadow-soft">
                 <div class="flex items-center justify-between">
                     <h2 class="text-base font-black text-secondary">Mis agencias asociadas</h2>
@@ -162,6 +179,36 @@ const formatPrice = (value: number) =>
                 <Button as="a" href="/vende" variant="outline" size="sm" class="mt-3">
                     Publicar ahora
                 </Button>
+            </div>
+        </section>
+
+        <!-- Planes de publicación -->
+        <section v-if="plans.length" class="rounded-3xl border border-border/70 bg-card p-6 shadow-soft">
+            <div class="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                    <h2 class="text-base font-black text-secondary">Planes de publicación</h2>
+                    <p class="mt-1 text-xs text-muted-foreground">Elige el plan que mejor se adapte a tu inventario.</p>
+                </div>
+                <Link href="/panel/facturacion" class="text-xs font-bold text-primary hover:underline">Ver facturación</Link>
+            </div>
+
+            <div class="mt-5 grid gap-5 md:grid-cols-3">
+                <div
+                    v-for="plan in plans"
+                    :key="plan.id"
+                    class="rounded-3xl border bg-card p-5 shadow-soft"
+                    :class="plan.highlight ? 'border-primary' : 'border-border'"
+                >
+                    <p class="text-xs font-bold uppercase tracking-wide text-primary">{{ plan.name }}</p>
+                    <p class="mt-2 text-2xl font-black text-secondary">{{ plan.price === 0 ? 'Gratis' : formatPrice(plan.price) }}</p>
+                    <p class="mt-1 text-xs text-muted-foreground">{{ plan.duration }} · hasta {{ plan.max_cars }} {{ plan.max_cars === 1 ? 'auto' : 'autos' }}</p>
+                    <ul class="mt-4 space-y-2 text-xs text-muted-foreground">
+                        <li v-for="feature in plan.features" :key="feature" class="flex items-start gap-2">
+                            <Check class="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" /> {{ feature }}
+                        </li>
+                    </ul>
+                    <Button as="a" href="/vende" class="mt-4 w-full" :variant="plan.highlight ? 'hero' : 'outline'">Elegir plan</Button>
+                </div>
             </div>
         </section>
     </div>

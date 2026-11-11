@@ -23,7 +23,17 @@ class BillingController extends Controller
             ->where('type', 'publication')
             ->whereIn('audience', ['user', 'both'])
             ->orderBy('sort_order')
-            ->get();
+            ->get()
+            ->map(fn (Plan $plan) => [
+                'id' => $plan->getKey(),
+                'key_name' => $plan->key_name,
+                'name' => $plan->name,
+                'price' => (float) $plan->price,
+                'duration' => $plan->duration,
+                'max_cars' => $plan->max_cars,
+                'highlight' => $plan->highlight,
+                'features' => $plan->benefits(),
+            ]);
 
         $subscription = $publicationPlans->activeForUser($user) ?? $publicationPlans->latestForUser($user);
         $plan = $subscription ? $publicationPlans->planFor($subscription) : null;
