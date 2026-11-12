@@ -53,6 +53,7 @@ class BillingController extends Controller
             'activePlan' => $activePlan,
             'invoices' => Payment::query()
                 ->where('user_id', $user->getKey())
+                ->where('status', 'paid')
                 ->latest()
                 ->limit(20)
                 ->get()

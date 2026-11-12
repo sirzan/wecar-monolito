@@ -16,6 +16,7 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class CheckoutController extends Controller
 {
@@ -58,6 +59,7 @@ class CheckoutController extends Controller
             'subscription' => [
                 'id' => $subscription->getKey(),
                 'status' => $subscription->status,
+                'payment_method' => $subscription->payment_method,
                 'amount' => (float) $subscription->amount,
                 'billing_cycle' => $subscription->billing_cycle,
                 'kind' => $kind,
@@ -79,7 +81,7 @@ class CheckoutController extends Controller
             'methods' => [
                 'stripe' => (bool) ($payments['stripe_enabled'] ?? false) && $this->stripe->enabled(),
                 'paypal' => (bool) ($payments['paypal_enabled'] ?? false) && $this->paypal->enabled(),
-                'spei' => (bool) ($payments['spei_enabled'] ?? false),
+                'spei' => (bool) ($payments['spei_enabled'] ?? false) && $this->spei->configured(),
             ],
             'spei' => $speiPayment ? [
                 'reference' => $speiPayment->provider_reference,
@@ -91,7 +93,7 @@ class CheckoutController extends Controller
         ]);
     }
 
-    public function pay(Request $request, Subscription $subscription): RedirectResponse
+    public function pay(Request $request, Subscription $subscription): SymfonyResponse|RedirectResponse
     {
         abort_unless($subscription->user_id === $request->user()->getKey(), 403);
 
@@ -130,7 +132,7 @@ class CheckoutController extends Controller
         $enabled = [
             'stripe' => (bool) ($payments['stripe_enabled'] ?? false) && $this->stripe->enabled(),
             'paypal' => (bool) ($payments['paypal_enabled'] ?? false) && $this->paypal->enabled(),
-            'spei' => (bool) ($payments['spei_enabled'] ?? false),
+            'spei' => (bool) ($payments['spei_enabled'] ?? false) && $this->spei->configured(),
         ];
 
         $kindEnabled = match ($kind) {
@@ -262,7 +264,7 @@ class CheckoutController extends Controller
         return response()->json(['received' => true]);
     }
 
-    private function payWithStripe(Subscription $subscription): RedirectResponse
+    private function payWithStripe(Subscription $subscription): SymfonyResponse
     {
         $subscription->loadMissing(['plan', 'user']);
 
@@ -276,10 +278,10 @@ class CheckoutController extends Controller
             'checkout_session_id' => $session['id'],
         ]);
 
-        return redirect()->away($session['url']);
+        return Inertia::location($session['url']);
     }
 
-    private function payWithPayPal(Subscription $subscription): RedirectResponse
+    private function payWithPayPal(Subscription $subscription): SymfonyResponse
     {
         $subscription->loadMissing(['plan']);
 
@@ -293,7 +295,7 @@ class CheckoutController extends Controller
             'order_id' => $order['id'],
         ]);
 
-        return redirect()->away($order['approval_url']);
+        return Inertia::location($order['approval_url']);
     }
 
     private function stripeSessionMatches(object $session, Subscription $subscription): bool

@@ -32,6 +32,9 @@ const payments = reactive({
     spei_enabled: Boolean(props.settings.payments?.spei_enabled),
     tokens_enabled: Boolean(props.settings.payments?.tokens_enabled),
     membership_enabled: Boolean(props.settings.payments?.membership_enabled),
+    spei_bank_name: String(props.settings.payments?.spei_bank_name ?? ''),
+    spei_clabe: String(props.settings.payments?.spei_clabe ?? ''),
+    spei_beneficiary: String(props.settings.payments?.spei_beneficiary ?? 'WeCar tech de México'),
 });
 
 const contact = reactive({
@@ -152,6 +155,11 @@ const save = (key: string, value: Record<string, any>) => {
                         <span>{{ label }}</span>
                         <input v-model="payments[key]" type="checkbox" class="h-5 w-5" />
                     </label>
+                </div>
+                <div class="mt-5 grid gap-4 sm:grid-cols-2">
+                    <div><Label>Banco SPEI</Label><Input v-model="payments.spei_bank_name" class="mt-1.5" placeholder="Nombre del banco" /></div>
+                    <div><Label>CLABE SPEI</Label><Input v-model="payments.spei_clabe" inputmode="numeric" maxlength="18" class="mt-1.5" placeholder="18 dígitos" /></div>
+                    <div class="sm:col-span-2"><Label>Beneficiario SPEI</Label><Input v-model="payments.spei_beneficiary" class="mt-1.5" /></div>
                 </div>
                 <Button class="mt-5" @click="save('payments', { ...payments })">Guardar pagos</Button>
             </template>

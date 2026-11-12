@@ -360,6 +360,33 @@ it('exposes usage and renewal data in billing', function () {
         );
 });
 
+it('shows only confirmed payments in user billing history', function () {
+    $user = planUser();
+
+    Payment::query()->create([
+        'user_id' => $user->getKey(),
+        'provider' => 'spei',
+        'amount' => 500,
+        'currency' => 'MXN',
+        'status' => 'pending',
+    ]);
+    Payment::query()->create([
+        'user_id' => $user->getKey(),
+        'provider' => 'stripe',
+        'amount' => 500,
+        'currency' => 'MXN',
+        'status' => 'paid',
+        'paid_at' => now(),
+    ]);
+
+    $this->actingAs($user)
+        ->get('/panel/facturacion')
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('invoices', 1)
+            ->where('invoices.0.status', 'paid')
+        );
+});
+
 it('renews an expired account plan and republishes paused cars', function () {
     Mail::fake();
 

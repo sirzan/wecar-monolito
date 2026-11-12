@@ -84,7 +84,7 @@ it('fetches and caches market prices with robust parsing', function () {
         'api.firecrawl.dev/*' => Http::response([
             'data' => [
                 'web' => [
-                    ['url' => 'https://example.com/a', 'json' => ['precio_minimo' => '1.200.000', 'precio_sugerido' => '1.300.000', 'precio_maximo' => '1.400.000']],
+                    ['url' => 'https://example.com/a', 'json' => ['precio_minimo' => '1.2 millones', 'precio_sugerido' => '1.3 millones', 'precio_maximo' => '1.4 millones']],
                     ['url' => 'https://example.com/b', 'json' => ['precio_minimo' => 1250000, 'precio_sugerido' => 1300000, 'precio_maximo' => 1350000]],
                     ['url' => 'https://example.com/c', 'json' => ['precio_minimo' => 1280000, 'precio_sugerido' => 1320000, 'precio_maximo' => 1380000]],
                 ],
@@ -97,6 +97,7 @@ it('fetches and caches market prices with robust parsing', function () {
     $second = $service->suggest($model, 2022, 'LE', 45000);
 
     expect($first['suggested'])->toBeGreaterThan(0)
+        ->and($first['suggested'])->toBeGreaterThan(1_000_000)
         ->and($second['cached'])->toBeTrue();
 
     Http::assertSentCount(1);

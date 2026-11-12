@@ -9,6 +9,7 @@ defineOptions({ layout: PanelLayout });
 const props = defineProps<{
     cards: { id: string; brand: string; last4: string; exp_month: number; exp_year: number; is_default: boolean }[];
     methods: { stripe: boolean; paypal: boolean; spei: boolean };
+    stripeError?: string | null;
 }>();
 
 const openPortal = () => router.post('/panel/metodos-pago/portal');
@@ -63,6 +64,10 @@ const brandLabel = (brand: string) => {
 
             <div v-if="!methods.stripe" class="mt-5 rounded-2xl border border-dashed border-border p-5 text-sm text-muted-foreground">
                 Stripe no está habilitado. Actívalo en Configuración → Pagos para guardar tarjetas.
+            </div>
+
+            <div v-else-if="stripeError" class="mt-5 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5 text-sm text-amber-700">
+                {{ stripeError }}
             </div>
 
             <div v-else-if="cards.length" class="mt-5 space-y-3">

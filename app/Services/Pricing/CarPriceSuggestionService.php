@@ -29,8 +29,8 @@ class CarPriceSuggestionService
         if ($versionId) {
             $prices = (clone $query)
                 ->where('version_id', $versionId)
-                ->pluck('price')
-                ->map(fn ($price) => (float) $price)
+                ->get(['price', 'km'])
+                ->map(fn (Car $car) => $this->mileageAdjustedPrice((float) $car->price, $car->km, $km))
                 ->all();
 
             if (count($prices) >= self::MIN_SAMPLES_FOR_VERSION) {
@@ -39,8 +39,8 @@ class CarPriceSuggestionService
         }
 
         $prices = $query
-            ->pluck('price')
-            ->map(fn ($price) => (float) $price)
+            ->get(['price', 'km'])
+            ->map(fn (Car $car) => $this->mileageAdjustedPrice((float) $car->price, $car->km, $km))
             ->all();
 
         return $this->stats($prices, 'model', $km);
@@ -116,6 +116,18 @@ class CarPriceSuggestionService
         }
 
         return 'low';
+    }
+
+    private function mileageAdjustedPrice(float $price, ?int $comparableKm, ?int $targetKm): float
+    {
+        if (! $targetKm || ! $comparableKm || $targetKm <= 0 || $comparableKm <= 0) {
+            return $price;
+        }
+
+        $differenceInTenThousands = ($comparableKm - $targetKm) / 10_000;
+        $adjustment = max(-0.25, min(0.25, $differenceInTenThousands * 0.025));
+
+        return $price * (1 + $adjustment);
     }
 
     /**

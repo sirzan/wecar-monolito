@@ -8,6 +8,7 @@ use App\Services\Certifications\CertificationConfig;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -42,6 +43,17 @@ class SettingController extends Controller
             'key' => ['required', Rule::in(self::KEYS)],
             'value' => ['required', 'array'],
         ]);
+
+        if ($validated['key'] === 'payments') {
+            $payments = $validated['value'];
+
+            if (filled($payments['spei_clabe'] ?? null)
+                && preg_match('/^\d{18}$/', (string) $payments['spei_clabe']) !== 1) {
+                throw ValidationException::withMessages([
+                    'value.spei_clabe' => 'La CLABE SPEI debe contener exactamente 18 dígitos.',
+                ]);
+            }
+        }
 
         SiteSetting::put($validated['key'], $validated['value'], $request->user()->getKey());
 

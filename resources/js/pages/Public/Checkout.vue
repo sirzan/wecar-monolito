@@ -8,7 +8,7 @@ import Button from '@/components/ui/Button.vue';
 defineOptions({ layout: PublicLayout });
 
 const props = defineProps<{
-    subscription: { id: string; status: string; amount: number; billing_cycle: string; kind: string; tokens: number };
+    subscription: { id: string; status: string; payment_method: string | null; amount: number; billing_cycle: string; kind: string; tokens: number };
     plan: { name: string; duration: string; max_cars: number; token_amount?: number | null } | null;
     coupon: { code: string; available: boolean; amount: number };
     car: { slug: string; title: string; price: number; image: string | null } | null;
@@ -32,7 +32,7 @@ const pay = (method: 'stripe' | 'paypal' | 'spei') => {
 </script>
 
 <template>
-    <SeoHead title="Pago de publicación — Wecar" description="Completa el pago de tu plan Wecar." noindex />
+    <SeoHead :title="isTokens ? 'Pago de tokens — Wecar' : 'Pago seguro — Wecar'" description="Completa tu pago Wecar." noindex />
 
     <section class="mx-auto max-w-4xl px-4 py-10 sm:px-6">
         <div class="text-center">
@@ -81,7 +81,9 @@ const pay = (method: 'stripe' | 'paypal' | 'spei') => {
                         <div class="flex justify-between"><dt>Beneficiario</dt><dd class="font-semibold text-secondary">{{ spei.beneficiary }}</dd></div>
                         <div class="flex justify-between"><dt>Monto</dt><dd class="font-bold text-primary">{{ formatPrice(spei.amount) }}</dd></div>
                     </dl>
-                    <p class="mt-3 text-[11px] text-muted-foreground">Envía tu comprobante a hola@wecar.mx. La publicación se activa al validar el pago.</p>
+                    <p class="mt-3 text-[11px] text-muted-foreground">
+                        {{ isTokens ? 'Tu pago se verá reflejado en minutos y podrás comenzar a usar tus tokens.' : 'Tu pago se verá reflejado en minutos y podrás comenzar a usar tu producto Wecar.' }}
+                    </p>
                 </div>
 
                 <div class="mt-5 space-y-3">

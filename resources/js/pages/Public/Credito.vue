@@ -152,13 +152,13 @@ const benefits = [
                         </div>
                         <div>
                             <Label>Versión</Label>
-                            <select
-                                v-model="version"
-                                :disabled="!model || versionsLoading || versions.length === 0"
-                                class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"
-                            >
+                                <select
+                                    v-model="version"
+                                    :disabled="!model || versionsLoading"
+                                    class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"
+                                >
                                 <option value="">
-                                    {{ versionsLoading ? 'Cargando versiones…' : versions.length ? 'Versión' : 'Sin versiones' }}
+                                    {{ versionsLoading ? 'Cargando versiones…' : versions.length ? 'Versión (opcional)' : 'Versión no disponible (opcional)' }}
                                 </option>
                                 <option v-for="item in versions" :key="item.id" :value="item.name">{{ item.name }}</option>
                             </select>
@@ -215,7 +215,7 @@ const benefits = [
                             <p class="mt-0.5 text-sm font-bold">{{ formatPrice(financed) }}</p>
                         </div>
                     </div>
-                    <Button variant="hero" size="lg" class="mt-4 w-full" :disabled="!version" @click="dialogOpen = true">
+                    <Button variant="hero" size="lg" class="mt-4 w-full" :disabled="!model" @click="dialogOpen = true">
                         Completar perfil y comparar
                     </Button>
                     <p class="mt-2.5 text-center text-[11px] text-secondary-foreground/70">

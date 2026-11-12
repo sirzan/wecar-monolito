@@ -320,10 +320,14 @@ class MarketPriceService
         if (is_int($value) || is_float($value)) {
             $number = $value;
         } elseif (is_string($value)) {
-            $lower = mb_strtolower($value);
-            $multiplier = str_contains($lower, 'millon') ? 1_000_000 : 1;
-            $digits = preg_replace('/\D+/', '', $value);
-            $number = $digits !== '' ? ((int) $digits) * $multiplier : 0;
+            $normalized = mb_strtolower(trim($value));
+
+            if (preg_match('/([0-9]+(?:[.,][0-9]+)?)\s*(?:millones?|mdp|m)\b/u', $normalized, $matches)) {
+                $number = (float) str_replace(',', '.', $matches[1]) * 1_000_000;
+            } else {
+                $digits = preg_replace('/\D+/', '', $normalized);
+                $number = $digits !== '' ? (int) $digits : 0;
+            }
         } else {
             return null;
         }

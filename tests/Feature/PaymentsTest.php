@@ -13,6 +13,7 @@ use App\Models\SiteSetting;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Services\PaymentService;
+use App\Services\StripeService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
@@ -78,7 +79,12 @@ function paymentSubscription(User $user, Car $car, Plan $plan): Subscription
 
 it('generates spei instructions and a pending payment', function () {
     $this->seed();
-    SiteSetting::put('payments', ['spei_enabled' => true]);
+    SiteSetting::put('payments', [
+        'spei_enabled' => true,
+        'spei_bank_name' => 'Banco de prueba',
+        'spei_clabe' => '012345678901234567',
+        'spei_beneficiary' => 'WeCar tech de México',
+    ]);
 
     $user = paymentUser();
     $plan = paymentPlan();
@@ -95,6 +101,46 @@ it('generates spei instructions and a pending payment', function () {
     expect($payment->provider)->toBe('spei');
     expect($payment->status)->toBe('pending');
     expect($payment->provider_reference)->toStartWith('WECAR-');
+});
+
+it('uses an Inertia external location for Stripe checkout', function () {
+    $this->seed();
+    SiteSetting::put('payments', [
+        'stripe_enabled' => true,
+        'tokens_enabled' => true,
+    ]);
+
+    $user = paymentUser();
+    $plan = Plan::query()->create([
+        'key_name' => 'stripe_tokens_test',
+        'type' => 'tokens',
+        'name' => 'Tokens Stripe Test',
+        'price' => 49,
+        'token_amount' => 5,
+        'is_active' => true,
+    ]);
+    $subscription = Subscription::query()->create([
+        'user_id' => $user->getKey(),
+        'kind' => 'tokens',
+        'plan_id' => $plan->getKey(),
+        'status' => 'pending',
+        'billing_cycle' => 'one_time',
+        'amount' => 49,
+    ]);
+
+    $stripe = Mockery::mock(StripeService::class);
+    $stripe->shouldReceive('enabled')->andReturn(true);
+    $stripe->shouldReceive('createCheckoutSession')->once()->andReturn([
+        'id' => 'cs_test_123',
+        'url' => 'https://checkout.stripe.com/cs_test_123',
+    ]);
+    $this->app->instance(StripeService::class, $stripe);
+
+    $this->actingAs($user)
+        ->withHeader('X-Inertia', 'true')
+        ->post("/checkout/{$subscription->getKey()}/pay", ['method' => 'stripe'])
+        ->assertStatus(409)
+        ->assertHeader('X-Inertia-Location', 'https://checkout.stripe.com/cs_test_123');
 });
 
 it('rejects payment methods disabled in settings', function () {

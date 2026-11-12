@@ -16,9 +16,11 @@ fi
 
 chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
 
-if [ ! -L public/storage ]; then
-    php artisan storage:link >/dev/null 2>&1 || true
+if [ -L public/storage ]; then
+    rm -f public/storage
 fi
+
+php artisan storage:link >/dev/null 2>&1 || true
 
 if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
     php artisan migrate --force

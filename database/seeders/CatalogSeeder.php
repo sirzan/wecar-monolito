@@ -81,6 +81,9 @@ class CatalogSeeder extends Seeder
             'spei_enabled' => false,
             'tokens_enabled' => false,
             'membership_enabled' => false,
+            'spei_bank_name' => '',
+            'spei_clabe' => '',
+            'spei_beneficiary' => 'WeCar tech de México',
         ]);
 
         SiteSetting::put('contact_info', [

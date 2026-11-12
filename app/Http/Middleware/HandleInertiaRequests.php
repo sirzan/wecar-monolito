@@ -3,8 +3,11 @@
 namespace App\Http\Middleware;
 
 use App\Models\SiteSetting;
+use App\Models\User;
 use App\Support\AgencyContext;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -35,7 +38,7 @@ class HandleInertiaRequests extends Middleware
                     'id' => $user->getKey(),
                     'name' => $user->name,
                     'email' => $user->email,
-                    'avatar_url' => $user->avatar_url ?? $user->profile?->avatar_url,
+                    'avatar_url' => $this->existingAvatarUrl($user),
                     'didit_status' => $user->profile?->didit_status,
                     'email_verified_at' => $user->email_verified_at?->toIso8601String(),
                     'roles' => $user->getRoleNames(),
@@ -79,5 +82,24 @@ class HandleInertiaRequests extends Middleware
                 'spei' => (bool) (data_get(SiteSetting::get('payments'), 'spei_enabled', false)),
             ],
         ];
+    }
+
+    private function existingAvatarUrl(User $user): ?string
+    {
+        $url = $user->avatar_url ?? $user->profile?->avatar_url;
+
+        if (! $url) {
+            return null;
+        }
+
+        $publicUrl = rtrim((string) config('filesystems.disks.public.url'), '/').'/';
+
+        if (! str_starts_with($url, $publicUrl)) {
+            return $url;
+        }
+
+        $path = Str::after($url, $publicUrl);
+
+        return Storage::disk('public')->exists($path) ? $url : null;
     }
 }

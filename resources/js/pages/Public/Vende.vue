@@ -67,7 +67,8 @@ const form = useForm({
     version_id: '',
     year: new Date().getFullYear() - 2,
     km: 45000,
-    price: 250000,
+    price: null as number | null,
+    price_confirmed: false,
     description: '',
     transmission: 'Automática',
     fuel: 'Gasolina',
@@ -85,6 +86,14 @@ const form = useForm({
     plates: '',
     plan_key: props.activePlan?.key || props.plans.find(p => p.price === 0)?.key_name || props.plans[0]?.key_name || 'basico',
     images: [] as File[],
+});
+
+const priceInput = computed<string | number>({
+    get: () => form.price ?? '',
+    set: (value) => {
+        form.price = value === '' ? null : Number(value);
+        form.price_confirmed = true;
+    },
 });
 
 const acceptsTrade = computed({
@@ -295,7 +304,7 @@ const canContinue = computed(() => {
             && form.description.length >= 20;
     }
     if (step.value === 2) {
-        return form.price >= 1000 && form.city.trim() !== '';
+        return form.price_confirmed && typeof form.price === 'number' && form.price >= 1000 && form.city.trim() !== '';
     }
     if (step.value === 3) return form.images.length >= 1;
     return true;
@@ -707,7 +716,7 @@ const goBack = () => {
                         <div>
                             <Label class="text-xs font-bold text-secondary">Precio deseado de venta (MXN) *</Label>
                             <div class="relative mt-1.5">
-                                <Input v-model.number="form.price" type="number" min="1000" :class="`${fieldClass} mt-0 pr-16`" />
+                                 <Input v-model="priceInput" type="number" min="1000" :class="`${fieldClass} mt-0 pr-16`" />
                                 <span class="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">MXN</span>
                             </div>
                         </div>
@@ -753,7 +762,7 @@ const goBack = () => {
                             <button
                                 type="button"
                                 class="mt-2 rounded-full bg-primary px-3 py-1.5 font-bold text-primary-foreground hover:opacity-90"
-                                @click="form.price = priceComparables.median ?? 0"
+                                 @click="form.price = priceComparables.median ?? 0; form.price_confirmed = true"
                             >
                                 Usar precio sugerido {{ formatPrice(priceComparables.median ?? 0) }}
                             </button>
@@ -793,7 +802,7 @@ const goBack = () => {
                                 <button
                                     type="button"
                                     class="mt-2 rounded-full bg-blue-600 px-3 py-1.5 font-bold text-white hover:opacity-90"
-                                    @click="form.price = priceMarket.suggested ?? 0"
+                                     @click="form.price = priceMarket.suggested ?? 0; form.price_confirmed = true"
                                 >
                                     Usar precio de mercado {{ formatPrice(priceMarket.suggested) }}
                                 </button>

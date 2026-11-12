@@ -338,16 +338,6 @@ const goToProfile = () => {
 };
 
 const evaluate = async () => {
-    if (!profile.version) {
-        submitError.value = 'Selecciona la versión del auto.';
-        return;
-    }
-
-    if (!props.car && versionOptions.value.length === 0) {
-        submitError.value = 'No hay versiones disponibles para este auto. Intenta de nuevo más tarde.';
-        return;
-    }
-
     if (!profile.income || profile.income <= 0) {
         submitError.value = 'Ingresa tu ingreso mensual.';
         return;
@@ -368,7 +358,7 @@ const evaluate = async () => {
                 auto: {
                     marca: profile.brand,
                     modelo: profile.model,
-                    version: profile.version,
+                    version: profile.version || null,
                     anio: Number(profile.year),
                     precio: price.value,
                     km: props.car?.km ?? 0,
