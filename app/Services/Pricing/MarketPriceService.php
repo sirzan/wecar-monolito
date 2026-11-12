@@ -12,37 +12,19 @@ use Illuminate\Support\Str;
 
 class MarketPriceService
 {
-    private const MIN_SANE_PRICE = 30_000;
+    private const MIN_SANE_PRICE = 35_000;
 
     private const MAX_SANE_PRICE = 15_000_000;
 
-    private const SUCCESS_TTL_HOURS = 24;
+    private const SUCCESS_TTL_HOURS = 12;
 
-    private const EMPTY_TTL_MINUTES = 10;
+    private const EMPTY_TTL_MINUTES = 5;
 
     private const ERROR_TTL_MINUTES = 1;
 
     private const EXPECTED_KM_PER_YEAR = 15_000;
 
-    /**
-     * @var array<int, string>
-     */
-    private const LIBRO_AZUL_DOMAINS = [
-        'libroazul.com',
-        'libroazul.app',
-        'guiaebc.com',
-    ];
-
-    /**
-     * @var array<int, string>
-     */
-    private const MEXICAN_MARKET_DOMAINS = [
-        'autocosmos.com.mx',
-        'kavak.com',
-        'autos.mercadolibre.com.mx',
-        'seminuevos.com',
-        'soloautos.mx',
-    ];
+    private const TIMEOUT_SECONDS = 30;
 
     /**
      * @return array<string, mixed>
@@ -54,7 +36,8 @@ class MarketPriceService
         ?int $km = null,
         bool $forceRefresh = false,
     ): array {
-        $key = $this->cacheKey($model, $year, $versionName);
+        $cleanVersion = $this->cleanVersion($versionName);
+        $key = $this->cacheKey($model, $year, $cleanVersion);
 
         if (! $forceRefresh) {
             $cached = Cache::get($key);
@@ -90,7 +73,7 @@ class MarketPriceService
         }
 
         try {
-            $result = $this->fetch($model, $year, $versionName);
+            $result = $this->fetch($model, $year, $cleanVersion);
             Cache::put($key, $result, $this->ttlFor($result));
 
             return [
@@ -111,7 +94,7 @@ class MarketPriceService
     /**
      * @return array<string, mixed>
      */
-    private function fetch(CarModel $model, int $year, ?string $versionName): array
+    private function fetch(CarModel $model, int $year, string $version): array
     {
         $apiKey = (string) config('services.firecrawl.key');
 
@@ -123,69 +106,24 @@ class MarketPriceService
 
         $brand = trim((string) ($model->brand?->name ?? ''));
         $modelName = trim((string) $model->name);
-        $version = trim((string) $versionName);
-
-        $libroAzulQuery = trim(implode(' ', array_filter([
-            $brand,
-            $modelName,
-            $version,
-            (string) $year,
-            'Libro Azul precio compra venta pesos',
-        ])));
-
-        $marketMxQuery = trim(implode(' ', array_filter([
-            $brand,
-            $modelName,
-            $version,
-            (string) $year,
-            'seminuevo usado precio México MXN',
-        ])));
 
         try {
-            $responses = Http::pool(fn (Pool $pool) => [
-                $pool->as('libro_azul')
-                    ->withToken($apiKey)
-                    ->connectTimeout(8)
-                    ->timeout(45)
-                    ->post('https://api.firecrawl.dev/v2/search', $this->firecrawlPayload(
-                        $libroAzulQuery,
-                        self::LIBRO_AZUL_DOMAINS,
-                        5,
-                        $brand,
-                        $modelName,
-                        $version,
-                        $year,
-                    )),
-                $pool->as('market_mx')
-                    ->withToken($apiKey)
-                    ->connectTimeout(8)
-                    ->timeout(45)
-                    ->post('https://api.firecrawl.dev/v2/search', $this->firecrawlPayload(
-                        $marketMxQuery,
-                        self::MEXICAN_MARKET_DOMAINS,
-                        5,
-                        $brand,
-                        $modelName,
-                        $version,
-                        $year,
-                    )),
-            ]);
+            $primaryResult = $this->searchAndAggregate($apiKey, $brand, $modelName, $version, $year);
 
-            $libroAzulResults = $this->extractSearchResults($responses['libro_azul'] ?? null, 'libro_azul', $modelName, $year);
-            $marketMxResults = $this->extractSearchResults($responses['market_mx'] ?? null, 'market_mx', $modelName, $year);
-
-            if ($libroAzulResults === null && $marketMxResults === null) {
-                return $this->empty('No se pudo consultar el mercado en este momento.');
+            if (($primaryResult['samples'] ?? 0) > 0 || $version === '') {
+                return $primaryResult;
             }
 
-            return $this->aggregate(
-                $libroAzulResults ?? [],
-                $marketMxResults ?? [],
-                $brand,
-                $modelName,
-                $version,
-                $year,
-            );
+            // Fallback automático sin versión cuando el nombre de versión del catálogo es demasiado específico.
+            $fallbackResult = $this->searchAndAggregate($apiKey, $brand, $modelName, '', $year);
+
+            if (($fallbackResult['samples'] ?? 0) > 0) {
+                $fallbackResult['match_level'] = 'model';
+
+                return $fallbackResult;
+            }
+
+            return $primaryResult;
         } catch (\Throwable $exception) {
             Log::warning('Firecrawl market price request error', [
                 'model' => $modelName,
@@ -198,12 +136,80 @@ class MarketPriceService
     }
 
     /**
-     * @param  array<int, string>  $domains
+     * @return array<string, mixed>
+     */
+    private function searchAndAggregate(
+        string $apiKey,
+        string $brand,
+        string $modelName,
+        string $version,
+        int $year,
+    ): array {
+        $libroAzulQuery = trim(implode(' ', array_filter([
+            $brand,
+            $modelName,
+            $version,
+            (string) $year,
+            'Libro Azul Guía EBC precio México pesos',
+        ])));
+
+        $marketMxQuery = trim(implode(' ', array_filter([
+            $brand,
+            $modelName,
+            $version,
+            (string) $year,
+            'precio México pesos seminuevo',
+        ])));
+
+        $responses = Http::pool(fn (Pool $pool) => [
+            $pool->as('libro_azul')
+                ->withToken($apiKey)
+                ->connectTimeout(8)
+                ->timeout(self::TIMEOUT_SECONDS)
+                ->post('https://api.firecrawl.dev/v2/search', $this->firecrawlPayload(
+                    $libroAzulQuery,
+                    3,
+                    $brand,
+                    $modelName,
+                    $version,
+                    $year,
+                )),
+            $pool->as('market_mx')
+                ->withToken($apiKey)
+                ->connectTimeout(8)
+                ->timeout(self::TIMEOUT_SECONDS)
+                ->post('https://api.firecrawl.dev/v2/search', $this->firecrawlPayload(
+                    $marketMxQuery,
+                    4,
+                    $brand,
+                    $modelName,
+                    $version,
+                    $year,
+                )),
+        ]);
+
+        $libroAzulResults = $this->extractSearchResults($responses['libro_azul'] ?? null, 'libro_azul', $modelName, $year);
+        $marketMxResults = $this->extractSearchResults($responses['market_mx'] ?? null, 'market_mx', $modelName, $year);
+
+        if ($libroAzulResults === null && $marketMxResults === null) {
+            return $this->empty('No se pudo consultar el mercado en este momento.');
+        }
+
+        return $this->aggregate(
+            $libroAzulResults ?? [],
+            $marketMxResults ?? [],
+            $brand,
+            $modelName,
+            $version,
+            $year,
+        );
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function firecrawlPayload(
         string $query,
-        array $domains,
         int $limit,
         string $brand,
         string $modelName,
@@ -211,30 +217,36 @@ class MarketPriceService
         int $year,
     ): array {
         $carLabel = trim(implode(' ', array_filter([$brand, $modelName, $version, (string) $year])));
+        $minFloor = number_format($this->minSanePriceForYear($year), 0, '.', ',');
 
         return [
             'query' => $query,
             'limit' => $limit,
             'country' => 'MX',
             'location' => 'Mexico',
-            'includeDomains' => $domains,
             'scrapeOptions' => [
                 'onlyMainContent' => true,
                 'formats' => [
                     [
                         'type' => 'json',
                         'prompt' => implode(' ', [
-                            "Extrae únicamente referencias de precio EN PESOS MEXICANOS (MXN) para el vehículo USADO/SEMINUEVO: {$carLabel} en México.",
-                            'Reglas estrictas:',
-                            '1) Solo reporta moneda "MXN" si el precio está claramente en pesos mexicanos (MXN, MX$, pesos o portal mexicano). Si el precio está en dólares (USD/US$), pesos colombianos (COP), chilenos (CLP) o argentinos (ARS), marca moneda como "USD" u "OTRA".',
-                            '2) Indica tipo_registro: "libro_azul" si proviene de Libro Azul / Guía EBC, "guia_precios" si es tabulador de precios usados, "seminuevo_venta" si es anuncio de seminuevo en venta, "auto_nuevo" si es vehículo 0 km/nuevo, o "financiamiento" si es enganche o mensualidad.',
-                            '3) Si es Libro Azul o tabulador con precio de compra (toma) y precio de venta (público), extrae ambos (precio_compra y precio_venta) como números enteros MXN sin decimales ni símbolos.',
-                            '4) Incluye anio (entero exacto del auto listado) y version exacta si aparece.',
-                            '5) Nunca inventes precios. Si no hay precios reales de este modelo y año, devuelve valuaciones: [].',
+                            "Estoy buscando el precio de mercado en México para el auto usado/seminuevo {$carLabel} (año {$year}).",
+                            'Extrae los precios de CONTADO del vehículo completo en pesos mexicanos (MXN) como números enteros sin símbolos ni separadores.',
+                            "PROHIBIDO extraer enganches, pagos iniciales, mensualidades, bonos de descuento, seguros o montos menores a \${$minFloor} MXN.",
+                            'PROHIBIDO extraer precios en dólares (USD/US$), pesos colombianos (COP), chilenos (CLP) o argentinos (ARS); si la página no está en MXN marca moneda como "USD" u "OTRA".',
+                            'Rellena precio_minimo, precio_sugerido y precio_maximo (y precio_compra / precio_venta si es Libro Azul o Guía EBC).',
+                            'Si la página contiene varias unidades o versiones, inclúyelas también en valuaciones[].',
                         ]),
                         'schema' => [
                             'type' => 'object',
                             'properties' => [
+                                'moneda' => ['type' => ['string', 'null'], 'enum' => ['MXN', 'USD', 'OTRA', null]],
+                                'es_libro_azul' => ['type' => ['boolean', 'null']],
+                                'precio_minimo' => ['type' => ['number', 'null']],
+                                'precio_sugerido' => ['type' => ['number', 'null']],
+                                'precio_maximo' => ['type' => ['number', 'null']],
+                                'precio_compra' => ['type' => ['number', 'null']],
+                                'precio_venta' => ['type' => ['number', 'null']],
                                 'valuaciones' => [
                                     'type' => 'array',
                                     'items' => [
@@ -249,12 +261,12 @@ class MarketPriceService
                                             'precio_compra' => ['type' => ['number', 'null']],
                                             'precio_venta' => ['type' => ['number', 'null']],
                                             'precio_sugerido' => ['type' => ['number', 'null']],
+                                            'precio_minimo' => ['type' => ['number', 'null']],
+                                            'precio_maximo' => ['type' => ['number', 'null']],
                                         ],
-                                        'required' => ['moneda', 'tipo_registro'],
                                     ],
                                 ],
                             ],
-                            'required' => ['valuaciones'],
                         ],
                     ],
                     ['type' => 'markdown'],
@@ -291,7 +303,7 @@ class MarketPriceService
         }
 
         $json = $response->json();
-        $results = $json['data']['web'] ?? $json['web'] ?? $json['data'] ?? [];
+        $results = $json['data']['web'] ?? $json['web'] ?? $json['data'] ?? $json['results'] ?? [];
 
         return is_array($results) ? $results : [];
     }
@@ -319,22 +331,34 @@ class MarketPriceService
             ? $this->collectFromMarkdownFallback($marketMxResults, 'market_mx', $brand, $modelName, $version, $year)
             : [];
 
-        $libroAzulAll = [...$libroAzulItems, ...$libroAzulFallback];
-        $marketMxAll = [...$marketMxItems, ...$marketMxFallback];
+        $allCollected = [
+            ...$libroAzulItems,
+            ...$libroAzulFallback,
+            ...$marketMxItems,
+            ...$marketMxFallback,
+        ];
 
-        // Si alguna referencia de market_mx viene etiquetada como libro_azul (por ejemplo en blog/portal MX), la promovemos.
-        foreach ($marketMxAll as $item) {
-            if ($item['record_type'] === 'libro_azul') {
-                $libroAzulAll[] = $item;
+        $libroAzulPool = [];
+        $marketMxPool = [];
+
+        foreach ($allCollected as $item) {
+            if (($item['record_type'] ?? '') === 'libro_azul') {
+                $libroAzulPool[] = $item;
+            } else {
+                $marketMxPool[] = $item;
             }
         }
 
-        if ($libroAzulAll !== []) {
-            return $this->summarize($libroAzulAll, $marketMxAll, 'libro_azul', $version);
+        if ($libroAzulPool !== []) {
+            $summary = $this->summarize($libroAzulPool, $marketMxPool, 'libro_azul', $version, $year);
+
+            if (($summary['samples'] ?? 0) > 0) {
+                return $summary;
+            }
         }
 
-        if ($marketMxAll !== []) {
-            return $this->summarize($marketMxAll, [], 'market_mx', $version);
+        if ($marketMxPool !== []) {
+            return $this->summarize($marketMxPool, [], 'market_mx', $version, $year);
         }
 
         return $this->empty('Sin coincidencias de precio en MXN para este vehículo');
@@ -371,24 +395,55 @@ class MarketPriceService
                 continue;
             }
 
-            $rawValuations = is_array($extracted['valuaciones'] ?? null)
-                ? $extracted['valuaciones']
-                : [$extracted];
+            $pageTitle = (string) ($result['title'] ?? '');
+            $isLibroAzulPage = $this->isLibroAzulSource($sourceUrl, $pageTitle, (bool) ($extracted['es_libro_azul'] ?? false));
+            $effectiveChannel = $isLibroAzulPage ? 'libro_azul' : $channel;
 
-            foreach ($rawValuations as $raw) {
-                if (! is_array($raw)) {
-                    continue;
+            $pageItems = [];
+
+            if (is_array($extracted['valuaciones'] ?? null) && $extracted['valuaciones'] !== []) {
+                foreach ($extracted['valuaciones'] as $raw) {
+                    if (! is_array($raw)) {
+                        continue;
+                    }
+
+                    $normalized = $this->normalizeValuation($raw, $sourceUrl, $effectiveChannel, $brand, $modelName, $version, $year, $pageTitle);
+
+                    if ($normalized !== null) {
+                        $pageItems[] = $normalized;
+                    }
                 }
+            }
 
-                $normalized = $this->normalizeValuation($raw, $sourceUrl, $channel, $brand, $modelName, $version, $year);
+            // Si valuaciones[] venía vacío o no produjo ítems, tomamos el resumen plano de primer nivel (como en getLibroAzulPrice TS).
+            if ($pageItems === [] && $this->hasFlatPriceFields($extracted)) {
+                $normalizedFlat = $this->normalizeValuation($extracted, $sourceUrl, $effectiveChannel, $brand, $modelName, $version, $year, $pageTitle);
 
-                if ($normalized !== null) {
-                    $items[] = $normalized;
+                if ($normalizedFlat !== null) {
+                    $pageItems[] = $normalizedFlat;
                 }
+            }
+
+            foreach ($pageItems as $item) {
+                $items[] = $item;
             }
         }
 
         return $items;
+    }
+
+    /**
+     * @param  array<string, mixed>  $extracted
+     */
+    private function hasFlatPriceFields(array $extracted): bool
+    {
+        foreach (['precio_sugerido', 'precio_minimo', 'precio_maximo', 'precio_compra', 'precio_venta'] as $field) {
+            if (isset($extracted[$field]) && $extracted[$field] !== null && $extracted[$field] !== '') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -403,22 +458,31 @@ class MarketPriceService
         string $modelName,
         string $version,
         int $year,
+        string $pageTitle = '',
     ): ?array {
         $currency = strtoupper(trim((string) ($raw['moneda'] ?? 'MXN')));
 
-        if ($currency !== 'MXN') {
+        if ($currency !== '' && $currency !== 'MXN') {
             return null;
         }
 
-        $recordType = strtolower(trim((string) ($raw['tipo_registro'] ?? ($channel === 'libro_azul' ? 'libro_azul' : 'seminuevo_venta'))));
+        $isLibroAzul = $this->isLibroAzulSource($sourceUrl, $pageTitle, (bool) ($raw['es_libro_azul'] ?? false))
+            || strtolower(trim((string) ($raw['tipo_registro'] ?? ''))) === 'libro_azul';
+
+        $defaultType = $isLibroAzul ? 'libro_azul' : 'seminuevo_venta';
+        $recordType = strtolower(trim((string) ($raw['tipo_registro'] ?? $defaultType)));
 
         if (in_array($recordType, ['auto_nuevo', 'financiamiento'], true)) {
             return null;
         }
 
+        if ($isLibroAzul) {
+            $recordType = 'libro_azul';
+        }
+
         $extractedYear = isset($raw['anio']) && is_numeric($raw['anio']) ? (int) $raw['anio'] : null;
 
-        if ($extractedYear !== null && $extractedYear !== $year) {
+        if ($extractedYear !== null && $extractedYear > 1900 && $extractedYear !== $year) {
             return null;
         }
 
@@ -428,13 +492,15 @@ class MarketPriceService
             return null;
         }
 
-        $buy = $this->sanePrice($raw['precio_compra'] ?? null);
-        $sell = $this->sanePrice($raw['precio_venta'] ?? null);
-        $suggested = $this->sanePrice($raw['precio_sugerido'] ?? null);
+        $buy = $this->sanePrice($raw['precio_compra'] ?? null, $year);
+        $sell = $this->sanePrice($raw['precio_venta'] ?? null, $year);
+        $suggested = $this->sanePrice($raw['precio_sugerido'] ?? null, $year);
+        $legacyMin = $this->sanePrice($raw['precio_minimo'] ?? null, $year);
+        $legacyMax = $this->sanePrice($raw['precio_maximo'] ?? null, $year);
 
-        // Soporte retrocompatible con esquema simple previo si llegara a presentarse.
-        $legacyMin = $this->sanePrice($raw['precio_minimo'] ?? null);
-        $legacyMax = $this->sanePrice($raw['precio_maximo'] ?? null);
+        if ($legacyMin !== null && $legacyMax !== null && $legacyMin > $legacyMax) {
+            [$legacyMin, $legacyMax] = [$legacyMax, $legacyMin];
+        }
 
         if ($buy === null && $legacyMin !== null && $recordType === 'libro_azul') {
             $buy = $legacyMin;
@@ -448,14 +514,30 @@ class MarketPriceService
             $buy = null;
         }
 
+        // Si el LLM no dio precio_sugerido pero sí dio min y max coherentes, usamos su punto medio.
+        if ($suggested === null && $legacyMin !== null && $legacyMax !== null) {
+            $suggested = (int) round(($legacyMin + $legacyMax) / 2);
+        }
+
         $representative = $suggested ?? $sell ?? $buy ?? $legacyMin ?? $legacyMax;
 
         if ($representative === null) {
             return null;
         }
 
+        // Si precio_minimo es un enganche disfrazado (< 55% del precio sugerido), lo ignoramos.
+        if ($legacyMin !== null && $legacyMin < ($representative * 0.55)) {
+            $legacyMin = null;
+        }
+
+        // Si precio_maximo está desproporcionado (> 175% del precio sugerido), lo ignoramos.
+        if ($legacyMax !== null && $legacyMax > ($representative * 1.75)) {
+            $legacyMax = null;
+        }
+
         $extractedVersion = trim((string) ($raw['version'] ?? ''));
-        $versionMatched = $version !== '' && $extractedVersion !== '' && $this->matchesVersion($extractedVersion, $version);
+        $versionContext = $extractedVersion !== '' ? $extractedVersion : ($pageTitle.' '.$sourceUrl);
+        $versionMatched = $version !== '' && $versionContext !== '' && $this->matchesVersion($versionContext, $version);
 
         return [
             'buy' => $buy,
@@ -463,7 +545,7 @@ class MarketPriceService
             'suggested' => $representative,
             'min' => $legacyMin ?? $buy ?? $representative,
             'max' => $legacyMax ?? $sell ?? $representative,
-            'record_type' => $channel === 'libro_azul' ? 'libro_azul' : $recordType,
+            'record_type' => $recordType,
             'version_matched' => $versionMatched,
             'source' => $sourceUrl !== '' ? $sourceUrl : $channel,
         ];
@@ -515,14 +597,17 @@ class MarketPriceService
         $strictItems = [];
 
         foreach ($pages as $page) {
-            foreach ($this->pricesFromMarkdownStrict($page['content'], $modelName, $year) as $price) {
+            $isLibroAzul = $this->isLibroAzulSource($page['url'], $page['title'], false);
+            $fullContext = trim($page['title']."\n".$page['url']."\n".$page['content']);
+
+            foreach ($this->pricesFromMarkdownStrict($fullContext, $modelName, $year) as $price) {
                 $strictItems[] = [
                     'buy' => null,
                     'sell' => null,
                     'suggested' => $price,
                     'min' => $price,
                     'max' => $price,
-                    'record_type' => $channel === 'libro_azul' ? 'libro_azul' : 'seminuevo_venta',
+                    'record_type' => $isLibroAzul ? 'libro_azul' : 'seminuevo_venta',
                     'version_matched' => $version !== '' && $this->matchesVersion($page['title'].' '.$page['content'], $version),
                     'source' => $page['url'] !== '' ? $page['url'] : $channel,
                 ];
@@ -664,57 +749,66 @@ class MarketPriceService
      * @param  array<int, array<string, mixed>>  $secondaryItems
      * @return array<string, mixed>
      */
-    private function summarize(array $primaryItems, array $secondaryItems, string $sourceType, string $version): array
+    private function summarize(array $primaryItems, array $secondaryItems, string $sourceType, string $version, int $year): array
     {
         $versionMatched = array_values(array_filter($primaryItems, fn (array $item) => (bool) ($item['version_matched'] ?? false)));
         $selected = $versionMatched !== [] ? $versionMatched : $primaryItems;
         $matchLevel = $version !== '' && $versionMatched !== [] ? 'version' : 'model';
 
         $suggestedValues = array_values(array_filter(array_map(fn (array $item) => $item['suggested'], $selected)));
-        $suggestedValues = $this->removeOutliers($suggestedValues);
+        $suggestedValues = $this->removeOutliers($suggestedValues, $year);
 
         if ($suggestedValues === []) {
             return $this->empty('Sin coincidencias de precio en MXN para este vehículo');
         }
 
+        sort($suggestedValues);
+        $median = $this->median($suggestedValues);
+        $minFloor = $this->minSanePriceForYear($year);
+
         $allValues = [];
 
         foreach ($selected as $item) {
             foreach ([$item['min'], $item['suggested'], $item['max']] as $price) {
-                if ($price !== null && $price >= self::MIN_SANE_PRICE && $price <= self::MAX_SANE_PRICE) {
+                if (
+                    $price !== null
+                    && $price >= $minFloor
+                    && $price <= self::MAX_SANE_PRICE
+                    && $price >= ($median * 0.55)
+                    && $price <= ($median * 1.75)
+                ) {
                     $allValues[] = $price;
                 }
             }
         }
 
-        // Si tenemos un respaldo de mercado MX y el primario tiene pocas muestras, usamos ambos solo para enriquecer rango (no alterar suggested si es Libro Azul).
         if ($sourceType === 'libro_azul' && count($allValues) < 3 && $secondaryItems !== []) {
             $secondaryVersion = array_values(array_filter($secondaryItems, fn (array $item) => (bool) ($item['version_matched'] ?? false)));
             $secondaryPool = $secondaryVersion !== [] ? $secondaryVersion : $secondaryItems;
 
             foreach ($secondaryPool as $item) {
-                if ($item['suggested'] !== null) {
-                    $allValues[] = $item['suggested'];
+                $candidate = $item['suggested'] ?? null;
+
+                if ($candidate !== null && $candidate >= ($median * 0.65) && $candidate <= ($median * 1.5)) {
+                    $allValues[] = $candidate;
                 }
             }
         }
 
-        $allValues = $this->removeOutliers($allValues);
+        $allValues = $this->removeOutliers($allValues, $year);
 
         if ($allValues === []) {
             $allValues = $suggestedValues;
         }
 
-        sort($suggestedValues);
         sort($allValues);
 
-        $median = $this->median($suggestedValues);
         $p25 = $this->percentile(count($suggestedValues) >= 3 ? $suggestedValues : $allValues, 25);
         $p75 = $this->percentile(count($suggestedValues) >= 3 ? $suggestedValues : $allValues, 75);
         $spread = $median > 0 ? ($p75 - $p25) / $median : 1;
 
-        $buyPrices = $this->removeOutliers(array_values(array_filter(array_map(fn (array $item) => $item['buy'], $selected))));
-        $sellPrices = $this->removeOutliers(array_values(array_filter(array_map(fn (array $item) => $item['sell'], $selected))));
+        $buyPrices = $this->removeOutliers(array_values(array_filter(array_map(fn (array $item) => $item['buy'], $selected))), $year);
+        $sellPrices = $this->removeOutliers(array_values(array_filter(array_map(fn (array $item) => $item['sell'], $selected))), $year);
 
         $buyPrice = $buyPrices !== [] ? (int) round($this->median($buyPrices)) : null;
         $sellPrice = $sellPrices !== [] ? (int) round($this->median($sellPrices)) : null;
@@ -769,9 +863,10 @@ class MarketPriceService
 
         $differenceInTenThousands = ($expectedKm - $km) / 10_000;
         $factor = 1 + max(-0.18, min(0.15, $differenceInTenThousands * 0.02));
+        $minFloor = $this->minSanePriceForYear($year);
 
         $adjust = fn (?int $value): ?int => $value !== null
-            ? max(self::MIN_SANE_PRICE, min(self::MAX_SANE_PRICE, (int) (round(($value * $factor) / 100) * 100)))
+            ? max($minFloor, min(self::MAX_SANE_PRICE, (int) (round(($value * $factor) / 100) * 100)))
             : null;
 
         return [
@@ -830,25 +925,52 @@ class MarketPriceService
         ];
     }
 
-    private function cacheKey(CarModel $model, int $year, ?string $versionName): string
+    private function cleanVersion(?string $versionName): string
+    {
+        $v = trim((string) $versionName);
+
+        if ($v === '' || Str::isUuid($v)) {
+            return '';
+        }
+
+        return $v;
+    }
+
+    private function cacheKey(CarModel $model, int $year, string $versionName): string
     {
         $model->loadMissing('brand');
 
         $key = implode('|', [
             Str::lower(Str::ascii((string) ($model->brand?->name ?? ''))),
             Str::lower(Str::ascii((string) $model->name)),
-            Str::lower(Str::ascii(trim((string) $versionName))),
+            Str::lower(Str::ascii($versionName)),
             $year,
         ]);
 
-        return 'market-price:v2:'.md5($key);
+        return 'market-price:v3:'.md5($key);
     }
 
-    private function sanePrice(mixed $value): ?int
+    /**
+     * Piso mínimo dinámico según la antigüedad del vehículo para descartar enganches y mensualidades.
+     */
+    private function minSanePriceForYear(int $year): int
+    {
+        $age = max(0, (int) date('Y') - $year);
+
+        return match (true) {
+            $age <= 3 => 120_000,
+            $age <= 7 => 80_000,
+            $age <= 12 => 55_000,
+            default => self::MIN_SANE_PRICE,
+        };
+    }
+
+    private function sanePrice(mixed $value, ?int $year = null): ?int
     {
         $price = $this->priceOrNull($value);
+        $minFloor = $year !== null ? $this->minSanePriceForYear($year) : self::MIN_SANE_PRICE;
 
-        if ($price === null || $price < self::MIN_SANE_PRICE || $price > self::MAX_SANE_PRICE) {
+        if ($price === null || $price < $minFloor || $price > self::MAX_SANE_PRICE) {
             return null;
         }
 
@@ -891,6 +1013,8 @@ class MarketPriceService
     }
 
     /**
+     * Extrae precios en MXN desde Markdown eliminando primero cláusulas de enganche, mensualidades y divisas extranjeras.
+     *
      * @return array<int, int>
      */
     private function pricesFromMarkdownStrict(string $markdown, string $modelName, int $year): array
@@ -911,18 +1035,37 @@ class MarketPriceService
         $prices = [];
 
         foreach ($lines as $line) {
-            $lowerLine = Str::lower(Str::ascii($line));
+            $asciiLine = Str::lower(Str::ascii($line));
 
-            if (preg_match('/\b(usd|us\$|dolar|dolares|cop|clp|ars|enganche|mensual|mensualidad|quincen|semanal|bono|0\s*km|nuevo)\b/', $lowerLine)) {
+            // Descartar líneas que hablen exclusivamente de autos 0 km de agencia.
+            if (preg_match('/\b(0\s*km|cero\s*kilometros|nuevo\s*de\s*agencia)\b/', $asciiLine)) {
                 continue;
             }
 
-            if (! preg_match_all('/(?:\$\s*|mxn\s*)(\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?|\d{5,8}(?:[.,]\d{1,2})?)/i', $line, $matches)) {
+            // Limpiar fragmentos de divisas extranjeras y financiamiento antes de buscar precios en MXN.
+            $sanitizedLine = (string) preg_replace([
+                '/(?:usd|us\$|dolar(?:es)?|cop|clp|ars|eur)\s*[:$]?\s*\$?\s*\d[\d.,]*/i',
+                '/\$\s*\d[\d.,]*\s*(?:usd|us\$|dolar(?:es)?|cop|clp|ars|eur)\b/i',
+                '/(?:enganche|pago\s*inicial|mensualidad(?:es)?|mensual(?:es)?|quincenal(?:es)?|semanal(?:es)?|bono(?:\s*de\s*descuento)?|descuento|ahorro|comision|seguro)\s*(?:de|desde|aprox\.?|hasta|:)?\s*\$\s*\d[\d.,]*/i',
+                '/\$\s*\d[\d.,]*\s*(?:al\s*mes|mensual(?:es)?|quincenal(?:es)?|semanal(?:es)?|de\s*enganche|de\s*bono)\b/i',
+            ], ' ', $line);
+
+            $lowerSanitized = Str::lower(Str::ascii($sanitizedLine));
+
+            // Si la línea sigue teniendo indicador de moneda extranjera sin mencionar MXN/pesos, la omitimos.
+            if (
+                preg_match('/\b(usd|us\$|dolar|dolares|cop|clp|ars)\b/', $lowerSanitized)
+                && ! preg_match('/\b(mxn|pesos)\b/', $lowerSanitized)
+            ) {
+                continue;
+            }
+
+            if (! preg_match_all('/(?:\$\s*|mxn\s*)(\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?|\d{5,8}(?:[.,]\d{1,2})?)/i', $sanitizedLine, $matches)) {
                 continue;
             }
 
             foreach ($matches[1] as $raw) {
-                $price = $this->sanePrice($raw);
+                $price = $this->sanePrice($raw, $year);
 
                 if ($price !== null) {
                     $prices[] = $price;
@@ -931,6 +1074,17 @@ class MarketPriceService
         }
 
         return $prices;
+    }
+
+    private function isLibroAzulSource(string $url, string $title, bool $flaggedByExtractor): bool
+    {
+        $haystack = Str::lower(Str::ascii($url.' '.$title));
+
+        if (str_contains($haystack, 'libroazul') || str_contains($haystack, 'libro azul') || str_contains($haystack, 'guiaebc') || str_contains($haystack, 'guia ebc')) {
+            return true;
+        }
+
+        return $flaggedByExtractor;
     }
 
     private function isAllowedMexicanUrl(string $url): bool
@@ -942,12 +1096,12 @@ class MarketPriceService
         $lower = Str::lower($url);
         $host = parse_url($lower, PHP_URL_HOST) ?: '';
 
-        if ($host !== '' && preg_match('/\.(co|cl|ar|pe|br|ec|uy|ve|es)$/', $host)) {
+        if ($host !== '' && preg_match('/\.(co|cl|ar|pe|br|ec|uy|ve|es|cr|pa|gt|do)$/', $host)) {
             return false;
         }
 
         if (str_contains($host, 'kavak.com')) {
-            return str_contains($lower, 'kavak.com/mx');
+            return ! preg_match('#kavak\.com/(co|ar|cl|br|pe|tr|ae|om|kw|sa|qa|bh)(/|$)#', $lower);
         }
 
         if (str_contains($host, 'mercadolibre.com') && ! str_contains($host, 'mercadolibre.com.mx')) {
@@ -1044,24 +1198,45 @@ class MarketPriceService
     }
 
     /**
+     * Filtra precios fuera de rango por año, aplica IQR (>= 4 muestras) y consistencia contra mediana (>= 2 muestras).
+     *
      * @param  array<int, int|float>  $values
      * @return array<int, int|float>
      */
-    private function removeOutliers(array $values): array
+    private function removeOutliers(array $values, ?int $year = null): array
     {
-        $values = array_values(array_filter($values, fn ($price) => $price >= self::MIN_SANE_PRICE && $price <= self::MAX_SANE_PRICE));
+        $minFloor = $year !== null ? $this->minSanePriceForYear($year) : self::MIN_SANE_PRICE;
+        $values = array_values(array_filter($values, fn ($price) => $price >= $minFloor && $price <= self::MAX_SANE_PRICE));
         sort($values);
 
-        if (count($values) < 4) {
-            return $values;
+        if (count($values) >= 4) {
+            $q1 = $this->percentile($values, 25);
+            $q3 = $this->percentile($values, 75);
+            $iqr = $q3 - $q1;
+            $iqrFiltered = array_values(array_filter($values, fn ($price) => $price >= $q1 - (1.5 * $iqr) && $price <= $q3 + (1.5 * $iqr)));
+
+            if ($iqrFiltered !== []) {
+                $values = $iqrFiltered;
+            }
         }
 
-        $q1 = $this->percentile($values, 25);
-        $q3 = $this->percentile($values, 75);
-        $iqr = $q3 - $q1;
-        $filtered = array_values(array_filter($values, fn ($price) => $price >= $q1 - (1.5 * $iqr) && $price <= $q3 + (1.5 * $iqr)));
+        if (count($values) >= 3) {
+            $median = $this->median($values);
+            $medianFiltered = array_values(array_filter(
+                $values,
+                fn ($price) => $price >= ($median * 0.55) && $price <= ($median * 1.75),
+            ));
 
-        return $filtered !== [] ? $filtered : $values;
+            if ($medianFiltered !== []) {
+                return $medianFiltered;
+            }
+        }
+
+        if (count($values) === 2 && $values[0] > 0 && ($values[1] / $values[0]) > 2.2 && $values[0] < 150_000) {
+            return [$values[1]];
+        }
+
+        return $values;
     }
 
     /**

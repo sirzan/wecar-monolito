@@ -123,9 +123,9 @@ it('prioritizes libro azul mxn buy and sell valuations matched by version', func
     $model = priceModel();
 
     Http::fake(function (Request $request) {
-        $domains = $request['includeDomains'] ?? [];
+        $query = (string) ($request['query'] ?? '');
 
-        if (in_array('libroazul.com', $domains, true)) {
+        if (str_contains($query, 'Libro Azul')) {
             return Http::response([
                 'data' => [
                     'web' => [
@@ -205,9 +205,9 @@ it('rejects non-mxn currencies, new cars, financing, wrong model or year, foreig
     $model = priceModel();
 
     Http::fake(function (Request $request) {
-        $domains = $request['includeDomains'] ?? [];
+        $query = (string) ($request['query'] ?? '');
 
-        if (in_array('libroazul.com', $domains, true)) {
+        if (str_contains($query, 'Libro Azul')) {
             return Http::response(['data' => ['web' => []]]);
         }
 
@@ -289,9 +289,9 @@ it('parses decimal prices cleanly in strict markdown fallback while ignoring usd
     $model = priceModel();
 
     Http::fake(function (Request $request) {
-        $domains = $request['includeDomains'] ?? [];
+        $query = (string) ($request['query'] ?? '');
 
-        if (in_array('libroazul.com', $domains, true)) {
+        if (str_contains($query, 'Libro Azul')) {
             return Http::response(['data' => ['web' => []]]);
         }
 
@@ -301,10 +301,10 @@ it('parses decimal prices cleanly in strict markdown fallback while ignoring usd
                     [
                         'url' => 'https://www.seminuevos.com/toyota-corolla-2015',
                         'markdown' => implode("\n", [
-                            'Toyota Corolla 2015 seminuevo en Monterrey',
+                            'Toyota Corolla 2015 seminuevo en Monterrey, Nuevo León (como nuevo)',
                             'Precio en USD: $18,500.00 USD',
                             'Enganche desde $45,000.00 mensualidad $4,200.00',
-                            'Precio de contado MXN $85,000.00',
+                            'Precio de contado MXN $85,000.00 (llévatelo con enganche desde $20,000 y bono de $5,000)',
                         ]),
                     ],
                 ],
@@ -325,9 +325,9 @@ it('adjusts cached market prices by mileage without re-querying firecrawl and su
     $year = (int) date('Y') - 4;
 
     Http::fake(function (Request $request) use ($year) {
-        $domains = $request['includeDomains'] ?? [];
+        $query = (string) ($request['query'] ?? '');
 
-        if (in_array('libroazul.com', $domains, true)) {
+        if (str_contains($query, 'Libro Azul')) {
             return Http::response([
                 'data' => [
                     'web' => [
@@ -380,6 +380,65 @@ it('adjusts cached market prices by mileage without re-querying firecrawl and su
 
     expect($refreshed['cached'])->toBeFalse()
         ->and($refreshed['suggested'])->toBe(300000);
+});
+
+it('falls back to model-level open search when a specific catalog version returns no hits and filters out down-payment outliers on 2024 cars', function () {
+    Cache::flush();
+    config()->set('services.firecrawl.key', 'test-key');
+    $model = priceModel();
+
+    Http::fake(function (Request $request) {
+        $query = (string) ($request['query'] ?? '');
+
+        // Si la query incluye la versión ultra específica del catálogo, simula 0 resultados (como ocurre en producción).
+        if (str_contains($query, 'XLE Piel QC CVT Paquete Navegacion')) {
+            return Http::response(['data' => ['web' => []]]);
+        }
+
+        // En el fallback automático sin versión, devuelve datos con esquema plano + un enganche infiltrado de $55,000.
+        if (str_contains($query, 'Libro Azul')) {
+            return Http::response(['data' => ['web' => []]]);
+        }
+
+        return Http::response([
+            'data' => [
+                'web' => [
+                    [
+                        'url' => 'https://www.autocosmos.com.mx/catalogo/2024/toyota/corolla',
+                        'json' => [
+                            'moneda' => 'MXN',
+                            'precio_minimo' => 55000, // Enganche infiltrado que antes rompía el precio sugerido
+                            'precio_sugerido' => 410000,
+                            'precio_maximo' => 445000,
+                        ],
+                    ],
+                    [
+                        'url' => 'https://www.seminuevos.com/usados/toyota-corolla-2024',
+                        'json' => [
+                            'moneda' => 'MXN',
+                            'precio_minimo' => 390000,
+                            'precio_sugerido' => 420000,
+                            'precio_maximo' => 450000,
+                        ],
+                    ],
+                ],
+            ],
+        ]);
+    });
+
+    $result = app(MarketPriceService::class)->suggest(
+        $model,
+        2024,
+        'XLE Piel QC CVT Paquete Navegacion',
+        120000,
+        true,
+    );
+
+    expect($result['samples'])->toBe(2)
+        ->and($result['match_level'])->toBe('model')
+        ->and($result['min'])->toBeGreaterThanOrEqual(300000)
+        ->and($result['suggested'])->toBeGreaterThan(320000)
+        ->and($result['km_adjusted'])->toBeTrue();
 });
 
 it('prefers exact year comparables when enough samples exist before falling back to year range', function () {
