@@ -93,12 +93,22 @@ class HandleInertiaRequests extends Middleware
 
         $publicUrl = rtrim((string) config('filesystems.disks.public.url'), '/').'/';
 
-        if (! str_starts_with($url, $publicUrl)) {
-            return $url;
+        if (str_starts_with($url, $publicUrl)) {
+            $path = Str::after($url, $publicUrl);
+
+            return Storage::disk('public')->exists($path) ? $url : null;
         }
 
-        $path = Str::after($url, $publicUrl);
+        $parsedPath = parse_url($url, PHP_URL_PATH);
 
-        return Storage::disk('public')->exists($path) ? $url : null;
+        if (is_string($parsedPath) && str_starts_with($parsedPath, '/storage/')) {
+            $path = ltrim(Str::after($parsedPath, '/storage/'), '/');
+
+            return Storage::disk('public')->exists($path)
+                ? Storage::disk('public')->url($path)
+                : null;
+        }
+
+        return $url;
     }
 }

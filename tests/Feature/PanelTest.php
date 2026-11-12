@@ -9,7 +9,9 @@ use App\Models\CarModel;
 use App\Models\CarStatus;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 
 uses(RefreshDatabase::class);
@@ -205,4 +207,45 @@ it('creates an agency for a user without one', function () {
 
     expect($agency)->not->toBeNull();
     expect($user->fresh()->hasRole('agency_owner'))->toBeTrue();
+});
+
+it('uploads and resolves user avatars from public storage across origins', function () {
+    $this->seed();
+    Storage::fake('public');
+
+    $user = panelUser();
+
+    $this->actingAs($user)
+        ->post('/panel/avatar', [
+            'avatar' => UploadedFile::fake()->image('avatar.jpg'),
+        ])
+        ->assertRedirect();
+
+    $storedUrl = (string) $user->fresh()->avatar_url;
+    expect($storedUrl)->toContain('/storage/avatars/');
+
+    $relativePath = 'avatars/'.basename($storedUrl);
+    Storage::disk('public')->assertExists($relativePath);
+
+    $this->actingAs($user)
+        ->get('/panel')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('auth.user.avatar_url', Storage::disk('public')->url($relativePath)));
+
+    $user->update(['avatar_url' => "http://legacy-host.local/storage/{$relativePath}"]);
+
+    $this->actingAs($user->fresh())
+        ->get('/panel')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('auth.user.avatar_url', Storage::disk('public')->url($relativePath)));
+
+    Storage::disk('public')->delete($relativePath);
+
+    $this->actingAs($user->fresh())
+        ->get('/panel')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('auth.user.avatar_url', null));
 });
