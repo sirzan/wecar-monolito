@@ -17,11 +17,19 @@ class GoogleController extends Controller
 
     public function redirect(): RedirectResponse
     {
+        if (! $this->isConfigured()) {
+            return redirect()->route('login')->with('error', 'El inicio de sesión con Google no está configurado.');
+        }
+
         return Socialite::driver('google')->redirect();
     }
 
     public function callback(): RedirectResponse
     {
+        if (! $this->isConfigured()) {
+            return redirect()->route('login')->with('error', 'El inicio de sesión con Google no está configurado.');
+        }
+
         $googleUser = Socialite::driver('google')->user();
 
         $user = User::query()->firstOrNew(['email' => $googleUser->getEmail()]);
@@ -38,5 +46,12 @@ class GoogleController extends Controller
         Auth::login($user, remember: true);
 
         return redirect()->to($this->redirector->path(request()));
+    }
+
+    private function isConfigured(): bool
+    {
+        return filled(config('services.google.client_id'))
+            && filled(config('services.google.client_secret'))
+            && filled(config('services.google.redirect'));
     }
 }
