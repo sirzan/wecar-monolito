@@ -73,18 +73,18 @@ Route::post('/webhooks/mercadopago', [CheckoutController::class, 'mercadopagoWeb
 Route::post('/webhooks/didit', [DiditController::class, 'webhook'])->name('webhooks.didit');
 Route::post('/api/webhooks/didit', [DiditController::class, 'webhook'])->name('webhooks.didit.api');
 
-Route::post('/api/ai-search', AiSearchController::class)->middleware('throttle:20,1')->name('ai-search');
+Route::post('/api/ai-search', AiSearchController::class)->middleware('throttle:ai-search')->name('ai-search');
 Route::get('/api/credito/financieras', [CreditController::class, 'financieras'])->name('credit.financieras');
 Route::post('/api/credito/evaluar', [CreditController::class, 'evaluate'])->middleware('throttle:30,1')->name('credit.evaluate');
-Route::get('/api/external-search/status', [ExternalSearchController::class, 'status'])->middleware('throttle:60,1')->name('external-search.status');
-Route::get('/api/external-search/cached', [ExternalSearchController::class, 'cached'])->middleware('throttle:60,1')->name('external-search.cached');
-Route::post('/api/external-search/resolve', [ExternalSearchController::class, 'resolve'])->middleware('throttle:30,1')->name('external-search.resolve');
-Route::post('/api/external-search', [ExternalSearchController::class, 'search'])->middleware('throttle:10,1')->name('external-search');
-Route::get('/api/car-versions', CarVersionController::class)->middleware('throttle:30,1')->name('car-versions');
+Route::get('/api/external-search/status', [ExternalSearchController::class, 'status'])->middleware('throttle:external-search-read')->name('external-search.status');
+Route::get('/api/external-search/cached', [ExternalSearchController::class, 'cached'])->middleware('throttle:external-search-read')->name('external-search.cached');
+Route::post('/api/external-search/resolve', [ExternalSearchController::class, 'resolve'])->middleware('throttle:external-search-resolve')->name('external-search.resolve');
+Route::post('/api/external-search', [ExternalSearchController::class, 'search'])->middleware('throttle:external-search')->name('external-search');
+Route::get('/api/car-versions', CarVersionController::class)->middleware('throttle:car-versions')->name('car-versions');
 Route::get('/api/certificaciones/disponibilidad', [CertificationController::class, 'availability'])->middleware('throttle:60,1')->name('certifications.availability');
 Route::post('/api/certificaciones/citas', [CertificationController::class, 'store'])->middleware('throttle:5,1')->name('certifications.store');
-Route::get('/api/car-price-suggestions/comparables', [CarPriceSuggestionController::class, 'comparables'])->middleware('throttle:30,1')->name('price-suggestions.comparables');
-Route::get('/api/car-price-suggestions/market', [CarPriceSuggestionController::class, 'market'])->middleware('throttle:20,1')->name('price-suggestions.market');
+Route::get('/api/car-price-suggestions/comparables', [CarPriceSuggestionController::class, 'comparables'])->middleware('throttle:price-suggestions')->name('price-suggestions.comparables');
+Route::get('/api/car-price-suggestions/market', [CarPriceSuggestionController::class, 'market'])->middleware('throttle:price-suggestions')->name('price-suggestions.market');
 
 Route::get('/sitemap.xml', SitemapController::class)->name('sitemap');
 Route::get('/sitemaps/{file}', [SitemapController::class, 'show'])

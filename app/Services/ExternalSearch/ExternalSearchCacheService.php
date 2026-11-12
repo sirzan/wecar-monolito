@@ -121,7 +121,7 @@ class ExternalSearchCacheService
 
                 $car = $this->normalizer->normalize($rawCar, $platform, true);
 
-                if (! $car || isset($seen[$car['id']])) {
+                if (! $car || isset($seen[$car['id']]) || $this->normalizer->isPlaceholderUrl((string) ($car['sourceUrl'] ?? ''))) {
                     continue;
                 }
 

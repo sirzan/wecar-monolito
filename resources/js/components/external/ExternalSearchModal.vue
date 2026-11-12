@@ -47,7 +47,8 @@ const emit = defineEmits<{ close: []; open: [car: ExternalCar]; retry: [] }>();
                     <div v-else-if="results.length === 0" class="flex flex-col items-center justify-center py-16 text-center">
                         <SearchX class="h-10 w-10 text-muted-foreground" />
                         <p class="mt-4 text-sm font-bold text-secondary">No encontramos resultados</p>
-                        <p class="mt-1 text-xs text-muted-foreground">Intenta con otra búsqueda o revisa el catálogo local.</p>
+                        <p class="mt-1 text-xs text-muted-foreground">Intenta con otra búsqueda, revisa el catálogo local o vuelve a buscar en vivo.</p>
+                        <Button variant="outline" class="mt-4" @click="emit('retry')">Reintentar búsqueda</Button>
                     </div>
 
                     <div v-else class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -59,7 +60,12 @@ const emit = defineEmits<{ close: []; open: [car: ExternalCar]; retry: [] }>();
                     <p class="text-[11px] text-muted-foreground">
                         {{ results.length ? `${results.length} autos externos` : 'Los anuncios provienen de fuentes públicas' }}
                     </p>
-                    <Button variant="outline" size="sm" @click="emit('close')">Cerrar</Button>
+                    <div class="flex items-center gap-2">
+                        <Button v-if="!loading && results.length > 0 && results.length < 6" variant="ghost" size="sm" @click="emit('retry')">
+                            Buscar más
+                        </Button>
+                        <Button variant="outline" size="sm" @click="emit('close')">Cerrar</Button>
+                    </div>
                 </div>
             </div>
         </div>

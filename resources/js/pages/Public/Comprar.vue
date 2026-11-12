@@ -210,8 +210,31 @@ const applyAiFilters = async () => {
 };
 
 
+const buildExternalQuery = () => {
+    const text = form.value.q.trim();
+    if (text) return text;
+
+    const brandName = props.options.brands.find((brand) => brand.slug === form.value.brand)?.name ?? '';
+    const modelName = props.options.models.find((model) => model.id === form.value.model)?.name ?? '';
+    const versionName = props.options.versions.find((version) => version.id === form.value.version)?.name ?? '';
+    const yearValue =
+        form.value.min_year && form.value.max_year && form.value.min_year === form.value.max_year
+            ? form.value.min_year
+            : (form.value.min_year || form.value.max_year || '');
+
+    const parts = [brandName, modelName, versionName, yearValue, form.value.body, form.value.city]
+        .map((part) => part.trim())
+        .filter(Boolean);
+
+    return parts.join(' ') || 'autos seminuevos en México';
+};
+
 const searchExternal = () => {
-    void externalSearch.search(form.value.q.trim() || 'autos seminuevos en México');
+    void externalSearch.search(buildExternalQuery());
+};
+
+const retryExternalSearch = () => {
+    void externalSearch.search(externalSearch.lastQuery.value || buildExternalQuery(), true);
 };
 
 const clear = () => {
@@ -495,7 +518,7 @@ const clear = () => {
         :query="externalSearch.lastQuery.value"
         @close="externalSearch.closeModal"
         @open="externalSearch.openExternal"
-        @retry="searchExternal"
+        @retry="retryExternalSearch"
     />
 
     <ExternalSearchLimitModal

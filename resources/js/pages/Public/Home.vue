@@ -46,6 +46,10 @@ const searchExternal = () => {
     void externalSearch.search(localQuery.value.trim() || 'autos seminuevos en México');
 };
 
+const retryExternalSearch = () => {
+    void externalSearch.search(externalSearch.lastQuery.value || localQuery.value.trim() || 'autos seminuevos en México', true);
+};
+
 const submit = () => {
     router.get('/comprar', localQuery.value ? { q: localQuery.value } : {}, { preserveScroll: true });
 };
@@ -203,7 +207,7 @@ const jsonLd = [
     <ExternalSearchModal :open="externalSearch.showModal.value" :loading="externalSearch.loading.value"
         :results="externalSearch.results.value" :error="externalSearch.error.value"
         :query="externalSearch.lastQuery.value" @close="externalSearch.closeModal" @open="externalSearch.openExternal"
-        @retry="searchExternal" />
+        @retry="retryExternalSearch" />
 
     <ExternalSearchLimitModal :open="externalSearch.showLimitModal.value" :status="externalSearch.status.value"
         @close="externalSearch.closeLimitModal" @reward="externalSearch.closeLimitModal(); rewardOpen = true" />

@@ -5,6 +5,7 @@ use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Spatie\Permission\Middleware\PermissionMiddleware;
@@ -29,6 +30,8 @@ return Application::configure(basePath: dirname(__DIR__))
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->trustProxies(at: '*');
+
         $middleware->web(append: [
             HandleInertiaRequests::class,
         ]);
@@ -48,6 +51,21 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
-            fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
+            fn (Request $request): bool => $request->is('api/*') || $request->expectsJson(),
         );
+
+        $exceptions->render(function (ThrottleRequestsException $exception, Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                $retryAfter = max(1, (int) ($exception->getHeaders()['Retry-After'] ?? 60));
+                $message = "Demasiadas solicitudes en poco tiempo. Espera {$retryAfter} segundos e intenta de nuevo.";
+
+                return response()->json([
+                    'message' => $message,
+                    'error' => $message,
+                    'retryAfter' => $retryAfter,
+                ], 429, $exception->getHeaders());
+            }
+
+            return null;
+        });
     })->create();

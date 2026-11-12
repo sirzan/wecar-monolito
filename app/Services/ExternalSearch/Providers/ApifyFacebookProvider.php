@@ -94,12 +94,12 @@ class ApifyFacebookProvider
                     'sourceUrl' => $listingUrl,
                 ], $platform, true);
 
-                if ($car) {
+                if ($car && $this->normalizer->matchesQuery($car, $query)) {
                     $cars[$car['id']] = $car;
                 }
             }
 
-            return array_slice(array_values($cars), 0, 8);
+            return array_slice(array_values($cars), 0, 10);
         } catch (\Throwable $exception) {
             report($exception);
 
