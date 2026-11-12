@@ -153,10 +153,15 @@ it('updates payment toggles from admin settings', function () {
     $this->seed();
     $admin = adminUser();
 
+    config()->set('services.mercadopago.public_key', 'APP_USR-public');
+    config()->set('services.mercadopago.access_token', 'APP_USR-token');
+    config()->set('services.stripe.secret', null);
+
     $this->actingAs($admin)
         ->patch('/admin/configuracion', [
             'key' => 'payments',
             'value' => [
+                'mercadopago_enabled' => true,
                 'stripe_enabled' => true,
                 'paypal_enabled' => false,
                 'spei_enabled' => true,
@@ -168,8 +173,29 @@ it('updates payment toggles from admin settings', function () {
 
     $payments = SiteSetting::query()->where('key', 'payments')->value('value');
 
+    expect($payments['mercadopago_enabled'])->toBeTrue();
     expect($payments['stripe_enabled'])->toBeTrue();
     expect($payments['spei_enabled'])->toBeTrue();
+
+    $this->actingAs($admin)
+        ->get('/admin/configuracion')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('paymentStatus.mercadopago.configured', true)
+            ->where('paymentStatus.mercadopago.active', true)
+            ->where('paymentStatus.stripe.configured', false)
+            ->where('paymentStatus.stripe.active', false));
+});
+
+it('lists mercadopago in admin payments providers filter', function () {
+    $this->seed();
+    $admin = adminUser();
+
+    $this->actingAs($admin)
+        ->get('/admin/pagos')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('providers', ['mercadopago', 'stripe', 'paypal', 'spei']));
 });
 
 it('updates car reports from admin', function () {

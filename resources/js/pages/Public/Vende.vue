@@ -2,11 +2,13 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { Link, useForm, usePage } from '@inertiajs/vue3';
 import {
+    AlertCircle,
     BadgeDollarSign,
     Building2,
     Camera,
     Car as CarIcon,
     Check,
+    CheckCircle2,
     ChevronLeft,
     ChevronRight,
     CircleDollarSign,
@@ -18,10 +20,10 @@ import {
     Info,
     LoaderCircle,
     MapPin,
+    RefreshCw,
     ShieldCheck,
     Sparkles,
     Star,
-    TicketPercent,
     Trash2,
     Upload,
     X,
@@ -33,6 +35,7 @@ import SeoHead from '@/components/site/SeoHead.vue';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
+import { paymentMethodIcon, type PaymentMethodKey, type PaymentMethodOption } from '@/lib/paymentMethods';
 import type { MarketPrice, PriceComparables } from '@/types/pricing';
 
 const props = defineProps<{
@@ -45,7 +48,11 @@ const props = defineProps<{
     adminMode?: boolean;
 }>();
 
-const page = usePage<{ auth: { user: { id: string; name: string; email: string; roles: string[] } | null }; currentAgency: { name: string; slug: string } | null }>();
+const page = usePage<{
+    auth: { user: { id: string; name: string; email: string; roles: string[] } | null };
+    currentAgency: { name: string; slug: string } | null;
+    paymentMethodOptions?: PaymentMethodOption[];
+}>();
 
 const step = ref(1);
 const isAdmin = computed(() => {
@@ -85,6 +92,7 @@ const form = useForm({
     serial_number: '',
     plates: '',
     plan_key: props.activePlan?.key || props.plans.find(p => p.price === 0)?.key_name || props.plans[0]?.key_name || 'basico',
+    payment_method: '' as PaymentMethodKey | '',
     images: [] as File[],
 });
 
@@ -110,27 +118,6 @@ const ownerOptions = Array.from({ length: 8 }, (_, index) => index + 1);
 const fieldClass =
     'mt-1.5 h-[52px] w-full rounded-full border border-input bg-[#FAF9F7] px-4 text-sm font-medium text-secondary outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50';
 
-// Coupons
-const couponCode = ref('');const appliedCoupon = ref<{ code: string; discountPct: number } | null>(null);
-const couponError = ref('');
-
-const applyCoupon = () => {
-    couponError.value = '';
-    const code = couponCode.value.trim().toUpperCase();
-    if (code === 'WECAR10') {
-        appliedCoupon.value = { code, discountPct: 10 };
-    } else if (code === 'WECAR20') {
-        appliedCoupon.value = { code, discountPct: 20 };
-    } else {
-        couponError.value = 'Cupón no válido o expirado.';
-    }
-};
-
-const removeCoupon = () => {
-    appliedCoupon.value = null;
-    couponCode.value = '';
-};
-
 const models = computed(() => props.brands.find((brand) => brand.id === form.brand_id)?.models ?? []);
 const selectedBrand = computed(() => props.brands.find((brand) => brand.id === form.brand_id) ?? null);
 const selectedModel = computed(() => selectedBrand.value?.models.find((model) => model.id === form.model_id) ?? null);
@@ -150,14 +137,31 @@ const versionsError = ref('');
 let versionsTimer: ReturnType<typeof setTimeout> | null = null;
 const selectedPlan = computed(() => props.plans.find((plan) => plan.key_name === form.plan_key) ?? null);
 const coveredPlan = computed(() => Boolean(props.activePlan || props.agencyPlan));
+const paymentOptions = computed<PaymentMethodOption[]>(() => page.props.paymentMethodOptions ?? []);
 
 const finalPlanPrice = computed(() => {
-    if (isAdmin.value || coveredPlan.value) return 0;
+    if (props.adminMode || isAdmin.value || coveredPlan.value) return 0;
     if (!selectedPlan.value) return 0;
-    const base = selectedPlan.value.price;
-    if (!appliedCoupon.value || base <= 0) return base;
-    return Math.max(0, Math.round(base * (1 - appliedCoupon.value.discountPct / 100)));
+    return selectedPlan.value.price;
 });
+
+const requiresMethodSelection = computed(
+    () => !props.adminMode && !isAdmin.value && !coveredPlan.value && finalPlanPrice.value > 0,
+);
+
+const selectedPaymentOption = computed(
+    () => paymentOptions.value.find((option) => option.key === form.payment_method) ?? null,
+);
+
+watch(
+    paymentOptions,
+    (options) => {
+        if (!options.some((option) => option.key === form.payment_method)) {
+            form.payment_method = options[0]?.key ?? '';
+        }
+    },
+    { immediate: true },
+);
 
 const priceComparables = ref<PriceComparables | null>(null);
 const priceMarket = ref<MarketPrice | null>(null);
@@ -172,7 +176,9 @@ let priceTimer: ReturnType<typeof setTimeout> | null = null;
 let comparablesSequence = 0;
 let marketSequence = 0;
 
-const shouldShowMarket = computed(() => marketRequested.value || (priceComparables.value !== null && priceComparables.value.samples < 3));
+const shouldShowMarket = computed(
+    () => marketRequested.value || (step.value === 2 && Boolean(form.model_id && form.version_id && form.year)),
+);
 
 const resetPriceSuggestions = () => {
     comparablesController?.abort();
@@ -186,7 +192,7 @@ const resetPriceSuggestions = () => {
     priceMarket.value = null;
 };
 
-const loadMarketPrice = async () => {
+const loadMarketPrice = async (refresh = false) => {
     if (!form.model_id || !form.version_id || !form.year) return;
 
     const sequence = ++marketSequence;
@@ -195,7 +201,9 @@ const loadMarketPrice = async () => {
     marketController = new AbortController();
     marketLoading.value = true;
     marketError.value = '';
-    priceMarket.value = null;
+    if (refresh) {
+        priceMarket.value = null;
+    }
 
     try {
         const params = new URLSearchParams({
@@ -204,6 +212,9 @@ const loadMarketPrice = async () => {
             year: String(form.year),
             km: String(form.km || 0),
         });
+        if (refresh) {
+            params.set('refresh', '1');
+        }
         const response = await fetch(`/api/car-price-suggestions/market?${params.toString()}`, {
             headers: { Accept: 'application/json' },
             signal: marketController.signal,
@@ -211,7 +222,7 @@ const loadMarketPrice = async () => {
         const payload = await response.json().catch(() => ({}));
 
         if (!response.ok) {
-            throw new Error(payload.message || payload.error || 'No pudimos consultar el mercado.');
+            throw new Error(payload.message || payload.error || 'No pudimos consultar el Libro Azul ni el mercado.');
         }
 
         if (sequence === marketSequence) {
@@ -220,7 +231,7 @@ const loadMarketPrice = async () => {
         }
     } catch (error) {
         if ((error as Error)?.name !== 'AbortError' && sequence === marketSequence) {
-            marketError.value = error instanceof Error ? error.message : 'No pudimos consultar el mercado.';
+            marketError.value = error instanceof Error ? error.message : 'No pudimos consultar el Libro Azul ni el mercado.';
         }
     } finally {
         if (sequence === marketSequence) marketLoading.value = false;
@@ -241,7 +252,8 @@ const loadPriceSuggestions = async () => {
     priceComparables.value = null;
     priceMarket.value = null;
     marketError.value = '';
-    marketRequested.value = false;
+
+    void loadMarketPrice();
 
     try {
         const params = new URLSearchParams({
@@ -263,14 +275,9 @@ const loadPriceSuggestions = async () => {
         if (sequence !== comparablesSequence) return;
 
         priceComparables.value = payload;
-
-        if (payload.samples < 3) {
-            void loadMarketPrice();
-        }
     } catch (error) {
         if ((error as Error)?.name !== 'AbortError' && sequence === comparablesSequence) {
             comparablesError.value = error instanceof Error ? error.message : 'No pudimos calcular los comparables.';
-            void loadMarketPrice();
         }
     } finally {
         if (sequence === comparablesSequence) comparablesLoading.value = false;
@@ -385,7 +392,15 @@ const confidenceLabel = (value?: string) =>
     ({ high: 'alta', medium: 'media', low: 'baja', none: 'sin datos' })[value ?? 'none'] ?? 'baja';
 
 const submit = () => {
-    form.post(props.adminMode ? '/admin/autos' : '/vende', { forceFormData: true });
+    if (requiresMethodSelection.value && !form.payment_method) {
+        form.setError('payment_method', 'Selecciona un método de pago disponible para continuar.');
+        return;
+    }
+
+    form.transform((data) => ({
+        ...data,
+        payment_method: requiresMethodSelection.value ? data.payment_method : '',
+    })).post(props.adminMode ? '/admin/autos' : '/vende', { forceFormData: true });
 };
 
 const goBack = () => {
@@ -750,7 +765,7 @@ const goBack = () => {
                             </div>
                             <p class="mt-1 text-muted-foreground">
                                 Basado en <strong>{{ priceComparables.samples }}</strong> autos similares
-                                {{ priceComparables.scope === 'version' ? 'con la misma versión' : 'del mismo modelo' }}.
+                                {{ priceComparables.scope === 'version' ? 'con la misma versión' : 'del mismo modelo' }}{{ priceComparables.year_scope === 'range' ? ' (incluye años cercanos)' : ` (${form.year})` }}.
                             </p>
                             <p class="mt-1 text-muted-foreground">
                                 Rango típico <strong>{{ formatPrice(priceComparables.p25 ?? 0) }}</strong> – <strong>{{ formatPrice(priceComparables.p75 ?? 0) }}</strong>
@@ -773,43 +788,83 @@ const goBack = () => {
                         {{ comparablesError }}
                     </div>
 
-                    <!-- Referencia de mercado -->
+                    <!-- Referencia Libro Azul / Mercado MXN -->
                     <div v-if="shouldShowMarket" class="rounded-2xl border border-blue-500/30 bg-blue-500/5 p-4 text-xs text-secondary flex items-start gap-3">
                         <Info class="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
                         <div class="min-w-0 flex-1">
                             <div class="flex flex-wrap items-center justify-between gap-2">
-                                <p class="font-black text-blue-700">Referencia de mercado</p>
-                                <span v-if="priceMarket && priceMarket.suggested" class="rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-bold uppercase text-blue-700">
-                                    Confianza {{ confidenceLabel(priceMarket.confidence) }}
-                                </span>
+                                <p class="font-black text-blue-700">
+                                    {{ priceMarket?.source_label || 'Referencia Libro Azul / Mercado MXN' }}
+                                </p>
+                                <div class="flex flex-wrap items-center gap-1.5">
+                                    <span
+                                        v-if="priceMarket?.match_level && priceMarket.match_level !== 'none'"
+                                        class="rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-bold uppercase text-blue-700"
+                                    >
+                                        {{ priceMarket.match_level === 'version' ? 'Versión exacta' : 'Modelo y año' }}
+                                    </span>
+                                    <span v-if="priceMarket && priceMarket.suggested" class="rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-bold uppercase text-blue-700">
+                                        Confianza {{ confidenceLabel(priceMarket.confidence) }}
+                                    </span>
+                                </div>
                             </div>
 
-                            <p v-if="marketLoading" class="mt-1 flex items-center gap-2 text-muted-foreground">
-                                <LoaderCircle class="h-3.5 w-3.5 animate-spin" /> Consultando precios externos…
+                            <p v-if="marketLoading" class="mt-1.5 flex items-center gap-2 text-muted-foreground">
+                                <LoaderCircle class="h-3.5 w-3.5 animate-spin" /> Consultando Libro Azul y mercado mexicano (MXN)…
                             </p>
 
                             <template v-else-if="priceMarket && priceMarket.suggested">
-                                <p class="mt-1 text-muted-foreground">
-                                    Precio sugerido <strong class="text-blue-700">{{ formatPrice(priceMarket.suggested) }}</strong>
+                                <p class="mt-1.5 text-muted-foreground">
+                                    Precio sugerido <strong class="text-sm text-blue-700">{{ formatPrice(priceMarket.suggested) }} MXN</strong>
+                                    <span v-if="priceMarket.km_adjusted && priceMarket.km !== null && priceMarket.km !== undefined" class="text-muted-foreground/80">
+                                        · Ajustado a {{ new Intl.NumberFormat('es-MX').format(priceMarket.km) }} km
+                                    </span>
                                 </p>
-                                <p class="mt-1 text-muted-foreground">
+                                <div v-if="priceMarket.buy_price || priceMarket.sell_price" class="mt-2 grid gap-2 sm:grid-cols-2">
+                                    <div v-if="priceMarket.buy_price" class="rounded-xl border border-blue-500/20 bg-background/80 px-3 py-2">
+                                        <p class="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Compra (toma / lote)</p>
+                                        <p class="mt-0.5 text-sm font-black text-secondary">{{ formatPrice(priceMarket.buy_price) }} MXN</p>
+                                    </div>
+                                    <div v-if="priceMarket.sell_price" class="rounded-xl border border-blue-500/20 bg-background/80 px-3 py-2">
+                                        <p class="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Venta sugerida (público)</p>
+                                        <p class="mt-0.5 text-sm font-black text-blue-700">{{ formatPrice(priceMarket.sell_price) }} MXN</p>
+                                    </div>
+                                </div>
+                                <p class="mt-1.5 text-muted-foreground">
                                     Rango típico <strong>{{ formatPrice(priceMarket.p25 ?? 0) }}</strong> – <strong>{{ formatPrice(priceMarket.p75 ?? 0) }}</strong>
                                     <span class="text-muted-foreground/70"> · Mín. {{ formatPrice(priceMarket.min ?? 0) }} · Máx. {{ formatPrice(priceMarket.max ?? 0) }}</span>
                                 </p>
                                 <p class="mt-1 text-muted-foreground">
-                                    {{ priceMarket.source_count }} fuente(s) · {{ priceMarket.cached ? 'caché' : 'consulta reciente' }}
+                                    {{ priceMarket.source_count }} fuente(s){{ priceMarket.sources?.length ? ` (${priceMarket.sources.join(', ')})` : '' }} · {{ priceMarket.cached ? 'caché' : 'consulta reciente' }}
                                 </p>
-                                <button
-                                    type="button"
-                                    class="mt-2 rounded-full bg-blue-600 px-3 py-1.5 font-bold text-white hover:opacity-90"
-                                     @click="form.price = priceMarket.suggested ?? 0; form.price_confirmed = true"
-                                >
-                                    Usar precio de mercado {{ formatPrice(priceMarket.suggested) }}
-                                </button>
+                                <div class="mt-2.5 flex flex-wrap items-center gap-2">
+                                    <button
+                                        type="button"
+                                        class="rounded-full bg-blue-600 px-3 py-1.5 font-bold text-white hover:opacity-90"
+                                        @click="form.price = priceMarket.suggested ?? 0; form.price_confirmed = true"
+                                    >
+                                        Usar precio sugerido {{ formatPrice(priceMarket.suggested) }}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="inline-flex items-center gap-1 rounded-full border border-blue-500/30 bg-background px-3 py-1.5 font-bold text-blue-700 hover:bg-blue-500/10"
+                                        @click="loadMarketPrice(true)"
+                                    >
+                                        <RefreshCw class="h-3 w-3" /> Actualizar
+                                    </button>
+                                </div>
                             </template>
 
-                            <p v-else-if="marketError" class="mt-1 text-muted-foreground">{{ marketError }}</p>
-                            <p v-else class="mt-1 text-muted-foreground">Sin datos suficientes de mercado.</p>
+                            <div v-else class="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-muted-foreground">
+                                <span>{{ marketError || 'Sin datos suficientes en Libro Azul ni mercado mexicano.' }}</span>
+                                <button
+                                    type="button"
+                                    class="inline-flex items-center gap-1 rounded-full border border-blue-500/30 bg-background px-3 py-1 font-bold text-blue-700 hover:bg-blue-500/10"
+                                    @click="loadMarketPrice(true)"
+                                >
+                                    <RefreshCw class="h-3 w-3" /> Reintentar
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -972,40 +1027,71 @@ const goBack = () => {
                             </div>
                         </div>
 
-                        <!-- Cupones de descuento para planes de pago -->
-                        <div v-if="!coveredPlan && selectedPlan && selectedPlan.price > 0" class="rounded-2xl border border-border bg-muted/30 p-4">
-                            <Label class="text-xs font-bold text-secondary">¿Tienes un cupón de descuento?</Label>
-                            <div class="mt-2 flex gap-2 max-w-sm">
-                                <Input
-                                    v-model="couponCode"
-                                    placeholder="Ej. WECAR10"
-                                    class="h-10 text-xs uppercase"
-                                    :disabled="appliedCoupon !== null"
-                                />
-                                <Button
-                                    v-if="!appliedCoupon"
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    @click="applyCoupon"
-                                >
-                                    Aplicar
-                                </Button>
-                                <Button
-                                    v-else
-                                    type="button"
-                                    variant="destructive"
-                                    size="sm"
-                                    @click="removeCoupon"
-                                >
-                                    Quitar
-                                </Button>
+                        <!-- Opciones de pago configuradas por el administrador -->
+                        <div v-if="requiresMethodSelection" class="rounded-2xl border border-border bg-card p-5 space-y-4">
+                            <div>
+                                <h3 class="text-sm font-black text-secondary">Elige tu método de pago</h3>
+                                <p class="mt-1 text-xs text-muted-foreground">
+                                    Solo mostramos las pasarelas activas y configuradas en este momento.
+                                </p>
                             </div>
-                            <p v-if="appliedCoupon" class="mt-2 text-xs font-bold text-emerald-600 flex items-center gap-1.5">
-                                <CheckCircle2 class="h-3.5 w-3.5" /> Cupón {{ appliedCoupon.code }} aplicado ({{ appliedCoupon.discountPct }}% de descuento).
-                            </p>
-                            <p v-if="couponError" class="mt-2 text-xs font-bold text-destructive">
-                                {{ couponError }}
+
+                            <div v-if="paymentOptions.length" class="grid gap-3 sm:grid-cols-2">
+                                <button
+                                    v-for="option in paymentOptions"
+                                    :key="option.key"
+                                    type="button"
+                                    :aria-pressed="form.payment_method === option.key"
+                                    class="flex items-start justify-between gap-3 rounded-2xl border p-4 text-left transition"
+                                    :class="
+                                        form.payment_method === option.key
+                                            ? 'border-primary bg-accent/40 ring-2 ring-primary/30'
+                                            : 'border-border bg-background hover:border-primary/40'
+                                    "
+                                    @click="form.payment_method = option.key"
+                                >
+                                    <div class="flex items-start gap-3">
+                                        <span class="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                                            <component :is="paymentMethodIcon(option.key)" class="h-4 w-4" />
+                                        </span>
+                                        <div class="space-y-1">
+                                            <div class="flex flex-wrap items-center gap-1.5">
+                                                <span class="text-sm font-bold text-secondary">{{ option.label }}</span>
+                                                <span
+                                                    v-if="option.badge"
+                                                    class="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase text-primary"
+                                                >
+                                                    {{ option.badge }}
+                                                </span>
+                                            </div>
+                                            <p class="text-xs text-muted-foreground">{{ option.description }}</p>
+                                        </div>
+                                    </div>
+                                    <span
+                                        class="mt-1 grid h-5 w-5 shrink-0 place-items-center rounded-full border"
+                                        :class="
+                                            form.payment_method === option.key
+                                                ? 'border-primary bg-primary text-primary-foreground'
+                                                : 'border-border'
+                                        "
+                                    >
+                                        <Check v-if="form.payment_method === option.key" class="h-3 w-3" />
+                                    </span>
+                                </button>
+                            </div>
+
+                            <div
+                                v-else
+                                class="flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-800"
+                            >
+                                <AlertCircle class="mt-0.5 h-4 w-4 shrink-0" />
+                                <span>
+                                    No hay métodos de pago habilitados o configurados por el administrador en este momento. Selecciona un plan gratuito o contacta a soporte.
+                                </span>
+                            </div>
+
+                            <p v-if="form.errors.payment_method" class="text-xs font-bold text-destructive">
+                                {{ form.errors.payment_method }}
                             </p>
                         </div>
 
@@ -1020,7 +1106,11 @@ const goBack = () => {
                                     Sin cargo por ser administrador. No se creará una suscripción.
                                 </p>
                                 <p v-else-if="finalPlanPrice > 0" class="text-[11px] text-white/60">
-                                    Se abrirá la pasarela segura (Stripe / PayPal / SPEI) tras confirmar.
+                                    {{
+                                        selectedPaymentOption
+                                            ? `Se abrirá ${selectedPaymentOption.label} tras confirmar.`
+                                            : 'Necesitas un método de pago activo para continuar.'
+                                    }}
                                 </p>
                             </div>
 
@@ -1029,7 +1119,7 @@ const goBack = () => {
                                 variant="hero"
                                 size="lg"
                                 class="w-full gap-2 rounded-full shadow-elegant font-bold sm:w-auto"
-                                :disabled="form.processing"
+                                :disabled="form.processing || (requiresMethodSelection && !form.payment_method)"
                             >
                                 <LoaderCircle v-if="form.processing" class="h-5 w-5 animate-spin" />
                                 <span v-else>{{ isAdmin ? 'Publicar auto sin cargo' : coveredPlan ? 'Publicar con mi plan' : 'Confirmar y publicar auto' }}</span>

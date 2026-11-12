@@ -47,7 +47,7 @@ class PaymentController extends Controller
                     : null,
             ]),
             'filters' => $filters,
-            'providers' => ['stripe', 'paypal', 'spei'],
+            'providers' => ['mercadopago', 'stripe', 'paypal', 'spei'],
             'statuses' => ['pending', 'paid', 'failed', 'refunded'],
         ]);
     }

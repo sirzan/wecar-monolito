@@ -24,34 +24,54 @@ class CarPriceSuggestionService
         ?int $km = null,
         ?string $excludeCarId = null,
     ): array {
-        $query = $this->baseQuery($model, $year, $excludeCarId);
+        $exactQuery = $this->baseQuery($model, $year, $year, $excludeCarId);
 
         if ($versionId) {
-            $prices = (clone $query)
-                ->where('version_id', $versionId)
-                ->get(['price', 'km'])
-                ->map(fn (Car $car) => $this->mileageAdjustedPrice((float) $car->price, $car->km, $km))
-                ->all();
+            $exactVersionPrices = $this->pricesFromQuery((clone $exactQuery)->where('version_id', $versionId), $km);
 
-            if (count($prices) >= self::MIN_SAMPLES_FOR_VERSION) {
-                return $this->stats($prices, 'version', $km);
+            if (count($exactVersionPrices) >= self::MIN_SAMPLES_FOR_VERSION) {
+                return $this->stats($exactVersionPrices, 'version', 'exact', $km);
             }
         }
 
-        $prices = $query
-            ->get(['price', 'km'])
-            ->map(fn (Car $car) => $this->mileageAdjustedPrice((float) $car->price, $car->km, $km))
-            ->all();
+        $exactModelPrices = $this->pricesFromQuery($exactQuery, $km);
 
-        return $this->stats($prices, 'model', $km);
+        if (count($exactModelPrices) >= self::MIN_SAMPLES_FOR_VERSION) {
+            return $this->stats($exactModelPrices, 'model', 'exact', $km);
+        }
+
+        $rangeQuery = $this->baseQuery($model, $year - 2, $year + 2, $excludeCarId);
+
+        if ($versionId) {
+            $rangeVersionPrices = $this->pricesFromQuery((clone $rangeQuery)->where('version_id', $versionId), $km);
+
+            if (count($rangeVersionPrices) >= self::MIN_SAMPLES_FOR_VERSION) {
+                return $this->stats($rangeVersionPrices, 'version', 'range', $km);
+            }
+        }
+
+        $rangeModelPrices = $this->pricesFromQuery($rangeQuery, $km);
+
+        return $this->stats($rangeModelPrices, 'model', $exactModelPrices !== [] && count($rangeModelPrices) === count($exactModelPrices) ? 'exact' : 'range', $km);
     }
 
-    private function baseQuery(CarModel $model, int $year, ?string $excludeCarId): Builder
+    /**
+     * @return array<int, float>
+     */
+    private function pricesFromQuery(Builder $query, ?int $targetKm): array
+    {
+        return $query
+            ->get(['price', 'km'])
+            ->map(fn (Car $car) => $this->mileageAdjustedPrice((float) $car->price, $car->km, $targetKm))
+            ->all();
+    }
+
+    private function baseQuery(CarModel $model, int $minYear, int $maxYear, ?string $excludeCarId): Builder
     {
         return Car::query()
             ->published()
             ->where('model_id', $model->getKey())
-            ->whereBetween('year', [$year - 2, $year + 2])
+            ->whereBetween('year', [$minYear, $maxYear])
             ->whereBetween('price', [self::MIN_SANE_PRICE, self::MAX_SANE_PRICE])
             ->whereHas('status', fn (Builder $query) => $query->whereIn('name', ['en_venta', 'promocion', 'nuevo']))
             ->when($excludeCarId, fn (Builder $query, string $id) => $query->whereKeyNot($id));
@@ -61,7 +81,7 @@ class CarPriceSuggestionService
      * @param  array<int, float>  $prices
      * @return array<string, mixed>
      */
-    private function stats(array $prices, string $scope, ?int $km): array
+    private function stats(array $prices, string $scope, string $yearScope, ?int $km): array
     {
         $prices = $this->removeOutliers(array_values(array_filter(
             $prices,
@@ -80,6 +100,7 @@ class CarPriceSuggestionService
                 'max' => null,
                 'confidence' => 'none',
                 'scope' => $scope,
+                'year_scope' => $yearScope,
             ];
         }
 
@@ -101,6 +122,7 @@ class CarPriceSuggestionService
             'max' => $max,
             'confidence' => $this->confidence($samples, $spread),
             'scope' => $scope,
+            'year_scope' => $yearScope,
             'km' => $km,
         ];
     }

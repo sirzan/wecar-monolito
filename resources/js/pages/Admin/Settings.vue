@@ -10,8 +10,16 @@ import { cn } from '@/lib/utils';
 
 defineOptions({ layout: AdminLayout });
 
+interface PaymentGatewayStatus {
+    configured: boolean;
+    enabled: boolean;
+    active: boolean;
+    hint: string;
+}
+
 const props = defineProps<{
     settings: Record<string, Record<string, unknown>>;
+    paymentStatus?: Record<string, PaymentGatewayStatus>;
 }>();
 
 const tabs = [
@@ -27,6 +35,7 @@ const tabs = [
 const active = ref('payments');
 
 const payments = reactive({
+    mercadopago_enabled: Boolean(props.settings.payments?.mercadopago_enabled),
     stripe_enabled: Boolean(props.settings.payments?.stripe_enabled),
     paypal_enabled: Boolean(props.settings.payments?.paypal_enabled),
     spei_enabled: Boolean(props.settings.payments?.spei_enabled),
@@ -36,6 +45,18 @@ const payments = reactive({
     spei_clabe: String(props.settings.payments?.spei_clabe ?? ''),
     spei_beneficiary: String(props.settings.payments?.spei_beneficiary ?? 'WeCar tech de México'),
 });
+
+const paymentGateways = [
+    { key: 'mercadopago', settingKey: 'mercadopago_enabled' as const, label: 'Mercado Pago' },
+    { key: 'stripe', settingKey: 'stripe_enabled' as const, label: 'Stripe (Tarjeta)' },
+    { key: 'paypal', settingKey: 'paypal_enabled' as const, label: 'PayPal' },
+    { key: 'spei', settingKey: 'spei_enabled' as const, label: 'Transferencia SPEI' },
+];
+
+const productToggles = [
+    { settingKey: 'tokens_enabled' as const, label: 'Paquetes de tokens' },
+    { settingKey: 'membership_enabled' as const, label: 'Membresía de búsqueda' },
+];
 
 const contact = reactive({
     email: String(props.settings.contact_info?.email ?? ''),
@@ -149,13 +170,53 @@ const save = (key: string, value: Record<string, any>) => {
         <div class="mt-6 rounded-2xl border border-border bg-card/50 p-6">
             <template v-if="active === 'payments'">
                 <h2 class="font-semibold">Métodos de pago</h2>
-                <p class="mt-1 text-sm text-muted-foreground">Activa o desactiva los métodos visibles en el sitio.</p>
+                <p class="mt-1 text-sm text-muted-foreground">
+                    Activa o desactiva pasarelas. Solo se mostrarán a los clientes los métodos habilitados que tengan credenciales o datos completos configurados en el servidor.
+                </p>
                 <div class="mt-5 grid gap-3 sm:grid-cols-2">
-                    <label v-for="(label, key) in { stripe_enabled: 'Stripe', paypal_enabled: 'PayPal', spei_enabled: 'SPEI', tokens_enabled: 'Paquetes de tokens', membership_enabled: 'Membresía de búsqueda' }" :key="key" class="flex items-center justify-between rounded-xl border border-border p-4 text-sm">
-                        <span>{{ label }}</span>
-                        <input v-model="payments[key]" type="checkbox" class="h-5 w-5" />
+                    <label
+                        v-for="gateway in paymentGateways"
+                        :key="gateway.key"
+                        class="flex items-start justify-between gap-3 rounded-xl border border-border p-4 text-sm"
+                    >
+                        <div class="space-y-1">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="font-medium">{{ gateway.label }}</span>
+                                <span
+                                    v-if="paymentStatus?.[gateway.key]"
+                                    :class="cn(
+                                        'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                                        paymentStatus[gateway.key].configured
+                                            ? 'bg-emerald-500/10 text-emerald-600'
+                                            : 'bg-amber-500/15 text-amber-700',
+                                    )"
+                                >
+                                    {{ paymentStatus[gateway.key].configured ? 'Configurado' : 'Sin credenciales' }}
+                                </span>
+                            </div>
+                            <p
+                                v-if="paymentStatus?.[gateway.key] && !paymentStatus[gateway.key].configured"
+                                class="text-xs text-muted-foreground"
+                            >
+                                {{ paymentStatus[gateway.key].hint }}
+                            </p>
+                        </div>
+                        <input v-model="payments[gateway.settingKey]" type="checkbox" class="mt-0.5 h-5 w-5 shrink-0" />
                     </label>
                 </div>
+
+                <h3 class="mt-6 text-sm font-semibold">Productos habilitados</h3>
+                <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                    <label
+                        v-for="toggle in productToggles"
+                        :key="toggle.settingKey"
+                        class="flex items-center justify-between rounded-xl border border-border p-4 text-sm"
+                    >
+                        <span>{{ toggle.label }}</span>
+                        <input v-model="payments[toggle.settingKey]" type="checkbox" class="h-5 w-5" />
+                    </label>
+                </div>
+
                 <div class="mt-5 grid gap-4 sm:grid-cols-2">
                     <div><Label>Banco SPEI</Label><Input v-model="payments.spei_bank_name" class="mt-1.5" placeholder="Nombre del banco" /></div>
                     <div><Label>CLABE SPEI</Label><Input v-model="payments.spei_clabe" inputmode="numeric" maxlength="18" class="mt-1.5" placeholder="18 dígitos" /></div>

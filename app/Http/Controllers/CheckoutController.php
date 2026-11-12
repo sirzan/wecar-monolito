@@ -5,10 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\Payment;
 use App\Models\SiteSetting;
 use App\Models\Subscription;
+use App\Services\MercadoPagoService;
+use App\Services\PaymentCheckoutService;
+use App\Services\PaymentMethodsService;
 use App\Services\PaymentService;
 use App\Services\PayPalService;
 use App\Services\SearchCouponService;
-use App\Services\SpeiService;
 use App\Services\StripeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -16,6 +18,7 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use MercadoPago\Resources\Payment as MercadoPagoPayment;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class CheckoutController extends Controller
@@ -23,9 +26,11 @@ class CheckoutController extends Controller
     public function __construct(
         private readonly StripeService $stripe,
         private readonly PayPalService $paypal,
-        private readonly SpeiService $spei,
+        private readonly MercadoPagoService $mercadopago,
         private readonly PaymentService $payments,
         private readonly SearchCouponService $coupons,
+        private readonly PaymentMethodsService $paymentMethods,
+        private readonly PaymentCheckoutService $checkout,
     ) {}
 
     public function show(Request $request, Subscription $subscription): Response|RedirectResponse
@@ -55,6 +60,13 @@ class CheckoutController extends Controller
             ->latest()
             ->first();
 
+        $mercadopagoPending = $subscription->payments()
+            ->where('provider', 'mercadopago')
+            ->where('status', 'pending')
+            ->whereNotNull('metadata->mp_payment_id')
+            ->latest()
+            ->first();
+
         return Inertia::render('Public/Checkout', [
             'subscription' => [
                 'id' => $subscription->getKey(),
@@ -78,17 +90,20 @@ class CheckoutController extends Controller
                 'price' => (float) $subscription->car->price,
                 'image' => $subscription->car->image,
             ] : null,
-            'methods' => [
-                'stripe' => (bool) ($payments['stripe_enabled'] ?? false) && $this->stripe->enabled(),
-                'paypal' => (bool) ($payments['paypal_enabled'] ?? false) && $this->paypal->enabled(),
-                'spei' => (bool) ($payments['spei_enabled'] ?? false) && $this->spei->configured(),
-            ],
+            'methods' => $this->paymentMethods->frontendMap($payments),
+            'methodOptions' => $this->paymentMethods->options($payments),
             'spei' => $speiPayment ? [
                 'reference' => $speiPayment->provider_reference,
                 'bank_name' => data_get($speiPayment->metadata, 'bank_name'),
                 'clabe' => data_get($speiPayment->metadata, 'clabe'),
                 'beneficiary' => data_get($speiPayment->metadata, 'beneficiary'),
                 'amount' => (float) $speiPayment->amount,
+            ] : null,
+            'mercadopagoPending' => $mercadopagoPending ? [
+                'payment_id' => data_get($mercadopagoPending->metadata, 'mp_payment_id'),
+                'status' => data_get($mercadopagoPending->metadata, 'mp_status', 'pending'),
+                'status_detail' => data_get($mercadopagoPending->metadata, 'status_detail'),
+                'payment_method' => data_get($mercadopagoPending->metadata, 'payment_method_id'),
             ] : null,
         ]);
     }
@@ -102,56 +117,16 @@ class CheckoutController extends Controller
         }
 
         $validated = $request->validate([
-            'method' => ['required', Rule::in(['stripe', 'paypal', 'spei'])],
+            'method' => ['required', Rule::in($this->paymentMethods->allKeys())],
             'coupon_code' => ['nullable', 'string', 'max:40'],
         ]);
 
-        $subscription->loadMissing(['plan', 'user']);
-        abort_unless($subscription->plan, 422, 'La suscripción no tiene un plan válido.');
-        $kind = $subscription->kind === 'agency' ? 'agency' : ($subscription->plan?->type ?? $subscription->kind);
-
-        if ($kind === 'tokens' && filled($validated['coupon_code'] ?? null)) {
-            abort_unless(
-                $this->coupons->validFor($request->user(), $validated['coupon_code'], $subscription->plan),
-                422,
-                'El cupón no es válido para este usuario.',
-            );
-        }
-
-        if ($kind === 'tokens' && $subscription->plan) {
-            $subscription->update([
-                'amount' => $this->coupons->amount(
-                    $subscription->plan,
-                    $request->user(),
-                    $validated['coupon_code'] ?? null,
-                ),
-            ]);
-        }
-
-        $payments = SiteSetting::get('payments', []);
-        $enabled = [
-            'stripe' => (bool) ($payments['stripe_enabled'] ?? false) && $this->stripe->enabled(),
-            'paypal' => (bool) ($payments['paypal_enabled'] ?? false) && $this->paypal->enabled(),
-            'spei' => (bool) ($payments['spei_enabled'] ?? false) && $this->spei->configured(),
-        ];
-
-        $kindEnabled = match ($kind) {
-            'membership' => (bool) ($payments['membership_enabled'] ?? false),
-            'tokens' => (bool) ($payments['tokens_enabled'] ?? false),
-            default => true,
-        };
-
-        abort_unless($kindEnabled, 404, 'Este producto no está disponible.');
-
-        abort_unless($enabled[$validated['method']], 422, 'Método de pago no disponible.');
-
-        $subscription->update(['payment_method' => $validated['method']]);
-
-        return match ($validated['method']) {
-            'stripe' => $this->payWithStripe($subscription),
-            'paypal' => $this->payWithPayPal($subscription),
-            'spei' => $this->payWithSpei($subscription),
-        };
+        return $this->checkout->start(
+            $subscription,
+            $request->user(),
+            $validated['method'],
+            $validated['coupon_code'] ?? null,
+        );
     }
 
     public function stripeSuccess(Request $request, Subscription $subscription): RedirectResponse
@@ -181,6 +156,128 @@ class CheckoutController extends Controller
         $this->payments->markPaid($payment);
 
         return $this->afterPayment($subscription->fresh(), 'Pago confirmado. Tu auto ya está publicado.');
+    }
+
+    public function mercadopagoReturn(Request $request, Subscription $subscription): RedirectResponse
+    {
+        abort_unless($subscription->user_id === $request->user()->getKey(), 403);
+
+        if (in_array($subscription->status, ['active', 'completed'], true)) {
+            return $this->afterPayment($subscription, 'Tu pago ya está confirmado.');
+        }
+
+        $status = strtolower((string) ($request->query('status') ?? $request->query('collection_status') ?? ''));
+        $paymentId = trim((string) ($request->query('payment_id') ?? $request->query('collection_id') ?? ''));
+        $preferenceId = trim((string) ($request->query('preference_id') ?? ''));
+
+        if ($paymentId === '' || strtolower($paymentId) === 'null' || ! ctype_digit($paymentId)) {
+            if (in_array($status, ['pending', 'in_process'], true)) {
+                return redirect()
+                    ->route('checkout.show', $subscription)
+                    ->with('success', 'Tu pago en Mercado Pago está pendiente de acreditación. Activaremos tu servicio en cuanto se confirme.');
+            }
+
+            return redirect()
+                ->route('checkout.show', $subscription)
+                ->with('error', 'El pago en Mercado Pago no se completó. Puedes intentar nuevamente o elegir otro método.');
+        }
+
+        $mpPayment = $this->mercadopago->findPayment($paymentId);
+
+        abort_unless(
+            $this->mercadopagoPaymentMatches($mpPayment, $subscription),
+            422,
+            'El pago de Mercado Pago no corresponde a esta suscripción.',
+        );
+
+        $metadata = $this->mercadopagoMetadata($mpPayment, $preferenceId ?: null);
+        $mpStatus = strtolower((string) ($mpPayment->status ?? ''));
+
+        if ($mpStatus === 'approved') {
+            $this->checkout->settleMercadoPagoPayment($subscription, (string) $mpPayment->id, $metadata, $preferenceId ?: null);
+
+            $message = $subscription->car
+                ? 'Pago confirmado con Mercado Pago. Tu auto ya está publicado.'
+                : 'Pago confirmado con Mercado Pago. Tu compra está activa.';
+
+            return $this->afterPayment($subscription->fresh(), $message);
+        }
+
+        if (in_array($mpStatus, ['pending', 'in_process', 'authorized'], true)) {
+            $this->checkout->recordMercadoPagoPending($subscription, (string) $mpPayment->id, $metadata, $preferenceId ?: null);
+
+            return redirect()
+                ->route('checkout.show', $subscription)
+                ->with('success', 'Tu pago está pendiente de acreditación en Mercado Pago. En cuanto se confirme, activaremos tu publicación.');
+        }
+
+        return redirect()
+            ->route('checkout.show', $subscription)
+            ->with('error', 'Mercado Pago no aprobó el pago. Intenta nuevamente o elige otro método disponible.');
+    }
+
+    public function mercadopagoWebhook(Request $request): JsonResponse
+    {
+        if (! $this->mercadopago->webhookConfigured()) {
+            return response()->json(['error' => 'Webhook not configured'], 503);
+        }
+
+        $queryDataId = $request->query('data.id') ?? $request->query('data_id');
+        $signatureDataId = is_scalar($queryDataId) ? (string) $queryDataId : null;
+
+        if (! $this->mercadopago->isValidWebhookSignature(
+            $request->header('x-signature'),
+            $request->header('x-request-id'),
+            $signatureDataId,
+        )) {
+            return response()->json(['error' => 'Invalid signature'], 401);
+        }
+
+        $topic = strtolower((string) ($request->input('type') ?? $request->query('type') ?? $request->input('topic') ?? $request->query('topic') ?? ''));
+        $action = strtolower((string) $request->input('action', ''));
+
+        if ($topic !== 'payment' && ! str_starts_with($action, 'payment.')) {
+            return response()->json(['received' => true, 'ignored' => true]);
+        }
+
+        $rawPaymentId = $request->input('data.id') ?? $signatureDataId;
+
+        if (! is_scalar($rawPaymentId) || ! ctype_digit(trim((string) $rawPaymentId))) {
+            return response()->json(['received' => true, 'ignored' => true]);
+        }
+
+        $mpPayment = $this->mercadopago->findPayment((string) $rawPaymentId);
+        $subscriptionId = $mpPayment->external_reference ?? null;
+        $subscription = filled($subscriptionId) ? Subscription::query()->find($subscriptionId) : null;
+
+        if (! $subscription || ! $this->mercadopagoPaymentMatches($mpPayment, $subscription)) {
+            report(new \RuntimeException('Mercado Pago payment rejected because it does not match a subscription.'));
+
+            return response()->json(['error' => 'Invalid payment association'], 422);
+        }
+
+        $mpPaymentId = (string) $mpPayment->id;
+        $existing = Payment::query()
+            ->where('provider', 'mercadopago')
+            ->where('provider_reference', $mpPaymentId)
+            ->first();
+
+        if ($existing && $existing->subscription_id !== $subscription->getKey()) {
+            report(new \RuntimeException('Mercado Pago payment reference is associated with another subscription.'));
+
+            return response()->json(['error' => 'Invalid payment association'], 422);
+        }
+
+        $metadata = $this->mercadopagoMetadata($mpPayment);
+        $mpStatus = strtolower((string) ($mpPayment->status ?? ''));
+
+        if ($mpStatus === 'approved') {
+            $this->checkout->settleMercadoPagoPayment($subscription, $mpPaymentId, $metadata);
+        } elseif (in_array($mpStatus, ['pending', 'in_process', 'authorized'], true)) {
+            $this->checkout->recordMercadoPagoPending($subscription, $mpPaymentId, $metadata);
+        }
+
+        return response()->json(['received' => true]);
     }
 
     public function paypalReturn(Request $request, Subscription $subscription): RedirectResponse
@@ -264,38 +361,25 @@ class CheckoutController extends Controller
         return response()->json(['received' => true]);
     }
 
-    private function payWithStripe(Subscription $subscription): SymfonyResponse
+    private function mercadopagoPaymentMatches(MercadoPagoPayment $mpPayment, Subscription $subscription): bool
     {
-        $subscription->loadMissing(['plan', 'user']);
-
-        $session = $this->stripe->createCheckoutSession(
-            $subscription,
-            route('checkout.stripe.success', $subscription).'?session_id={CHECKOUT_SESSION_ID}',
-            route('checkout.show', $subscription),
-        );
-
-        $this->payments->createPayment($subscription, 'stripe', (float) $subscription->amount, $session['id'], [
-            'checkout_session_id' => $session['id'],
-        ]);
-
-        return Inertia::location($session['url']);
+        return (string) ($mpPayment->external_reference ?? '') === (string) $subscription->getKey()
+            && strtoupper((string) ($mpPayment->currency_id ?? '')) === 'MXN'
+            && number_format((float) ($mpPayment->transaction_amount ?? 0), 2, '.', '') === number_format((float) $subscription->amount, 2, '.', '');
     }
 
-    private function payWithPayPal(Subscription $subscription): SymfonyResponse
+    /**
+     * @return array<string, mixed>
+     */
+    private function mercadopagoMetadata(MercadoPagoPayment $mpPayment, ?string $preferenceId = null): array
     {
-        $subscription->loadMissing(['plan']);
-
-        $order = $this->paypal->createOrder(
-            $subscription,
-            route('checkout.paypal.return', $subscription),
-            route('checkout.show', $subscription),
-        );
-
-        $this->payments->createPayment($subscription, 'paypal', (float) $subscription->amount, $order['id'], [
-            'order_id' => $order['id'],
-        ]);
-
-        return Inertia::location($order['approval_url']);
+        return array_filter([
+            'preference_id' => $preferenceId,
+            'mp_status' => $mpPayment->status,
+            'status_detail' => $mpPayment->status_detail,
+            'payment_method_id' => $mpPayment->payment_method_id,
+            'payment_type_id' => $mpPayment->payment_type_id,
+        ], static fn (mixed $value): bool => $value !== null && $value !== '');
     }
 
     private function stripeSessionMatches(object $session, Subscription $subscription): bool
@@ -325,26 +409,6 @@ class CheckoutController extends Controller
         return (string) $reference === $subscription->getKey()
             && number_format((float) $amount, 2, '.', '') === number_format((float) $subscription->amount, 2, '.', '')
             && strtoupper((string) $currency) === 'MXN';
-    }
-
-    private function payWithSpei(Subscription $subscription): RedirectResponse
-    {
-        $subscription->payments()
-            ->where('provider', 'spei')
-            ->where('status', 'pending')
-            ->update(['status' => 'failed']);
-
-        $instructions = $this->spei->instructions((float) $subscription->amount);
-
-        $this->payments->createPayment($subscription, 'spei', (float) $subscription->amount, $instructions['reference'], [
-            'bank_name' => $instructions['bank_name'],
-            'clabe' => $instructions['clabe'],
-            'beneficiary' => $instructions['beneficiary'],
-        ]);
-
-        return redirect()
-            ->route('checkout.show', $subscription)
-            ->with('success', 'Instrucciones SPEI generadas. Realiza tu transferencia para activar la publicación.');
     }
 
     private function afterPayment(Subscription $subscription, string $message): RedirectResponse

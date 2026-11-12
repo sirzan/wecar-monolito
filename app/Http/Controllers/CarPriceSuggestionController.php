@@ -47,6 +47,7 @@ class CarPriceSuggestionController extends Controller
             'year' => ['required', 'integer', 'min:1990', 'max:'.(date('Y') + 1)],
             'version_id' => ['nullable', 'uuid', 'exists:car_versions,id'],
             'km' => ['nullable', 'integer', 'min:0', 'max:2000000'],
+            'refresh' => ['nullable', 'boolean'],
         ]);
 
         $model = CarModel::query()->with('brand')->findOrFail($validated['model_id']);
@@ -65,6 +66,7 @@ class CarPriceSuggestionController extends Controller
                 (int) $validated['year'],
                 $versionName,
                 isset($validated['km']) ? (int) $validated['km'] : null,
+                (bool) ($validated['refresh'] ?? false),
             ),
         );
     }

@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\SiteSetting;
 use App\Models\User;
+use App\Services\PaymentMethodsService;
 use App\Support\AgencyContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -25,6 +26,7 @@ class HandleInertiaRequests extends Middleware
         $agencyContext = app(AgencyContext::class);
         $currentAgency = $user ? $agencyContext->current($request) : null;
         $agencies = $user ? $agencyContext->allFor($request) : collect();
+        $paymentMethods = app(PaymentMethodsService::class);
 
         return [
             ...parent::share($request),
@@ -76,11 +78,8 @@ class HandleInertiaRequests extends Middleware
             'push' => [
                 'publicKey' => config('services.webpush.public_key'),
             ],
-            'paymentMethods' => [
-                'stripe' => (bool) (data_get(SiteSetting::get('payments'), 'stripe_enabled', false)),
-                'paypal' => (bool) (data_get(SiteSetting::get('payments'), 'paypal_enabled', false)),
-                'spei' => (bool) (data_get(SiteSetting::get('payments'), 'spei_enabled', false)),
-            ],
+            'paymentMethods' => $paymentMethods->frontendMap(),
+            'paymentMethodOptions' => $paymentMethods->options(),
         ];
     }
 

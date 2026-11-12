@@ -53,6 +53,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/checkout/{subscription}/pay', [CheckoutController::class, 'pay'])->name('checkout.pay');
     Route::get('/checkout/{subscription}/stripe/success', [CheckoutController::class, 'stripeSuccess'])->name('checkout.stripe.success');
     Route::get('/checkout/{subscription}/paypal/return', [CheckoutController::class, 'paypalReturn'])->name('checkout.paypal.return');
+    Route::get('/checkout/{subscription}/mercadopago/return', [CheckoutController::class, 'mercadopagoReturn'])->name('checkout.mercadopago.return');
     Route::post('/api/didit/session', [DiditController::class, 'createSession'])->middleware('throttle:10,1')->name('didit.session');
     Route::get('/api/notifications', [NotificationController::class, 'index'])->name('notifications.index');
     Route::patch('/api/notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
@@ -68,6 +69,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 });
 
 Route::post('/webhooks/stripe', [CheckoutController::class, 'stripeWebhook'])->name('webhooks.stripe');
+Route::post('/webhooks/mercadopago', [CheckoutController::class, 'mercadopagoWebhook'])->name('webhooks.mercadopago');
 Route::post('/webhooks/didit', [DiditController::class, 'webhook'])->name('webhooks.didit');
 Route::post('/api/webhooks/didit', [DiditController::class, 'webhook'])->name('webhooks.didit.api');
 

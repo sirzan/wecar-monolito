@@ -2,6 +2,7 @@
 import { router } from '@inertiajs/vue3';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import Pagination from '@/components/site/Pagination.vue';
+import { paymentProviderLabel } from '@/lib/paymentMethods';
 
 defineOptions({ layout: AdminLayout });
 
@@ -48,7 +49,7 @@ const update = (payment: PaymentItem, status: string) => {
         <div class="mt-6 flex flex-wrap gap-3 rounded-2xl border border-border bg-card/50 p-4">
             <select class="h-10 rounded-xl border border-input bg-background px-3 text-sm" :value="filters.provider ?? ''" @change="filter('provider', ($event.target as HTMLSelectElement).value)">
                 <option value="">Todos los proveedores</option>
-                <option v-for="provider in providers" :key="provider" :value="provider">{{ provider }}</option>
+                <option v-for="provider in providers" :key="provider" :value="provider">{{ paymentProviderLabel(provider) }}</option>
             </select>
             <select class="h-10 rounded-xl border border-input bg-background px-3 text-sm" :value="filters.status ?? ''" @change="filter('status', ($event.target as HTMLSelectElement).value)">
                 <option value="">Todos los estatus</option>
@@ -64,7 +65,7 @@ const update = (payment: PaymentItem, status: string) => {
                 <tbody class="divide-y divide-border">
                     <tr v-for="payment in payments.data" :key="payment.id">
                         <td class="p-4">
-                            <p class="font-medium capitalize">{{ payment.provider }}</p>
+                            <p class="font-medium">{{ paymentProviderLabel(payment.provider) }}</p>
                             <p class="text-xs text-muted-foreground">{{ payment.reference ?? payment.id }}</p>
                         </td>
                         <td class="p-4">

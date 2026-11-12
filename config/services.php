@@ -34,6 +34,14 @@ return [
         'base_url' => env('PAYPAL_API', 'https://api-m.sandbox.paypal.com'),
     ],
 
+    'mercadopago' => [
+        'public_key' => env('MERCADOPAGO_PUBLIC_KEY'),
+        'access_token' => env('MERCADOPAGO_ACCESS_TOKEN'),
+        'webhook_secret' => env('MERCADOPAGO_WEBHOOK_SECRET'),
+        'sandbox' => (bool) env('MERCADOPAGO_SANDBOX', false),
+        'base_url' => env('MERCADOPAGO_API_URL', 'https://api.mercadopago.com'),
+    ],
+
     'google' => [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),

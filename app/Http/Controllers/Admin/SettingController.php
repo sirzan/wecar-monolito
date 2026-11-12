@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\SiteSetting;
 use App\Services\Certifications\CertificationConfig;
+use App\Services\PaymentMethodsService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -14,7 +15,10 @@ use Inertia\Response;
 
 class SettingController extends Controller
 {
-    public function __construct(private readonly CertificationConfig $certifications) {}
+    public function __construct(
+        private readonly CertificationConfig $certifications,
+        private readonly PaymentMethodsService $paymentMethods,
+    ) {}
 
     private const KEYS = [
         'payments', 'contact_info', 'about_page', 'footer_config',
@@ -31,9 +35,12 @@ class SettingController extends Controller
                 : SiteSetting::get($key, []);
         }
 
+        $paymentSettings = is_array($settings['payments'] ?? null) ? $settings['payments'] : [];
+
         return Inertia::render('Admin/Settings', [
             'settings' => $settings,
             'keys' => self::KEYS,
+            'paymentStatus' => $this->paymentMethods->adminStatus($paymentSettings),
         ]);
     }
 

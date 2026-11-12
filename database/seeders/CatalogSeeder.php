@@ -76,6 +76,7 @@ class CatalogSeeder extends Seeder
         }
 
         SiteSetting::put('payments', [
+            'mercadopago_enabled' => false,
             'stripe_enabled' => false,
             'paypal_enabled' => false,
             'spei_enabled' => false,

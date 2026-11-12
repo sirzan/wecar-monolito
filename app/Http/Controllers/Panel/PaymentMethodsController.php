@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Panel;
 
 use App\Http\Controllers\Controller;
 use App\Models\SiteSetting;
+use App\Services\PaymentMethodsService;
 use App\Services\StripeService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -13,12 +14,17 @@ use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class PaymentMethodsController extends Controller
 {
-    public function __construct(private readonly StripeService $stripe) {}
+    public function __construct(
+        private readonly StripeService $stripe,
+        private readonly PaymentMethodsService $paymentMethods,
+    ) {}
 
     public function index(Request $request): Response
     {
         $payments = SiteSetting::get('payments', []);
-        $stripeEnabled = (bool) ($payments['stripe_enabled'] ?? false) && $this->stripe->enabled();
+        $payments = is_array($payments) ? $payments : [];
+        $frontendMap = $this->paymentMethods->frontendMap($payments);
+        $stripeEnabled = $frontendMap['stripe'] ?? false;
         $cards = [];
         $stripeError = null;
 
@@ -34,11 +40,8 @@ class PaymentMethodsController extends Controller
         return Inertia::render('Panel/PaymentMethods', [
             'cards' => $cards,
             'stripeError' => $stripeError,
-            'methods' => [
-                'stripe' => $stripeEnabled,
-                'paypal' => (bool) ($payments['paypal_enabled'] ?? false),
-                'spei' => (bool) ($payments['spei_enabled'] ?? false),
-            ],
+            'methods' => $frontendMap,
+            'methodOptions' => $this->paymentMethods->options($payments),
         ]);
     }
 

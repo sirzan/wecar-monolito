@@ -9,6 +9,8 @@ use App\Models\CarStatus;
 use App\Models\Plan;
 use App\Models\Subscription;
 use App\Services\CarCatalog\CarVersionService;
+use App\Services\PaymentCheckoutService;
+use App\Services\PaymentMethodsService;
 use App\Services\PublicationPlanService;
 use App\Support\AgencyContext;
 use Illuminate\Http\RedirectResponse;
@@ -17,11 +19,17 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class VendeController extends Controller
 {
-    public function store(Request $request, CarVersionService $carVersions, PublicationPlanService $publicationPlans): RedirectResponse
-    {
+    public function store(
+        Request $request,
+        CarVersionService $carVersions,
+        PublicationPlanService $publicationPlans,
+        PaymentMethodsService $paymentMethods,
+        PaymentCheckoutService $checkout,
+    ): SymfonyResponse|RedirectResponse {
         $validated = $request->validate([
             'brand_id' => ['required', 'uuid', 'exists:car_brands,id'],
             'model_id' => ['required', 'uuid', 'exists:car_models,id'],
@@ -45,6 +53,7 @@ class VendeController extends Controller
             'serial_number' => ['nullable', 'string', 'max:40'],
             'plates' => ['nullable', 'string', 'max:20'],
             'plan_key' => ['nullable', 'string', 'exists:plans,key_name'],
+            'payment_method' => ['nullable', 'string', Rule::in($paymentMethods->allKeys())],
             'images' => ['required', 'array', 'min:1', 'max:12'],
             'images.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:8192'],
         ]);
@@ -116,6 +125,12 @@ class VendeController extends Controller
                 }
 
                 $requiresPayment = (float) $plan->price > 0;
+
+                if ($requiresPayment && filled($validated['payment_method'] ?? null) && ! $paymentMethods->isAvailable($validated['payment_method'])) {
+                    throw ValidationException::withMessages([
+                        'payment_method' => 'El método de pago seleccionado no está disponible o configurado.',
+                    ]);
+                }
             }
         } else {
             $plan = isset($validated['plan_key'])
@@ -199,6 +214,18 @@ class VendeController extends Controller
         }
 
         if ($requiresPayment && $subscription) {
+            if (filled($validated['payment_method'] ?? null)) {
+                try {
+                    return $checkout->start($subscription, $request->user(), $validated['payment_method']);
+                } catch (\Throwable $exception) {
+                    report($exception);
+
+                    return redirect()
+                        ->route('checkout.show', $subscription)
+                        ->with('error', 'Tu auto fue guardado, pero no pudimos iniciar la pasarela seleccionada. Intenta nuevamente o elige otro método.');
+                }
+            }
+
             return redirect()
                 ->route('checkout.show', $subscription)
                 ->with('success', 'Tu auto fue creado. Completa el pago para publicarlo.');
