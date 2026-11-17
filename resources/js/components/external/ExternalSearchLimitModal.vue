@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import { CheckCircle2, Coins, Globe, PlayCircle, ShieldCheck, Sparkles } from '@lucide/vue';
 import { Link } from '@inertiajs/vue3';
 import Button from '@/components/ui/Button.vue';
+import { formatMxn } from '@/lib/currency';
 import type { ExternalSearchStatus } from '@/types/external';
 
 const props = defineProps<{ open: boolean; status: ExternalSearchStatus | null }>();
@@ -48,7 +49,7 @@ const tokenPackages = [
                             <p class="text-sm font-black text-secondary">Búsqueda Inteligente Ilimitada</p>
                         </div>
                         <div class="text-right">
-                            <p class="text-2xl font-black text-primary">${{ price }}</p>
+                            <p class="text-2xl font-black text-primary">{{ formatMxn(price) }}</p>
                             <p class="text-[10px] font-bold text-muted-foreground">MXN / 30 días</p>
                         </div>
                     </div>
@@ -67,8 +68,8 @@ const tokenPackages = [
                     >
                         <p class="text-sm font-black text-secondary">{{ pack.label }}</p>
                         <p class="text-xs text-muted-foreground">
-                            <span v-if="hasCoupon" class="line-through">${{ pack.price }}</span>
-                            <span class="font-black text-primary"> ${{ hasCoupon ? (pack.price / 2).toFixed(2) : pack.price }} MXN</span>
+                            <span v-if="hasCoupon" class="line-through">{{ formatMxn(pack.price) }}</span>
+                            <span class="font-black text-primary"> {{ formatMxn(hasCoupon ? pack.price / 2 : pack.price) }} MXN</span>
                         </p>
                     </Link>
                 </div>
@@ -78,7 +79,7 @@ const tokenPackages = [
                         <PlayCircle class="h-4 w-4" /> Ver anuncio y recibir 1 token gratis
                     </Button>
                     <Button v-if="!unlimited" as="a" href="/panel/membresia" variant="hero" class="w-full gap-2" @click="emit('close')">
-                        <Sparkles class="h-4 w-4" /> Obtener membresía por ${{ price }} MXN
+                        <Sparkles class="h-4 w-4" /> Obtener membresía por {{ formatMxn(price) }} MXN
                     </Button>
                     <Button variant="ghost" class="w-full text-xs" @click="emit('close')">Continuar viendo el catálogo</Button>
                 </div>

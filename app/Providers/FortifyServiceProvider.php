@@ -9,8 +9,10 @@ use App\Actions\Fortify\UpdateUserProfileInformation;
 use App\Http\Responses\LoginResponse as AppLoginResponse;
 use App\Http\Responses\PasskeyLoginResponse as AppPasskeyLoginResponse;
 use App\Http\Responses\TwoFactorLoginResponse as AppTwoFactorLoginResponse;
+use App\Models\User;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
@@ -43,6 +45,13 @@ class FortifyServiceProvider extends ServiceProvider
         Fortify::updateUserPasswordsUsing(UpdateUserPassword::class);
         Fortify::resetUserPasswordsUsing(ResetUserPassword::class);
         Fortify::redirectUserForTwoFactorAuthenticationUsing(RedirectIfTwoFactorAuthenticatable::class);
+        Fortify::authenticateUsing(function (Request $request): ?User {
+            $user = User::query()->where('email', $request->input('email'))->first();
+
+            return $user?->is_active && Hash::check((string) $request->input('password'), $user->password)
+                ? $user
+                : null;
+        });
 
         Fortify::loginView(fn () => Inertia::render('Auth/Login'));
         Fortify::registerView(fn () => Inertia::render('Auth/Register'));
@@ -70,6 +79,12 @@ class FortifyServiceProvider extends ServiceProvider
 
             return Limit::perMinute(10)->by(
                 ($credentialId ?: $request->session()->getId()).'|'.$request->ip()
+            );
+        });
+
+        RateLimiter::for('email-change', function (Request $request) {
+            return Limit::perMinute(5)->by(
+                ($request->user()?->getAuthIdentifier() ?? 'guest').'|'.$request->ip()
             );
         });
     }

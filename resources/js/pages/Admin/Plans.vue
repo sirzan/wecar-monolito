@@ -6,6 +6,7 @@ import AdminLayout from '@/layouts/AdminLayout.vue';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
+import { formatMxn } from '@/lib/currency';
 
 defineOptions({ layout: AdminLayout });
 
@@ -154,7 +155,7 @@ const destroy = (plan: PlanItem) => {
                             </td>
                             <td class="p-4"><span class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase">{{ plan.type }}</span></td>
                             <td class="p-4 text-xs uppercase text-muted-foreground">{{ plan.audience ?? 'user' }}</td>
-                            <td class="p-4 tabular-nums">${{ plan.price.toLocaleString('es-MX') }}</td>
+                            <td class="p-4 tabular-nums">{{ formatMxn(plan.price) }}</td>
                             <td class="p-4 text-muted-foreground">{{ plan.duration }}</td>
                             <td class="p-4 text-muted-foreground">{{ plan.type === 'tokens' ? `${plan.token_amount ?? 0} tokens` : plan.max_cars }}</td>
                             <td class="p-4">

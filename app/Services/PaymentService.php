@@ -10,6 +10,7 @@ use App\Models\Payment;
 use App\Models\PlanReminder;
 use App\Models\Subscription;
 use App\Models\User;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 
@@ -32,7 +33,7 @@ class PaymentService
         array $metadata = [],
         string $status = 'pending',
     ): Payment {
-        return Payment::query()->create([
+        $attributes = [
             'user_id' => $subscription->user_id,
             'subscription_id' => $subscription->getKey(),
             'plan_id' => $subscription->plan_id,
@@ -42,7 +43,39 @@ class PaymentService
             'currency' => 'MXN',
             'status' => $status,
             'metadata' => $metadata,
-        ]);
+        ];
+
+        if ($reference === null) {
+            return Payment::query()->create($attributes);
+        }
+
+        $existing = Payment::query()
+            ->where('provider', $provider)
+            ->where('provider_reference', $reference)
+            ->first();
+
+        if ($existing) {
+            if ($existing->subscription_id !== $subscription->getKey()) {
+                throw new \LogicException('El pago ya está asociado a otra suscripción.');
+            }
+
+            return $existing;
+        }
+
+        try {
+            return Payment::query()->create($attributes);
+        } catch (UniqueConstraintViolationException) {
+            $existing = Payment::query()
+                ->where('provider', $provider)
+                ->where('provider_reference', $reference)
+                ->firstOrFail();
+
+            if ($existing->subscription_id !== $subscription->getKey()) {
+                throw new \LogicException('El pago ya está asociado a otra suscripción.');
+            }
+
+            return $existing;
+        }
     }
 
     public function markPaid(Payment $payment): void
@@ -50,7 +83,7 @@ class PaymentService
         $paid = DB::transaction(function () use ($payment): bool {
             $locked = Payment::query()->whereKey($payment->getKey())->lockForUpdate()->first();
 
-            if (! $locked || $locked->status === 'paid') {
+            if (! $locked || $locked->status !== 'pending') {
                 return false;
             }
 

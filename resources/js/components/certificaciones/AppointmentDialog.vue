@@ -4,6 +4,7 @@ import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Loader2, MapPin,
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
+import PhoneInput from '@/components/ui/PhoneInput.vue';
 import { cn } from '@/lib/utils';
 
 interface Pricing {
@@ -482,7 +483,7 @@ const errorFor = (field: string): string | null => fieldErrors.value[field]?.[0]
                         </div>
                         <div>
                             <Label for="cert-whatsapp" class="text-xs font-bold text-secondary">WhatsApp *</Label>
-                            <Input id="cert-whatsapp" v-model="form.whatsapp" type="tel" placeholder="81 1234 5678" class="mt-1.5 h-11 rounded-full bg-[#FAF9F7]" />
+                            <PhoneInput id="cert-whatsapp" v-model="form.whatsapp" placeholder="81 1234 5678" class="mt-1.5 h-11 rounded-full bg-[#FAF9F7]" />
                             <p v-if="errorFor('whatsapp')" class="mt-1 text-xs font-semibold text-destructive">{{ errorFor('whatsapp') }}</p>
                         </div>
                     </div>

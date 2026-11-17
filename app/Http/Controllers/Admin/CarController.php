@@ -40,7 +40,7 @@ class CarController extends Controller
         $filters = $request->only(['q', 'status', 'featured', 'agency_id']);
 
         $cars = Car::query()
-            ->with(['brand', 'model', 'status', 'agency', 'owner'])
+            ->with(['brand', 'model', 'version', 'status', 'agency', 'owner'])
             ->when($filters['q'] ?? null, function ($query, string $q) {
                 $term = '%'.trim($q).'%';
                 $query->where(function ($query) use ($term) {
@@ -64,6 +64,8 @@ class CarController extends Controller
                 'title' => trim(($car->brand?->name ?? '').' '.($car->model?->name ?? '').' '.$car->year),
                 'price' => (float) $car->price,
                 'km' => (int) $car->km,
+                'version' => $car->version?->name,
+                'city' => $car->city,
                 'image' => $car->image,
                 'status_id' => $car->status_id,
                 'status' => $car->status?->label ?? $car->status?->name,

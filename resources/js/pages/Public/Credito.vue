@@ -9,6 +9,7 @@ import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
 import FinanciarAutoDialog from '@/components/credito/FinanciarAutoDialog.vue';
 import FinancialPartnersCarousel from '@/components/site/FinancialPartnersCarousel.vue';
+import { vehicleYears } from '@/lib/carCatalog';
 
 defineOptions({ layout: PublicLayout });
 
@@ -19,15 +20,21 @@ const props = defineProps<{
 }>();
 
 const page = usePage<{ url: string }>();
-const priceFromQuery = Number(new URL(page.url, 'http://localhost').searchParams.get('precio') ?? 0);
+const query = new URL(page.url, 'http://localhost').searchParams;
+const priceFromQuery = Number(query.get('precio') ?? 0);
+const yearFromQuery = Number(query.get('year') ?? 0);
+const brandFromQuery = props.brands.find((item) => item.id === query.get('brand_id') || item.name === query.get('brand'));
+const modelFromQuery = brandFromQuery?.models.find((item) => item.id === query.get('model_id') || item.name === query.get('model'));
 
 const price = ref(priceFromQuery > 0 ? priceFromQuery : 280000);
 const downPaymentPct = ref(20);
 const term = ref(48);
-const brand = ref('');
-const model = ref('');
-const version = ref('');
-const year = ref(new Date().getFullYear() - 2);
+const brand = ref(brandFromQuery?.name ?? '');
+const model = ref(modelFromQuery?.name ?? '');
+const version = ref(query.get('version') ?? '');
+const year = ref<number | null>(yearFromQuery > 0 ? yearFromQuery : null);
+const km = ref(Number(query.get('km') ?? 0));
+const carId = ref(query.get('car_id') ?? '');
 const dialogOpen = ref(false);
 const versions = ref<{ id: string; name: string }[]>([]);
 const versionsLoading = ref(false);
@@ -42,7 +49,9 @@ const minRate = computed(() => {
 
     return rates.length ? Math.min(...rates) : 12.5;
 });
+const selectedBrandId = computed(() => props.brands.find((item) => item.name === brand.value)?.id ?? '');
 const selectedModelId = computed(() => models.value.find((item) => item.name === model.value)?.id ?? '');
+const selectedVersionId = computed(() => versions.value.find((item) => item.name === version.value)?.id ?? query.get('version_id') ?? '');
 const downPayment = computed(() => Math.round((price.value * downPaymentPct.value) / 100));
 const financed = computed(() => Math.max(price.value - downPayment.value, 0));
 const monthly = computed(() => {
@@ -134,7 +143,10 @@ const benefits = [
                     <div class="mt-4 grid grid-cols-2 gap-3">
                         <div>
                             <Label>Año</Label>
-                            <Input v-model.number="year" type="number" min="1990" :max="new Date().getFullYear() + 1" class="mt-1.5" />
+                            <select v-model.number="year" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                                <option :value="null">Selecciona el año</option>
+                                <option v-for="item in vehicleYears" :key="item" :value="item">{{ item }}</option>
+                            </select>
                         </div>
                         <div>
                             <Label>Marca</Label>
@@ -152,13 +164,13 @@ const benefits = [
                         </div>
                         <div>
                             <Label>Versión</Label>
-                            <select
-                                v-model="version"
-                                :disabled="!model || versionsLoading || versions.length === 0"
-                                class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"
-                            >
+                                <select
+                                    v-model="version"
+                                    :disabled="!model || versionsLoading"
+                                    class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"
+                                >
                                 <option value="">
-                                    {{ versionsLoading ? 'Cargando versiones…' : versions.length ? 'Versión' : 'Sin versiones' }}
+                                    {{ versionsLoading ? 'Cargando versiones…' : versions.length ? 'Versión (opcional)' : 'Versión no disponible (opcional)' }}
                                 </option>
                                 <option v-for="item in versions" :key="item.id" :value="item.name">{{ item.name }}</option>
                             </select>
@@ -215,7 +227,7 @@ const benefits = [
                             <p class="mt-0.5 text-sm font-bold">{{ formatPrice(financed) }}</p>
                         </div>
                     </div>
-                    <Button variant="hero" size="lg" class="mt-4 w-full" :disabled="!version" @click="dialogOpen = true">
+                    <Button variant="hero" size="lg" class="mt-4 w-full" :disabled="!model" @click="dialogOpen = true">
                         Completar perfil y comparar
                     </Button>
                     <p class="mt-2.5 text-center text-[11px] text-secondary-foreground/70">
@@ -266,13 +278,18 @@ const benefits = [
     <FinanciarAutoDialog
         :open="dialogOpen"
         :brands="brands"
+        :car="carId ? { id: carId, brand, brand_id: selectedBrandId, model, model_id: selectedModelId, version, version_id: selectedVersionId, year, price, km } : null"
         :initial="{
             downPayment: downPaymentPct,
             term,
             brand,
+            brand_id: selectedBrandId,
             model,
+            model_id: selectedModelId,
             version,
-            year,
+            version_id: selectedVersionId,
+            year: year ?? undefined,
+            km,
             price,
         }"
         @close="dialogOpen = false"

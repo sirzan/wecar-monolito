@@ -45,7 +45,23 @@ Artisan::command('seo:generate-sitemap', function () {
     ));
 })->purpose('Genera el sitemap XML del portal y de los autos publicados');
 
-Schedule::call(fn () => app(ExternalSearchCacheService::class)->prune())->daily();
-Schedule::command('seo:generate-sitemap')->hourlyAt(15)->timezone('America/Monterrey')->withoutOverlapping();
-Schedule::command('plans:send-reminders')->dailyAt('09:00')->timezone('America/Monterrey');
-Schedule::command('plans:process-expirations')->hourlyAt(5)->timezone('America/Monterrey');
+Schedule::call(fn () => app(ExternalSearchCacheService::class)->prune())
+    ->daily()
+    ->name('external-search-cache-prune')
+    ->onOneServer()
+    ->withoutOverlapping(30);
+Schedule::command('seo:generate-sitemap')
+    ->hourlyAt(15)
+    ->timezone('America/Monterrey')
+    ->onOneServer()
+    ->withoutOverlapping(30);
+Schedule::command('plans:send-reminders')
+    ->dailyAt('09:00')
+    ->timezone('America/Monterrey')
+    ->onOneServer()
+    ->withoutOverlapping(30);
+Schedule::command('plans:process-expirations')
+    ->hourlyAt(5)
+    ->timezone('America/Monterrey')
+    ->onOneServer()
+    ->withoutOverlapping(30);

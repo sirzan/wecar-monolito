@@ -34,6 +34,20 @@ return [
         'base_url' => env('PAYPAL_API', 'https://api-m.sandbox.paypal.com'),
     ],
 
+    'mercadopago' => [
+        'public_key' => env('MERCADOPAGO_PUBLIC_KEY'),
+        'access_token' => env('MERCADOPAGO_ACCESS_TOKEN'),
+        'webhook_secret' => env('MERCADOPAGO_WEBHOOK_SECRET'),
+        'sandbox' => (bool) env('MERCADOPAGO_SANDBOX', false),
+        'base_url' => env('MERCADOPAGO_API_URL', 'https://api.mercadopago.com'),
+    ],
+
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect' => env('GOOGLE_REDIRECT_URI', env('APP_URL').'/auth/google/callback'),
+    ],
+
     'openai' => [
         'key' => env('OPENAI_API_KEY'),
         'model' => env('OPENAI_MODEL', 'gpt-4o-mini'),
@@ -66,6 +80,10 @@ return [
         'callback_url' => env('DIDIT_CALLBACK_URL'),
         'shared_secret' => env('DIDIT_SHARED_SECRET'),
         'webhook_secret' => env('DIDIT_WEBHOOK_SECRET'),
+    ],
+
+    'zip_code' => [
+        'url' => env('ZIP_CODE_API_URL', 'https://api.zippopotam.us/mx'),
     ],
 
     'ses' => [

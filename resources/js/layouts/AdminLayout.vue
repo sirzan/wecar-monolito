@@ -55,6 +55,7 @@ const mainItems = [
     { label: 'Créditos', href: '/admin/creditos', icon: CreditCard },
     { label: 'Certificaciones', href: '/admin/certificaciones', icon: CalendarDays },
     { label: 'Autos', href: '/admin/autos', icon: Car },
+    { label: 'Autos externos', href: '/admin/autos-externos', icon: ExternalLink },
     { label: 'Financieras', href: '/admin/financieras', icon: Building2 },
     { label: 'Usuarios', href: '/admin/usuarios', icon: Users },
     { label: 'Agencias', href: '/admin/agencias', icon: Building2 },

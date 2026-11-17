@@ -17,6 +17,10 @@ import {
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
+import PhoneInput from '@/components/ui/PhoneInput.vue';
+import ZipCodeFields from '@/components/forms/ZipCodeFields.vue';
+import { vehicleYears } from '@/lib/carCatalog';
+import { formatMxn } from '@/lib/currency';
 import { cn } from '@/lib/utils';
 
 interface Brand {
@@ -28,8 +32,11 @@ interface Brand {
 interface CarInput {
     id?: string;
     brand?: string | null;
+    brand_id?: string | null;
     model?: string | null;
+    model_id?: string | null;
     version?: string | null;
+    version_id?: string | null;
     year?: number | null;
     price?: number | null;
     km?: number | null;
@@ -46,9 +53,13 @@ const props = withDefaults(
             downPayment?: number;
             term?: number;
             brand?: string;
+            brand_id?: string;
             model?: string;
+            model_id?: string;
             version?: string;
+            version_id?: string;
             year?: number;
+            km?: number;
             price?: number;
         };
     }>(),
@@ -78,18 +89,69 @@ const basics = reactive({
 });
 
 const profile = reactive({
-    income: 0,
-    tenure: 1,
-    bureau: 'bueno',
-    employment: 'fijo',
-    debts: 0,
-    age: 30,
+    income: null as number | null,
+    tenure: null as number | null,
+    bureau: '',
+    employment: '',
+    debts: null as number | null,
+    age: null as number | null,
     brand: props.car?.brand ?? props.initial.brand ?? '',
+    brandId: props.car?.brand_id ?? props.initial.brand_id ?? '',
     model: props.car?.model ?? props.initial.model ?? '',
-    year: props.car?.year ?? props.initial.year ?? new Date().getFullYear() - 3,
-    price: props.car?.price ?? props.initial.price ?? 250000,
+    modelId: props.car?.model_id ?? props.initial.model_id ?? '',
+    year: props.car?.year ?? props.initial.year ?? (null as number | null),
+    price: props.car?.price ?? props.initial.price ?? (null as number | null),
     version: props.car?.version ?? props.initial.version ?? '',
+    versionId: props.car?.version_id ?? props.initial.version_id ?? '',
 });
+
+const modelOptions = computed(() => {
+    const brand = props.brands.find((item) => item.id === profile.brandId || item.name === profile.brand);
+
+    return brand?.models ?? [];
+});
+
+const syncFromInitial = () => {
+    const initial = props.initial;
+    const car = props.car;
+
+    basics.downPayment = initial.downPayment ?? 20;
+    basics.term = initial.term ?? 48;
+
+    profile.brand = car?.brand ?? initial.brand ?? '';
+    profile.model = car?.model ?? initial.model ?? '';
+    profile.version = car?.version ?? initial.version ?? '';
+    profile.year = car?.year ?? initial.year ?? null;
+    profile.price = car?.price ?? initial.price ?? null;
+
+    const brand = props.brands.find((item) => item.id === (car?.brand_id ?? initial.brand_id) || item.name === profile.brand);
+    profile.brandId = car?.brand_id ?? initial.brand_id ?? brand?.id ?? '';
+    const model = brand?.models.find((item) => item.id === (car?.model_id ?? initial.model_id) || item.name === profile.model);
+    profile.modelId = car?.model_id ?? initial.model_id ?? model?.id ?? '';
+    profile.versionId = car?.version_id ?? initial.version_id ?? '';
+};
+
+const resolveModelName = () => {
+    const brand = props.brands.find((item) => item.id === profile.brandId);
+    const model = brand?.models.find((item) => item.id === profile.modelId);
+
+    if (brand) profile.brand = brand.name;
+    if (model) profile.model = model.name;
+};
+
+const onBrandChange = () => {
+    profile.model = '';
+    profile.modelId = '';
+    profile.version = '';
+    profile.versionId = '';
+    resolveModelName();
+};
+
+const onModelChange = () => {
+    profile.version = '';
+    profile.versionId = '';
+    resolveModelName();
+};
 
 const versionOptions = ref<{ id: string; name: string }[]>([]);
 const versionsLoading = ref(false);
@@ -97,7 +159,7 @@ const versionsError = ref('');
 let versionsTimer: ReturnType<typeof setTimeout> | null = null;
 
 const loadVersions = async () => {
-    if (!profile.brand || !profile.model || !profile.year) {
+    if ((!profile.modelId && (!profile.brand || !profile.model)) || !profile.year) {
         versionOptions.value = [];
         return;
     }
@@ -107,10 +169,16 @@ const loadVersions = async () => {
 
     try {
         const params = new URLSearchParams({
-            brand: profile.brand,
-            model: profile.model,
             year: String(profile.year),
         });
+
+        if (profile.modelId) {
+            params.set('model_id', profile.modelId);
+        } else {
+            params.set('brand', profile.brand);
+            params.set('model', profile.model);
+        }
+
         const response = await fetch(`/api/car-versions?${params.toString()}`, {
             headers: { Accept: 'application/json' },
         });
@@ -140,10 +208,11 @@ const loadVersions = async () => {
 };
 
 watch(
-    () => [profile.brand, profile.model, profile.year],
+    () => [profile.brandId, profile.modelId, profile.year],
     (value, oldValue) => {
         if (oldValue && (value[0] !== oldValue[0] || value[1] !== oldValue[1] || value[2] !== oldValue[2])) {
             profile.version = props.car?.version ?? '';
+            profile.versionId = props.car?.version_id ?? '';
         }
 
         if (versionsTimer) clearTimeout(versionsTimer);
@@ -164,6 +233,7 @@ const application = reactive({
     cp: '',
     alcaldia: '',
     ciudad: '',
+    state: '',
     pais: 'México',
     ocupacion: '',
     empresa: '',
@@ -252,17 +322,59 @@ const reset = () => {
     documents.estado_cuenta = {};
 };
 
+const loadProfile = async () => {
+    if (!user.value) return;
+
+    try {
+        const response = await fetch('/api/credito/perfil', { headers: { Accept: 'application/json' } });
+        if (!response.ok) return;
+        const data = await response.json();
+        const saved = data.profile ?? {};
+
+        application.full_name = saved.full_name ?? user.value.name ?? '';
+        application.email = saved.email ?? user.value.email ?? '';
+        application.birthdate = saved.birthdate ?? '';
+        application.rfc = saved.rfc ?? '';
+        application.curp = saved.curp ?? '';
+        application.calle = saved.calle ?? '';
+        application.colonia = saved.colonia ?? '';
+        application.cp = saved.cp ?? '';
+        application.alcaldia = saved.alcaldia ?? '';
+        application.state = saved.state ?? '';
+        application.ocupacion = saved.ocupacion ?? '';
+        application.empresa = saved.empresa ?? '';
+        application.antiguedad = saved.antiguedad ?? '';
+        application.phone = saved.phone ?? application.phone;
+
+        if (saved.phone && !basics.phone) {
+            basics.phone = saved.phone;
+        }
+
+        profile.income = saved.ingreso_mensual !== null && saved.ingreso_mensual !== undefined
+            ? Number(saved.ingreso_mensual)
+            : profile.income;
+        profile.debts = saved.deuda_mensual !== null && saved.deuda_mensual !== undefined
+            ? Number(saved.deuda_mensual)
+            : profile.debts;
+    } catch {
+        // El usuario puede completar sus datos manualmente.
+    }
+};
+
 watch(
     () => props.open,
     (open) => {
         if (open) {
             reset();
+            syncFromInitial();
             application.full_name = user.value?.name ?? '';
             application.email = user.value?.email ?? '';
             application.phone = basics.phone;
             void loadSavedDocuments();
+            void loadProfile();
         }
     },
+    { immediate: true },
 );
 
 watch(
@@ -338,18 +450,33 @@ const goToProfile = () => {
 };
 
 const evaluate = async () => {
-    if (!profile.version) {
-        submitError.value = 'Selecciona la versión del auto.';
-        return;
-    }
-
-    if (!props.car && versionOptions.value.length === 0) {
-        submitError.value = 'No hay versiones disponibles para este auto. Intenta de nuevo más tarde.';
-        return;
-    }
-
-    if (!profile.income || profile.income <= 0) {
+    if (profile.income === null || profile.income <= 0) {
         submitError.value = 'Ingresa tu ingreso mensual.';
+        return;
+    }
+
+    if (profile.age === null || profile.age < 18 || profile.age > 99) {
+        submitError.value = 'Ingresa una edad válida (18 a 99 años).';
+        return;
+    }
+
+    if (!profile.employment) {
+        submitError.value = 'Selecciona tu tipo de empleo.';
+        return;
+    }
+
+    if (!profile.bureau) {
+        submitError.value = 'Selecciona tu historial crediticio.';
+        return;
+    }
+
+    if (profile.tenure === null || profile.tenure < 0) {
+        submitError.value = 'Ingresa tu antigüedad laboral.';
+        return;
+    }
+
+    if (!profile.year || !profile.price) {
+        submitError.value = 'Completa el año y el precio del vehículo.';
         return;
     }
 
@@ -357,6 +484,8 @@ const evaluate = async () => {
     evaluating.value = true;
 
     try {
+        resolveModelName();
+
         const response = await fetch('/api/credito/evaluar', {
             method: 'POST',
             headers: {
@@ -368,10 +497,10 @@ const evaluate = async () => {
                 auto: {
                     marca: profile.brand,
                     modelo: profile.model,
-                    version: profile.version,
+                    version: profile.version || null,
                     anio: Number(profile.year),
                     precio: price.value,
-                    km: props.car?.km ?? 0,
+                    km: props.car?.km ?? props.initial?.km ?? 0,
                     tipo: props.car?.condition === 'new' ? 'nuevo' : 'seminuevo',
                 },
                 perfil: {
@@ -381,15 +510,19 @@ const evaluate = async () => {
                     historialBuro: profile.bureau,
                     tipoEmpleo: profile.employment,
                     antiguedadLaboralAnios: Number(profile.tenure),
-                    deudasMensuales: Number(profile.debts),
+                    deudasMensuales: Number(profile.debts ?? 0),
                     edad: Number(profile.age),
                 },
             }),
         });
 
-        if (!response.ok) throw new Error('No se pudo evaluar tu perfil.');
+        const data = await response.json().catch(() => ({}));
 
-        evaluation.value = await response.json();
+        if (!response.ok) {
+            throw new Error(data.message ?? data.errors?.perfil?.[0] ?? 'No se pudo evaluar tu perfil.');
+        }
+
+        evaluation.value = data;
         offers.value = (evaluation.value.opcionesRecomendadas ?? []).map(normalizeOffer);
         pawnOffers.value = (evaluation.value.opcionesPrendarias ?? []).map(normalizeOffer);
         selectedSlug.value = offers.value.find((offer) => offer.califica)?.slug ?? null;
@@ -434,7 +567,7 @@ const submit = async () => {
     try {
         const payload = {
             ...application,
-            phone: basics.phone || application.phone,
+            phone: application.phone || basics.phone,
             ingreso_mensual: Number(profile.income),
             deuda_mensual: Number(profile.debts),
             car_brand: profile.brand,
@@ -571,7 +704,7 @@ const submit = async () => {
 
                             <div>
                                 <Label for="phone">Teléfono</Label>
-                                <Input id="phone" v-model="basics.phone" type="tel" class="mt-1.5" placeholder="81 1234 5678" />
+                                <PhoneInput id="phone" v-model="basics.phone" class="mt-1.5" placeholder="81 1234 5678" />
                             </div>
 
                             <div class="rounded-2xl bg-secondary p-4 text-secondary-foreground">
@@ -584,24 +717,25 @@ const submit = async () => {
                         <!-- Paso 2 -->
                         <div v-else-if="step === 2" class="grid gap-4 sm:grid-cols-2">
                             <div class="sm:col-span-2">
-                                <Label for="income">Ingreso mensual neto</Label>
-                                <Input id="income" v-model.number="profile.income" type="number" min="1" class="mt-1.5" placeholder="25000" />
+                                <Label for="income">Ingreso mensual neto *</Label>
+                                <Input id="income" v-model.number="profile.income" type="number" min="1" class="mt-1.5" placeholder="Ej. 25,000" />
                             </div>
                             <div>
-                                <Label for="tenure">Antigüedad laboral (años)</Label>
-                                <Input id="tenure" v-model.number="profile.tenure" type="number" min="0" class="mt-1.5" />
+                                <Label for="tenure">Antigüedad laboral (años) *</Label>
+                                <Input id="tenure" v-model.number="profile.tenure" type="number" min="0" class="mt-1.5" placeholder="Ej. 3" />
                             </div>
                             <div>
                                 <Label for="debts">Deudas mensuales</Label>
-                                <Input id="debts" v-model.number="profile.debts" type="number" min="0" class="mt-1.5" />
+                                <Input id="debts" v-model.number="profile.debts" type="number" min="0" class="mt-1.5" placeholder="0" />
                             </div>
                             <div>
-                                <Label for="age">Edad</Label>
-                                <Input id="age" v-model.number="profile.age" type="number" min="18" max="99" class="mt-1.5" />
+                                <Label for="age">Edad *</Label>
+                                <Input id="age" v-model.number="profile.age" type="number" min="18" max="99" class="mt-1.5" placeholder="Ej. 35" />
                             </div>
                             <div>
-                                <Label for="employment">Tipo de empleo</Label>
+                                <Label for="employment">Tipo de empleo *</Label>
                                 <select id="employment" v-model="profile.employment" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                                    <option value="">Selecciona una opción</option>
                                     <option value="fijo">Empleado fijo</option>
                                     <option value="honorarios">Honorarios</option>
                                     <option value="negocio">Negocio propio</option>
@@ -609,8 +743,9 @@ const submit = async () => {
                                 </select>
                             </div>
                             <div class="sm:col-span-2">
-                                <Label for="bureau">Historial en Buró / Círculo</Label>
+                                <Label for="bureau">Historial en Buró / Círculo *</Label>
                                 <select id="bureau" v-model="profile.bureau" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                                    <option value="">Selecciona una opción</option>
                                     <option value="excelente">Excelente — sin atrasos</option>
                                     <option value="bueno">Bueno — pagos puntuales</option>
                                     <option value="regular">Regular — algún atraso</option>
@@ -622,27 +757,33 @@ const submit = async () => {
                             <template v-if="!props.car">
                                 <div>
                                     <Label for="brand">Marca</Label>
-                                    <select id="brand" v-model="profile.brand" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                                    <select id="brand" v-model="profile.brandId" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" @change="onBrandChange">
                                         <option value="">Selecciona</option>
-                                        <option v-for="brand in brands" :key="brand.id" :value="brand.name">{{ brand.name }}</option>
+                                        <option v-for="brand in brands" :key="brand.id" :value="brand.id">{{ brand.name }}</option>
                                     </select>
                                 </div>
                                 <div>
                                     <Label for="model">Modelo</Label>
-                                    <Input id="model" v-model="profile.model" class="mt-1.5" />
+                                    <select id="model" v-model="profile.modelId" :disabled="!profile.brandId" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50" @change="onModelChange">
+                                        <option value="">{{ profile.brandId ? 'Selecciona el modelo' : 'Selecciona la marca primero' }}</option>
+                                        <option v-for="model in modelOptions" :key="model.id" :value="model.id">{{ model.name }}</option>
+                                    </select>
                                 </div>
                                 <div>
                                     <Label for="year">Año</Label>
-                                    <Input id="year" v-model.number="profile.year" type="number" min="1990" :max="new Date().getFullYear() + 1" class="mt-1.5" />
+                                    <select id="year" v-model.number="profile.year" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                                        <option :value="null">Selecciona el año</option>
+                                        <option v-for="year in vehicleYears" :key="year" :value="year">{{ year }}</option>
+                                    </select>
                                 </div>
                                 <div>
                                     <Label for="price">Precio</Label>
-                                    <Input id="price" v-model.number="profile.price" type="number" min="1" class="mt-1.5" />
+                                    <Input id="price" v-model.number="profile.price" type="number" min="1" class="mt-1.5" placeholder="Ej. 250000" />
                                 </div>
                             </template>
 
                             <div>
-                                <Label for="version">Versión *</Label>
+                                <Label for="version">Versión (opcional)</Label>
                                 <select
                                     id="version"
                                     v-model="profile.version"
@@ -655,8 +796,9 @@ const submit = async () => {
                                     <option v-for="version in versionOptions" :key="version.id" :value="version.name">{{ version.name }}</option>
                                 </select>
                                 <p v-if="versionsError" class="mt-1 text-[11px] font-semibold text-destructive">{{ versionsError }}</p>
+                                <p v-else-if="!versionsLoading && versionOptions.length === 0" class="mt-1 text-[11px] text-muted-foreground">Puedes continuar sin versión; la financiera revisará el vehículo.</p>
                                 <button
-                                    v-if="!versionsLoading && versionOptions.length === 0 && profile.model"
+                                    v-if="!versionsLoading && versionOptions.length === 0 && (profile.modelId || profile.model)"
                                     type="button"
                                     class="mt-1 text-[11px] font-bold text-primary hover:underline"
                                     @click="loadVersions"
@@ -759,20 +901,15 @@ const submit = async () => {
                             <div class="grid gap-4 sm:grid-cols-2">
                                 <div><Label>Nombre completo</Label><Input v-model="application.full_name" class="mt-1.5" /></div>
                                 <div><Label>Correo</Label><Input v-model="application.email" type="email" class="mt-1.5" /></div>
-                                <div><Label>Teléfono</Label><Input v-model="application.phone" type="tel" class="mt-1.5" /></div>
+                                <div><Label>Teléfono</Label><PhoneInput v-model="application.phone" class="mt-1.5" /></div>
                                 <div><Label>Fecha de nacimiento</Label><Input v-model="application.birthdate" type="date" class="mt-1.5" /></div>
-                                <div><Label>RFC</Label><Input v-model="application.rfc" class="mt-1.5" /></div>
-                                <div><Label>CURP</Label><Input v-model="application.curp" class="mt-1.5" /></div>
+                                <div><Label>RFC</Label><Input v-model="application.rfc" class="mt-1.5" @input="application.rfc = application.rfc.toUpperCase()" /></div>
+                                <div><Label>CURP</Label><Input v-model="application.curp" class="mt-1.5" @input="application.curp = application.curp.toUpperCase()" /></div>
                                 <div class="sm:col-span-2"><Label>Calle y número</Label><Input v-model="application.calle" class="mt-1.5" /></div>
-                                <div><Label>Colonia</Label><Input v-model="application.colonia" class="mt-1.5" /></div>
-                                <div><Label>Código postal</Label><Input v-model="application.cp" class="mt-1.5" /></div>
-                                <div><Label>Alcaldía / municipio</Label><Input v-model="application.alcaldia" class="mt-1.5" /></div>
-                                <div><Label>Ciudad</Label><Input v-model="application.ciudad" class="mt-1.5" /></div>
+                                <ZipCodeFields v-model:cp="application.cp" v-model:colonia="application.colonia" v-model:alcaldia="application.alcaldia" v-model:state="application.state" />
                                 <div><Label>Ocupación</Label><Input v-model="application.ocupacion" class="mt-1.5" /></div>
                                 <div><Label>Empresa</Label><Input v-model="application.empresa" class="mt-1.5" /></div>
                                 <div><Label>Antigüedad</Label><Input v-model="application.antiguedad" class="mt-1.5" placeholder="3 años" /></div>
-                                <div><Label>Banco</Label><Input v-model="application.banco" class="mt-1.5" /></div>
-                                <div><Label>Tipo de cuenta</Label><Input v-model="application.tipo_cuenta" class="mt-1.5" placeholder="Nómina" /></div>
                             </div>
 
                             <div class="space-y-3">

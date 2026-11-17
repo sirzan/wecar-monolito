@@ -15,6 +15,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use Inertia\Testing\AssertableInertia as Assert;
 
 uses(RefreshDatabase::class);
 
@@ -35,6 +36,25 @@ function adminPublishPayload(CarBrand $brand, CarModel $model, CarVersion $versi
         'city' => 'Monterrey, NL',
         'plan_key' => $plan->key_name,
         'images' => [UploadedFile::fake()->image('carro.jpg')],
+    ];
+}
+
+function adminExternalCar(string $url, string $title = 'Toyota Corolla 2020'): array
+{
+    return [
+        'id' => app(ExternalCarNormalizer::class)->externalId($url),
+        'title' => $title,
+        'price' => 300000,
+        'year' => 2020,
+        'km' => 50000,
+        'location' => 'Monterrey',
+        'imageUrl' => 'https://http2.mlstatic.com/car.jpg',
+        'gallery' => [],
+        'sourceUrl' => $url,
+        'platformId' => 'mercadolibre',
+        'platformName' => 'Mercado Libre Autos',
+        'platformColor' => '#FFE600',
+        'platformInitials' => 'ML',
     ];
 }
 
@@ -173,4 +193,72 @@ it('gives admins unlimited external searches and direct source urls', function (
         ->assertOk()
         ->assertJsonPath('allowed', true)
         ->assertJsonPath('sourceUrl', $car['sourceUrl']);
+});
+
+it('allows managers to delete external cars across groups and delete a full group', function () {
+    $this->seed();
+
+    $manager = User::factory()->create(['email_verified_at' => now()]);
+    $manager->assignRole('manager');
+
+    $shared = adminExternalCar('https://autos.mercadolibre.com.mx/MLM-shared');
+    $other = adminExternalCar('https://autos.mercadolibre.com.mx/MLM-other', 'Nissan Sentra 2021');
+    $groupOne = ExternalSearchCache::query()->create([
+        'query_key' => 'admin-group-one',
+        'query_text' => 'toyota',
+        'platforms' => [],
+        'results' => [$shared, $other],
+        'platforms_searched' => ['Mercado Libre Autos'],
+    ]);
+    $groupTwo = ExternalSearchCache::query()->create([
+        'query_key' => 'admin-group-two',
+        'query_text' => 'corolla',
+        'platforms' => [],
+        'results' => [$shared],
+        'platforms_searched' => ['Mercado Libre Autos'],
+    ]);
+
+    $this->actingAs($manager)
+        ->get('/admin/autos-externos')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Admin/ExternalAutos')
+            ->has('groups.data', 2)
+        );
+
+    $this->actingAs($manager)
+        ->post('/admin/autos-externos/seleccion', ['ids' => [$shared['id']]])
+        ->assertRedirect();
+
+    expect($groupOne->fresh()->results)->toHaveCount(1)
+        ->and($groupTwo->fresh())->toBeNull();
+
+    $this->actingAs($manager)
+        ->delete("/admin/autos-externos/grupos/{$groupOne->getKey()}")
+        ->assertRedirect();
+
+    expect(ExternalSearchCache::query()->whereKey($groupOne->getKey())->exists())->toBeFalse();
+});
+
+it('lets viewers inspect external cars but not delete them', function () {
+    $this->seed();
+
+    $viewer = User::factory()->create(['email_verified_at' => now()]);
+    $viewer->assignRole('viewer');
+    $car = adminExternalCar('https://autos.mercadolibre.com.mx/MLM-viewer');
+    $group = ExternalSearchCache::query()->create([
+        'query_key' => 'viewer-group',
+        'query_text' => 'viewer',
+        'platforms' => [],
+        'results' => [$car],
+        'platforms_searched' => ['Mercado Libre Autos'],
+    ]);
+
+    $this->actingAs($viewer)->get('/admin/autos-externos')->assertOk();
+
+    $this->actingAs($viewer)
+        ->delete('/admin/autos-externos/'.$car['id'])
+        ->assertForbidden();
+
+    expect(ExternalSearchCache::query()->whereKey($group->getKey())->exists())->toBeTrue();
 });

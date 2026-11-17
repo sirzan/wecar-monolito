@@ -53,6 +53,40 @@ it('generates offers and filters banks for vehicles older than 8 years', functio
         ->and($bbvaOffer['motivo'])->toContain('8 años');
 });
 
+it('requires an active membership for restricted financial offers', function () {
+    $financiera = Financiera::query()->create([
+        'slug' => 'membership-only',
+        'nombre' => 'Financiera con membresía',
+        'tipo' => 'fintech',
+        'tasa_min' => 12,
+        'tasa_max' => 18,
+        'cat_min' => 14,
+        'cat_max' => 20,
+        'enganche_pct' => 10,
+        'plazo_max' => 60,
+        'score_min' => 500,
+        'activo' => true,
+        'vehicle_condition' => 'any',
+        'requires_membership' => true,
+    ]);
+
+    $input = [
+        'precio' => 200000,
+        'enganche' => 50000,
+        'plazo' => 48,
+        'car_year' => now()->year - 2,
+    ];
+
+    $withoutMembership = collect(app(CreditOfferService::class)->generate($input, 700, collect([$financiera])))
+        ->first();
+    $withMembership = collect(app(CreditOfferService::class)->generate($input, 700, collect([$financiera]), true))
+        ->first();
+
+    expect($withoutMembership['elegible'])->toBeFalse()
+        ->and($withoutMembership['motivo'])->toContain('membresía')
+        ->and($withMembership['elegible'])->toBeTrue();
+});
+
 it('returns list of active financieras from api', function () {
     $this->seed();
 

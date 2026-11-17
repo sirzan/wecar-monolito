@@ -2,7 +2,9 @@
 
 use App\Models\Agency;
 use App\Models\User;
+use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
 use Inertia\Testing\AssertableInertia as Assert;
 
 uses(RefreshDatabase::class);
@@ -96,4 +98,32 @@ it('requires agency data when registering as agency', function () {
         'password_confirmation' => 'Password123',
         'terms' => true,
     ])->assertSessionHasErrors(['agency_name', 'agency_phone']);
+});
+
+it('allows an unverified user to correct their email', function () {
+    Notification::fake();
+
+    $user = User::factory()->unverified()->create(['email' => 'wrong@example.com']);
+
+    $this->actingAs($user)
+        ->put('/email/verification-email', [
+            'email' => 'correct@example.com',
+            'current_password' => 'password',
+        ])
+        ->assertRedirect();
+
+    expect($user->fresh()->email)->toBe('correct@example.com')
+        ->and($user->fresh()->email_verified_at)->toBeNull();
+
+    Notification::assertSentTo($user, VerifyEmail::class);
+});
+
+it('allows an unverified user to log out from the verification state', function () {
+    $user = User::factory()->unverified()->create();
+
+    $this->actingAs($user)
+        ->post('/logout')
+        ->assertRedirect('/');
+
+    $this->assertGuest();
 });

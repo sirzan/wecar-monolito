@@ -78,8 +78,14 @@ class PublicController extends Controller
     {
         $filters = $request->only([
             'q', 'brand', 'model', 'version', 'city', 'body', 'transmission', 'fuel', 'color',
-            'min_price', 'max_price', 'min_year', 'max_year', 'sort',
+            'min_price', 'max_price', 'min_year', 'max_year', 'min_km', 'max_km', 'sort',
         ]);
+
+        foreach ([['min_price', 'max_price'], ['min_year', 'max_year'], ['min_km', 'max_km']] as [$min, $max]) {
+            if (isset($filters[$min], $filters[$max]) && is_numeric($filters[$min]) && is_numeric($filters[$max]) && (float) $filters[$min] > (float) $filters[$max]) {
+                [$filters[$min], $filters[$max]] = [$filters[$max], $filters[$min]];
+            }
+        }
 
         $hasFilters = collect($filters)->filter(fn ($value) => $value !== null && $value !== '')->isNotEmpty();
 
@@ -156,6 +162,8 @@ class PublicController extends Controller
         $query->when($filters['max_price'] ?? null, fn (Builder $query, $max) => $query->where('price', '<=', (float) $max));
         $query->when($filters['min_year'] ?? null, fn (Builder $query, $min) => $query->where('year', '>=', (int) $min));
         $query->when($filters['max_year'] ?? null, fn (Builder $query, $max) => $query->where('year', '<=', (int) $max));
+        $query->when($filters['min_km'] ?? null, fn (Builder $query, $min) => $query->where('km', '>=', (int) $min));
+        $query->when($filters['max_km'] ?? null, fn (Builder $query, $max) => $query->where('km', '<=', (int) $max));
 
         match ($filters['sort'] ?? 'recent') {
             'price-asc' => $query->orderBy('price'),

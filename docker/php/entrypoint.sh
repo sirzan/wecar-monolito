@@ -3,7 +3,7 @@ set -e
 
 cd /var/www/html
 
-mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache
+mkdir -p storage/app/public storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache
 
 if [ "${APP_ENV:-production}" = "local" ] && [ ! -f vendor/autoload.php ]; then
     echo "Installing Composer dependencies for development..."
@@ -15,10 +15,14 @@ if [ "${WAIT_FOR_DB:-true}" = "true" ]; then
 fi
 
 chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
+chmod 0755 storage storage/app storage/app/public 2>/dev/null || true
+chmod -R a+rX storage/app/public 2>/dev/null || true
 
-if [ ! -L public/storage ]; then
-    php artisan storage:link >/dev/null 2>&1 || true
+if [ -L public/storage ]; then
+    rm -f public/storage
 fi
+
+php artisan storage:link >/dev/null 2>&1 || true
 
 if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
     php artisan migrate --force

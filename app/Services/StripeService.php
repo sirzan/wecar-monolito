@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Subscription;
 use App\Models\User;
+use App\Models\UserStripeCustomer;
 use Stripe\Checkout\Session;
 use Stripe\StripeClient;
 use Stripe\Webhook;
@@ -32,9 +33,11 @@ class StripeService
             throw new \RuntimeException('Stripe no está configurado.');
         }
 
-        $session = $this->client->checkout->sessions->create([
+        $subscription->loadMissing('user');
+
+        $customerId = $subscription->user ? $this->ensureCustomer($subscription->user) : null;
+        $checkout = [
             'mode' => 'payment',
-            'customer_email' => $subscription->user?->email,
             'client_reference_id' => $subscription->getKey(),
             'line_items' => [[
                 'quantity' => 1,
@@ -55,7 +58,15 @@ class StripeService
             ],
             'success_url' => $successUrl,
             'cancel_url' => $cancelUrl,
-        ]);
+        ];
+
+        if ($customerId) {
+            $checkout['customer'] = $customerId;
+        } else {
+            $checkout['customer_email'] = $subscription->user?->email;
+        }
+
+        $session = $this->client->checkout->sessions->create($checkout);
 
         return ['id' => $session->id, 'url' => (string) $session->url];
     }
@@ -86,8 +97,10 @@ class StripeService
             throw new \RuntimeException('Stripe no está configurado.');
         }
 
-        if ($user->stripe_customer_id) {
-            return $user->stripe_customer_id;
+        $storedCustomer = UserStripeCustomer::query()->find($user->getKey());
+
+        if ($storedCustomer?->stripe_customer_id) {
+            return $storedCustomer->stripe_customer_id;
         }
 
         $customer = $this->client->customers->create([
@@ -96,7 +109,10 @@ class StripeService
             'metadata' => ['user_id' => $user->getKey()],
         ]);
 
-        $user->forceFill(['stripe_customer_id' => $customer->id])->save();
+        UserStripeCustomer::query()->updateOrCreate(
+            ['user_id' => $user->getKey()],
+            ['stripe_customer_id' => $customer->id],
+        );
 
         return (string) $customer->id;
     }
@@ -122,11 +138,15 @@ class StripeService
      */
     public function cards(User $user): array
     {
-        if (! $this->client || ! $user->stripe_customer_id) {
+        if (! $this->client) {
             return [];
         }
 
-        $customerId = $user->stripe_customer_id;
+        $customerId = UserStripeCustomer::query()->whereKey($user->getKey())->value('stripe_customer_id');
+
+        if (! $customerId) {
+            return [];
+        }
         $methods = $this->client->paymentMethods->all([
             'customer' => $customerId,
             'type' => 'card',

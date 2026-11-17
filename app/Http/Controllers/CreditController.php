@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Car;
 use App\Models\CreditApplication;
 use App\Models\CreditDocument;
 use App\Models\Financiera;
@@ -10,8 +11,10 @@ use App\Services\CreditDocumentService;
 use App\Services\CreditEvaluationService;
 use App\Services\CreditOfferService;
 use App\Services\CreditScoringService;
+use App\Services\MembershipService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -24,6 +27,7 @@ class CreditController extends Controller
         private readonly CreditDocumentService $documents,
         private readonly CreditScoringService $scoring,
         private readonly CreditOfferService $offers,
+        private readonly MembershipService $memberships,
     ) {}
 
     public function financieras(): JsonResponse
@@ -33,6 +37,35 @@ class CreditController extends Controller
                 ->where('activo', true)
                 ->orderBy('orden')
                 ->get(),
+        ]);
+    }
+
+    public function profile(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $profile = $user->profile;
+
+        return response()->json([
+            'profile' => [
+                'full_name' => $profile?->full_name ?? $user->name,
+                'email' => $user->email,
+                'phone' => $profile?->phone ?? $user->phone,
+                'birthdate' => $profile?->birthdate?->toDateString(),
+                'rfc' => $profile?->rfc,
+                'curp' => $profile?->curp,
+                'gender' => $profile?->genero,
+                'calle' => $profile?->calle,
+                'colonia' => $profile?->colonia,
+                'cp' => $profile?->cp,
+                'alcaldia' => $profile?->alcaldia,
+                'state' => $profile?->state,
+                'ocupacion' => $profile?->ocupacion ?? data_get($profile?->metadata, 'ocupacion'),
+                'empresa' => $profile?->empresa ?? data_get($profile?->metadata, 'empresa'),
+                'antiguedad' => $profile?->antiguedad ?? data_get($profile?->metadata, 'antiguedad'),
+                'tipo_trabajo' => $profile?->tipo_trabajo ?? data_get($profile?->metadata, 'tipo_trabajo'),
+                'ingreso_mensual' => $profile?->ingreso_mensual,
+                'deuda_mensual' => $profile?->deuda_mensual,
+            ],
         ]);
     }
 
@@ -52,9 +85,9 @@ class CreditController extends Controller
             'perfil.plazoMeses' => ['required', 'integer', 'min:12', 'max:84'],
             'perfil.historialBuro' => ['required', Rule::in(['excelente', 'bueno', 'regular', 'sin-historial', 'malo'])],
             'perfil.tipoEmpleo' => ['required', Rule::in(['fijo', 'honorarios', 'negocio', 'eventual'])],
-            'perfil.antiguedadLaboralAnios' => ['nullable', 'numeric', 'min:0'],
+            'perfil.antiguedadLaboralAnios' => ['required', 'numeric', 'min:0'],
             'perfil.deudasMensuales' => ['nullable', 'numeric', 'min:0'],
-            'perfil.edad' => ['nullable', 'integer', 'min:18', 'max:99'],
+            'perfil.edad' => ['required', 'integer', 'min:18', 'max:99'],
         ]);
 
         return response()->json(
@@ -104,15 +137,15 @@ class CreditController extends Controller
             'colonia' => ['required', 'string', 'max:120'],
             'cp' => ['required', 'string', 'max:10'],
             'alcaldia' => ['required', 'string', 'max:120'],
-            'ciudad' => ['required', 'string', 'max:120'],
+            'ciudad' => ['nullable', 'string', 'max:120'],
             'pais' => ['required', 'string', 'max:80'],
             'ocupacion' => ['required', 'string', 'max:120'],
             'empresa' => ['nullable', 'string', 'max:160'],
             'antiguedad' => ['nullable', 'string', 'max:80'],
             'ingreso_mensual' => ['required', 'numeric', 'min:1'],
             'deuda_mensual' => ['nullable', 'numeric', 'min:0'],
-            'banco' => ['required', 'string', 'max:80'],
-            'tipo_cuenta' => ['required', 'string', 'max:80'],
+            'banco' => ['nullable', 'string', 'max:80'],
+            'tipo_cuenta' => ['nullable', 'string', 'max:80'],
             'car_brand' => ['required', 'string', 'max:120'],
             'car_model' => ['required', 'string', 'max:120'],
             'car_version' => ['nullable', 'string', 'max:160'],
@@ -123,10 +156,10 @@ class CreditController extends Controller
             'financiera_name' => ['required', 'string', 'max:160'],
             'car_id' => ['nullable', 'uuid', 'exists:cars,id'],
             'car_condition' => ['nullable', Rule::in(['new', 'used'])],
-            'bureau' => ['nullable', Rule::in(['excelente', 'bueno', 'regular', 'sin-historial', 'malo'])],
-            'employment' => ['nullable', Rule::in(['fijo', 'honorarios', 'negocio', 'eventual'])],
-            'tenure' => ['nullable', 'numeric', 'min:0'],
-            'age' => ['nullable', 'integer', 'min:18', 'max:99'],
+            'bureau' => ['required', Rule::in(['excelente', 'bueno', 'regular', 'sin-historial', 'malo'])],
+            'employment' => ['required', Rule::in(['fijo', 'honorarios', 'negocio', 'eventual'])],
+            'tenure' => ['required', 'numeric', 'min:0'],
+            'age' => ['required', 'integer', 'min:18', 'max:99'],
             'score' => ['nullable', 'integer', 'min:0', 'max:1000'],
             'risk_level' => ['nullable', 'string', 'max:40'],
             'down_payment' => ['required', 'numeric', 'min:0'],
@@ -150,12 +183,42 @@ class CreditController extends Controller
             ->where('activo', true)
             ->firstOrFail();
 
+        $validated['rfc'] = filled($validated['rfc'] ?? null) ? Str::upper((string) $validated['rfc']) : null;
+        $validated['curp'] = filled($validated['curp'] ?? null) ? Str::upper((string) $validated['curp']) : null;
+
+        if ($validated['car_id'] ?? null) {
+            $car = Car::query()
+                ->with(['brand', 'model', 'version'])
+                ->whereKey($validated['car_id'])
+                ->where('owner_id', $request->user()->getKey())
+                ->first();
+
+            if (! $car) {
+                throw ValidationException::withMessages([
+                    'car_id' => 'El auto seleccionado no pertenece a tu cuenta.',
+                ]);
+            }
+
+            $validated['car_brand'] = $car->brand?->name ?? $validated['car_brand'];
+            $validated['car_model'] = $car->model?->name ?? $validated['car_model'];
+            $validated['car_version'] = $car->version?->name ?? $validated['car_version'];
+            $validated['car_year'] = (int) $car->year;
+            $validated['car_price'] = (float) $car->price;
+            $validated['car_km'] = $car->km;
+        }
+
+        if ((float) $validated['down_payment'] > (float) $validated['car_price']) {
+            throw ValidationException::withMessages([
+                'down_payment' => 'El enganche no puede ser mayor que el precio del auto.',
+            ]);
+        }
+
         $input = [
             'ingreso' => (float) $validated['ingreso_mensual'],
-            'edad' => (int) ($validated['age'] ?? 30),
-            'antiguedad' => (float) ($validated['tenure'] ?? 0),
-            'empleo' => (string) ($validated['employment'] ?? 'fijo'),
-            'historial' => (string) ($validated['bureau'] ?? 'bueno'),
+            'edad' => (int) $validated['age'],
+            'antiguedad' => (float) $validated['tenure'],
+            'empleo' => (string) $validated['employment'],
+            'historial' => (string) $validated['bureau'],
             'deudas' => (float) ($validated['deuda_mensual'] ?? 0),
             'precio' => (float) $validated['car_price'],
             'enganche' => (float) $validated['down_payment'],
@@ -166,7 +229,12 @@ class CreditController extends Controller
         ];
 
         $score = $this->scoring->calculate($input);
-        $offer = collect($this->offers->generate($input, $score['score'], collect([$financiera])))->first();
+        $offer = collect($this->offers->generate(
+            $input,
+            $score['score'],
+            collect([$financiera]),
+            $this->memberships->isSubscribed($request->user()),
+        ))->first();
 
         if (! $offer || ! $offer['elegible']) {
             throw ValidationException::withMessages([
@@ -187,6 +255,8 @@ class CreditController extends Controller
             'ine', 'domicilio', 'estado_cuenta',
             'reuse_ine', 'reuse_domicilio', 'reuse_estado_cuenta',
             'car_condition', 'bureau', 'employment', 'tenure', 'age',
+            'score', 'risk_level', 'monthly_payment', 'rate', 'cat', 'total_to_pay',
+            'inputs', 'offers', 'financiera_name',
         ])->all();
 
         $data = [
@@ -202,7 +272,6 @@ class CreditController extends Controller
             'term_months' => $offer['plazo_efectivo'],
             'service_fee' => $offer['cargo_servicio'],
             'inputs' => [
-                ...($validated['inputs'] ?? []),
                 'quote' => [
                     'financiera_id' => $financiera->getKey(),
                     'tasa' => $offer['tasa'],
@@ -213,6 +282,7 @@ class CreditController extends Controller
                     'total' => $offer['total'],
                 ],
             ],
+            'offers' => [$offer],
         ];
 
         $application = $this->applications->submit(

@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\Mail;
 
 class PlanReminderService
 {
+    private const BUSINESS_TIMEZONE = 'America/Monterrey';
+
     private const THRESHOLDS = [7, 3, 1, 0];
 
     public function __construct(private readonly PushService $push) {}
@@ -22,61 +24,66 @@ class PlanReminderService
      */
     public function run(): array
     {
+        $businessNow = $this->businessNow();
+        $from = $businessNow->copy()->startOfDay()->setTimezone('UTC');
+        $until = $businessNow->copy()->addDays(8)->endOfDay()->setTimezone('UTC');
         $subscriptions = Subscription::query()
-            ->with(['plan', 'user', 'agency.owner'])
+            ->with(['plan', 'user.pushSubscriptions', 'agency.owner.pushSubscriptions', 'agency.planRelation'])
             ->whereIn('status', ['active', 'expired'])
             ->whereNotNull('ends_at')
-            ->whereBetween('ends_at', [now()->startOfDay(), now()->addDays(8)->endOfDay()])
-            ->get();
+            ->whereBetween('ends_at', [$from, $until]);
 
         $sent = 0;
         $subscriptionsSent = 0;
 
-        foreach ($subscriptions as $subscription) {
-            $key = $this->reminderKey($subscription->ends_at);
+        $subscriptions->chunkById(500, function ($batch) use (&$sent, &$subscriptionsSent): void {
+            foreach ($batch as $subscription) {
+                $key = $this->reminderKey($subscription->ends_at);
 
-            if (! $key || ($subscription->status === 'expired' && $this->hasActiveReplacement($subscription))) {
-                continue;
+                if (! $key || ($subscription->status === 'expired' && $this->hasActiveReplacement($subscription))) {
+                    continue;
+                }
+
+                $user = $subscription->kind === 'agency'
+                    ? $subscription->agency?->owner
+                    : $subscription->user;
+
+                if (! $user) {
+                    continue;
+                }
+
+                if ($this->send($subscription, $key, $user, $this->contextForSubscription($subscription))) {
+                    $subscriptionsSent++;
+                    $sent++;
+                }
             }
-
-            $user = $subscription->kind === 'agency'
-                ? $subscription->agency?->owner
-                : $subscription->user;
-
-            if (! $user) {
-                continue;
-            }
-
-            if ($this->send($subscription, $key, $user, $this->contextForSubscription($subscription))) {
-                $subscriptionsSent++;
-                $sent++;
-            }
-        }
+        });
 
         $agencies = Agency::query()
-            ->with('owner')
+            ->with(['owner.pushSubscriptions', 'planRelation'])
             ->whereNotNull('plan_expires_at')
-            ->whereBetween('plan_expires_at', [now()->startOfDay(), now()->addDays(8)->endOfDay()])
+            ->whereBetween('plan_expires_at', [$from, $until])
             ->whereDoesntHave('subscriptions', fn ($query) => $query
                 ->where('kind', 'agency')
                 ->where('status', '!=', 'pending')
-                ->where(fn ($query) => $query->whereNull('ends_at')->orWhere('ends_at', '>=', now()->startOfDay())))
-            ->get();
+                ->where(fn ($query) => $query->whereNull('ends_at')->orWhere('ends_at', '>=', $from)));
 
         $agenciesSent = 0;
 
-        foreach ($agencies as $agency) {
-            $key = $this->reminderKey($agency->plan_expires_at);
+        $agencies->chunkById(500, function ($batch) use (&$sent, &$agenciesSent): void {
+            foreach ($batch as $agency) {
+                $key = $this->reminderKey($agency->plan_expires_at);
 
-            if (! $key || ! $agency->owner) {
-                continue;
-            }
+                if (! $key || ! $agency->owner) {
+                    continue;
+                }
 
-            if ($this->send($agency, $key, $agency->owner, $this->contextForAgency($agency))) {
-                $agenciesSent++;
-                $sent++;
+                if ($this->send($agency, $key, $agency->owner, $this->contextForAgency($agency))) {
+                    $agenciesSent++;
+                    $sent++;
+                }
             }
-        }
+        });
 
         return [
             'subscriptions' => $subscriptionsSent,
@@ -103,7 +110,10 @@ class PlanReminderService
             return null;
         }
 
-        $days = (int) floor(now()->startOfDay()->diffInDays($endsAt->copy()->startOfDay(), false));
+        $days = (int) floor($this->businessNow()->startOfDay()->diffInDays(
+            $endsAt->copy()->setTimezone(self::BUSINESS_TIMEZONE)->startOfDay(),
+            false,
+        ));
 
         if ($days < 0) {
             return null;
@@ -120,16 +130,13 @@ class PlanReminderService
 
     private function send(Subscription|Agency $subject, string $key, User $user, array $context): bool
     {
-        $reminder = PlanReminder::query()->firstOrCreate(
-            [
-                'subject_type' => $subject::class,
-                'subject_id' => $subject->getKey(),
-                'reminder_key' => $key,
-            ],
-            ['sent_at' => now()],
-        );
+        $criteria = [
+            'subject_type' => $subject::class,
+            'subject_id' => $subject->getKey(),
+            'reminder_key' => $key,
+        ];
 
-        if (! $reminder->wasRecentlyCreated) {
+        if (PlanReminder::query()->where($criteria)->exists()) {
             return false;
         }
 
@@ -160,11 +167,16 @@ class PlanReminderService
             'url' => $context['url'],
         ];
 
-        foreach ($user->pushSubscriptions()->get() as $pushSubscription) {
+        foreach ($user->pushSubscriptions as $pushSubscription) {
             $this->push->send($pushSubscription, $payload);
         }
 
-        return true;
+        return PlanReminder::query()->firstOrCreate($criteria, ['sent_at' => now()])->wasRecentlyCreated;
+    }
+
+    private function businessNow(): Carbon
+    {
+        return Carbon::now(self::BUSINESS_TIMEZONE);
     }
 
     /**

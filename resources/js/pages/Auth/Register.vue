@@ -8,6 +8,7 @@ import Logo from '@/components/site/Logo.vue';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
+import PhoneInput from '@/components/ui/PhoneInput.vue';
 
 defineOptions({ layout: PublicLayout });
 
@@ -107,7 +108,7 @@ const submit = () => {
                     </div>
                     <div>
                         <Label for="agency_phone">Teléfono de la agencia</Label>
-                        <Input id="agency_phone" v-model="form.agency_phone" type="tel" class="mt-1.5" autocomplete="tel" placeholder="81 1234 5678" />
+                        <PhoneInput id="agency_phone" v-model="form.agency_phone" class="mt-1.5" autocomplete="tel" placeholder="81 1234 5678" />
                         <p v-if="form.errors.agency_phone" class="mt-1 text-xs font-medium text-destructive">{{ form.errors.agency_phone }}</p>
                     </div>
                 </template>
@@ -150,7 +151,6 @@ const submit = () => {
                         :type="showPassword ? 'text' : 'password'"
                         class="mt-1.5"
                         autocomplete="new-password"
-                        placeholder="••••••••"
                     />
                 </div>
 

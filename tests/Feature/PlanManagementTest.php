@@ -182,6 +182,31 @@ it('uses the admin agency plan for new agencies', function () {
         ->and($agency->plan_expires_at->diffInDays(now()->addWeeks(2)))->toBeLessThan(1);
 });
 
+it('creates a membership checkout for the selected active plan', function () {
+    $user = planUser();
+    $plan = Plan::query()->create([
+        'key_name' => 'membership_selected',
+        'type' => 'membership',
+        'audience' => 'user',
+        'name' => 'Membresía seleccionada',
+        'price' => 799,
+        'duration' => '8 semanas',
+        'duration_weeks' => 8,
+        'max_cars' => 0,
+        'is_active' => true,
+        'sort_order' => 1,
+    ]);
+
+    $this->actingAs($user)
+        ->post('/panel/membresia/checkout', ['plan_key' => $plan->key_name])
+        ->assertRedirect();
+
+    $subscription = Subscription::query()->where('user_id', $user->getKey())->latest()->firstOrFail();
+
+    expect($subscription->plan_id)->toBe($plan->getKey())
+        ->and((float) $subscription->amount)->toBe(799.0);
+});
+
 it('blocks expired agencies from publishing', function () {
     Storage::fake('public');
 
@@ -332,6 +357,33 @@ it('exposes usage and renewal data in billing', function () {
             ->where('activePlan.max_cars', 3)
             ->where('activePlan.used_cars', 1)
             ->has('activePlan.subscription_id')
+        );
+});
+
+it('shows only confirmed payments in user billing history', function () {
+    $user = planUser();
+
+    Payment::query()->create([
+        'user_id' => $user->getKey(),
+        'provider' => 'spei',
+        'amount' => 500,
+        'currency' => 'MXN',
+        'status' => 'pending',
+    ]);
+    Payment::query()->create([
+        'user_id' => $user->getKey(),
+        'provider' => 'stripe',
+        'amount' => 500,
+        'currency' => 'MXN',
+        'status' => 'paid',
+        'paid_at' => now(),
+    ]);
+
+    $this->actingAs($user)
+        ->get('/panel/facturacion')
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('invoices', 1)
+            ->where('invoices.0.status', 'paid')
         );
 });
 

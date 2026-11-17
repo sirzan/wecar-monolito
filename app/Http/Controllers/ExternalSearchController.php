@@ -23,9 +23,15 @@ class ExternalSearchController extends Controller
     {
         $validated = $request->validate([
             'q' => ['required', 'string', 'min:3', 'max:200'],
+            'refresh' => ['nullable', 'boolean'],
         ]);
 
-        $result = $this->external->search($request->user(), $request->ip(), $validated['q']);
+        $result = $this->external->search(
+            $request->user(),
+            $request->ip(),
+            $validated['q'],
+            (bool) ($validated['refresh'] ?? false),
+        );
 
         if (($result['error'] ?? null) === 'Búsqueda externa no disponible (API Key faltante).') {
             return response()->json(['error' => $result['error']], 422);

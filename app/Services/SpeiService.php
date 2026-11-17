@@ -14,12 +14,23 @@ class SpeiService
     {
         $payments = SiteSetting::get('payments', []);
 
+        abort_unless($this->configured($payments), 422, 'Los datos SPEI aún no están configurados.');
+
         return [
             'reference' => 'WECAR-'.Str::upper(Str::random(8)),
-            'bank_name' => $payments['spei_bank_name'] ?? 'BBVA',
-            'clabe' => $payments['spei_clabe'] ?? '012180000000000000',
-            'beneficiary' => $payments['spei_beneficiary'] ?? 'Wecar SA de CV',
+            'bank_name' => $payments['spei_bank_name'],
+            'clabe' => $payments['spei_clabe'],
+            'beneficiary' => $payments['spei_beneficiary'],
             'amount' => $amount,
         ];
+    }
+
+    public function configured(?array $payments = null): bool
+    {
+        $payments ??= SiteSetting::get('payments', []);
+
+        return filled($payments['spei_bank_name'] ?? null)
+            && filled($payments['spei_beneficiary'] ?? null)
+            && preg_match('/^\d{18}$/', (string) ($payments['spei_clabe'] ?? '')) === 1;
     }
 }

@@ -6,6 +6,7 @@ import PanelLayout from '@/layouts/PanelLayout.vue';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
+import PhoneInput from '@/components/ui/PhoneInput.vue';
 import { usePushNotifications } from '@/composables/usePush';
 
 defineOptions({ layout: PanelLayout });
@@ -36,6 +37,10 @@ const form = useForm({
 });
 
 const submit = () => form.post('/panel/configuracion', { preserveScroll: true });
+
+const uppercase = (field: 'rfc' | 'curp') => {
+    form[field] = form[field].toUpperCase();
+};
 
 const accountType = useForm({ account_type: props.profile.is_agency ? 'agency' : 'personal' });
 const saveAccountType = () => accountType.patch('/panel/tipo-cuenta', { preserveScroll: true });
@@ -186,7 +191,7 @@ const disableTwoFactor = async () => {
                 </div>
                 <div>
                     <Label for="phone">Teléfono</Label>
-                    <Input id="phone" v-model="form.phone" class="mt-1.5" />
+                    <PhoneInput id="phone" v-model="form.phone" class="mt-1.5" />
                 </div>
                 <div>
                     <Label for="birthdate">Fecha de nacimiento</Label>
@@ -202,11 +207,11 @@ const disableTwoFactor = async () => {
                 </div>
                 <div>
                     <Label for="rfc">RFC</Label>
-                    <Input id="rfc" v-model="form.rfc" class="mt-1.5" />
+                    <Input id="rfc" v-model="form.rfc" class="mt-1.5" @input="uppercase('rfc')" />
                 </div>
                 <div>
                     <Label for="curp">CURP</Label>
-                    <Input id="curp" v-model="form.curp" class="mt-1.5" />
+                    <Input id="curp" v-model="form.curp" class="mt-1.5" @input="uppercase('curp')" />
                 </div>
             </div>
             <Button type="submit" class="mt-6" :disabled="form.processing">Guardar cambios</Button>

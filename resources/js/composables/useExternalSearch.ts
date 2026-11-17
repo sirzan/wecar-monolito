@@ -73,7 +73,7 @@ export function useExternalSearch() {
         }
     };
 
-    const search = async (query: string) => {
+    const search = async (query: string, refresh = false) => {
         if (!query.trim() || loading.value) return;
         lastQuery.value = query.trim();
         loading.value = true;
@@ -84,7 +84,10 @@ export function useExternalSearch() {
         try {
             const payload = await request<ExternalSearchResponse>('/api/external-search', {
                 method: 'POST',
-                body: JSON.stringify({ q: query.trim() }),
+                body: JSON.stringify({
+                    q: query.trim(),
+                    ...(refresh ? { refresh: true } : {}),
+                }),
             });
 
             if (payload.limitReached) {

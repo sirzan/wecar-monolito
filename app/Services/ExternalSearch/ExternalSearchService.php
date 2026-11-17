@@ -64,7 +64,7 @@ class ExternalSearchService
     /**
      * @return array<string, mixed>
      */
-    public function search(?User $user, ?string $ip, string $query): array
+    public function search(?User $user, ?string $ip, string $query, bool $forceRefresh = false): array
     {
         $activePlatforms = $this->platforms->active();
 
@@ -104,54 +104,94 @@ class ExternalSearchService
         $cacheKey = $this->cache->key($query, $activePlatforms);
         $memoryKey = 'external-search:'.$cacheKey;
 
-        $cached = Cache::get($memoryKey);
+        if (! $forceRefresh) {
+            $cached = Cache::get($memoryKey);
 
-        if (is_array($cached) && isset($cached['results'])) {
-            return $this->searchResponse($cached, $unlimited, $usageCount, $tokenUsed);
-        }
+            if (is_array($cached) && isset($cached['results'])) {
+                $filtered = $this->filterRelevantResults($cached['results'], $query);
 
-        $databaseCache = $this->cache->get($cacheKey);
+                if (count($filtered) >= 3) {
+                    return $this->searchResponse([
+                        ...$cached,
+                        'results' => $filtered,
+                    ], $unlimited, $usageCount, $tokenUsed);
+                }
+            }
 
-        if ($databaseCache) {
-            $results = $this->normalizeStoredResults($databaseCache['results'] ?? []);
+            $databaseCache = $this->cache->get($cacheKey);
 
-            if ($results !== []) {
-                $payload = [
-                    'results' => $results,
-                    'platformsSearched' => $databaseCache['platforms_searched'] ?? [],
-                ];
-                Cache::put($memoryKey, $payload, now()->addMinutes((int) config('external_search.memory_ttl_minutes', 30)));
+            if ($databaseCache) {
+                $results = $this->filterRelevantResults(
+                    $this->normalizeStoredResults($databaseCache['results'] ?? []),
+                    $query,
+                );
 
-                return $this->searchResponse($payload, $unlimited, $usageCount, $tokenUsed);
+                if (count($results) >= 3) {
+                    $payload = [
+                        'results' => $results,
+                        'platformsSearched' => $databaseCache['platforms_searched'] ?? [],
+                    ];
+                    Cache::put($memoryKey, $payload, now()->addMinutes((int) config('external_search.memory_ttl_minutes', 30)));
+
+                    return $this->searchResponse($payload, $unlimited, $usageCount, $tokenUsed);
+                }
             }
         }
 
         $cars = [];
+        $firecrawlPlatforms = [];
+        $apifyPlatforms = [];
 
         foreach ($activePlatforms as $platform) {
-            $found = ($platform['provider'] ?? 'firecrawl') === 'apify'
-                ? $this->apify->search($query, $platform)
-                : $this->firecrawl->search($query, $platform);
-
-            foreach ($found as $car) {
-                $cars[$car['id']] = $car;
+            if (($platform['provider'] ?? 'firecrawl') === 'apify') {
+                $apifyPlatforms[] = $platform;
+            } else {
+                $firecrawlPlatforms[] = $platform;
             }
         }
 
-        $cars = $this->normalizer->sortByPlatform(array_values($this->normalizer->withIds($cars)));
+        if ($firecrawlPlatforms !== []) {
+            foreach ($this->firecrawl->searchBatch($query, $firecrawlPlatforms) as $foundCars) {
+                foreach ($foundCars as $car) {
+                    if ($this->normalizer->matchesQuery($car, $query)) {
+                        $cars[$car['id']] = $car;
+                    }
+                }
+            }
+        }
+
+        foreach ($apifyPlatforms as $platform) {
+            foreach ($this->apify->search($query, $platform) as $car) {
+                if ($this->normalizer->matchesQuery($car, $query)) {
+                    $cars[$car['id']] = $car;
+                }
+            }
+        }
+
+        $candidates = $this->normalizer->balanceByPlatform(array_values($this->normalizer->withIds($cars)), 24);
+        $verified = $this->normalizer->verifyLiveCars($candidates);
+        $cars = $this->normalizer->balanceByPlatform(array_values($this->normalizer->withIds($verified)), 15);
         $payload = [
             'results' => $cars,
             'platformsSearched' => collect($activePlatforms)->pluck('name')->values()->all(),
         ];
 
-        Cache::put($memoryKey, $payload, now()->addMinutes((int) config('external_search.memory_ttl_minutes', 30)));
-        $this->cache->put(
-            $cacheKey,
-            $query,
-            $activePlatforms,
-            $cars,
-            $payload['platformsSearched'],
-        );
+        $memoryTtl = count($cars) >= 3
+            ? now()->addMinutes((int) config('external_search.memory_ttl_minutes', 30))
+            : now()->addMinutes(5);
+
+        Cache::put($memoryKey, $payload, $memoryTtl);
+
+        // Solo persistimos en caché de larga duración (7 días) cuando la búsqueda obtuvo resultados suficientes.
+        if (count($cars) >= 3) {
+            $this->cache->put(
+                $cacheKey,
+                $query,
+                $activePlatforms,
+                $cars,
+                $payload['platformsSearched'],
+            );
+        }
 
         return $this->searchResponse($payload, $unlimited, $usageCount, $tokenUsed);
     }
@@ -229,6 +269,34 @@ class ExternalSearchService
             'tokenUsed' => $tokenUsed,
             'limitReached' => false,
         ];
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $results
+     * @return array<int, array<string, mixed>>
+     */
+    private function filterRelevantResults(array $results, string $query): array
+    {
+        return array_values(array_filter(
+            $results,
+            function (mixed $car): bool {
+                if (! is_array($car)) {
+                    return false;
+                }
+
+                $platformId = (string) ($car['platformId'] ?? '');
+                $sourceUrl = (string) ($car['sourceUrl'] ?? '');
+                $imageUrl = (string) ($car['imageUrl'] ?? '');
+
+                return $sourceUrl !== ''
+                    && $imageUrl !== ''
+                    && ! $this->normalizer->isPlaceholderUrl($sourceUrl)
+                    && ! $this->normalizer->isPlaceholderUrl($imageUrl)
+                    && $this->normalizer->isDetailUrl($sourceUrl, $platformId)
+                    && $this->normalizer->isValidImage($imageUrl, $platformId)
+                    && $this->normalizer->matchesQuery($car, $query);
+            }
+        ));
     }
 
     /**

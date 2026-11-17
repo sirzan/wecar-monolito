@@ -3,8 +3,12 @@
 namespace App\Http\Middleware;
 
 use App\Models\SiteSetting;
+use App\Models\User;
+use App\Services\PaymentMethodsService;
 use App\Support\AgencyContext;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -22,6 +26,7 @@ class HandleInertiaRequests extends Middleware
         $agencyContext = app(AgencyContext::class);
         $currentAgency = $user ? $agencyContext->current($request) : null;
         $agencies = $user ? $agencyContext->allFor($request) : collect();
+        $paymentMethods = app(PaymentMethodsService::class);
 
         return [
             ...parent::share($request),
@@ -35,7 +40,7 @@ class HandleInertiaRequests extends Middleware
                     'id' => $user->getKey(),
                     'name' => $user->name,
                     'email' => $user->email,
-                    'avatar_url' => $user->avatar_url ?? $user->profile?->avatar_url,
+                    'avatar_url' => $this->existingAvatarUrl($user),
                     'didit_status' => $user->profile?->didit_status,
                     'email_verified_at' => $user->email_verified_at?->toIso8601String(),
                     'roles' => $user->getRoleNames(),
@@ -70,14 +75,41 @@ class HandleInertiaRequests extends Middleware
                 'enabled' => (bool) config('external_search.enabled', true)
                     && (filled(config('services.firecrawl.key')) || (bool) config('services.apify.facebook_enabled')),
             ],
+            'favoriteIds' => $user ? fn () => $user->favorites()->pluck('car_id') : [],
             'push' => [
                 'publicKey' => config('services.webpush.public_key'),
             ],
-            'paymentMethods' => [
-                'stripe' => (bool) (data_get(SiteSetting::get('payments'), 'stripe_enabled', false)),
-                'paypal' => (bool) (data_get(SiteSetting::get('payments'), 'paypal_enabled', false)),
-                'spei' => (bool) (data_get(SiteSetting::get('payments'), 'spei_enabled', false)),
-            ],
+            'paymentMethods' => $paymentMethods->frontendMap(),
+            'paymentMethodOptions' => $paymentMethods->options(),
         ];
+    }
+
+    private function existingAvatarUrl(User $user): ?string
+    {
+        $url = $user->avatar_url ?? $user->profile?->avatar_url;
+
+        if (! $url) {
+            return null;
+        }
+
+        $publicUrl = rtrim((string) config('filesystems.disks.public.url'), '/').'/';
+
+        if (str_starts_with($url, $publicUrl)) {
+            $path = Str::after($url, $publicUrl);
+
+            return Storage::disk('public')->exists($path) ? $url : null;
+        }
+
+        $parsedPath = parse_url($url, PHP_URL_PATH);
+
+        if (is_string($parsedPath) && str_starts_with($parsedPath, '/storage/')) {
+            $path = ltrim(Str::after($parsedPath, '/storage/'), '/');
+
+            return Storage::disk('public')->exists($path)
+                ? Storage::disk('public')->url($path)
+                : null;
+        }
+
+        return $url;
     }
 }
