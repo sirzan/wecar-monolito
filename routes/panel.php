@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\DiditController;
+use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\Panel\AgencyController;
 use App\Http\Controllers\Panel\BillingController;
 use App\Http\Controllers\Panel\CreditController;
@@ -10,6 +11,7 @@ use App\Http\Controllers\Panel\MembershipController;
 use App\Http\Controllers\Panel\PaymentMethodsController;
 use App\Http\Controllers\Panel\ProfileController;
 use App\Http\Controllers\Panel\PublicationController;
+use App\Http\Controllers\VendeController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/invitaciones/{token}', [InvitationController::class, 'accept'])
@@ -19,8 +21,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 
     Route::get('/publicaciones', [PublicationController::class, 'index'])->name('publications');
-    Route::patch('/publicaciones/{car}/status', [PublicationController::class, 'updateStatus'])->name('publications.status');
-    Route::delete('/publicaciones/{car}', [PublicationController::class, 'destroy'])->name('publications.destroy');
+    Route::get('/publicaciones/{car:id}/editar', [PublicationController::class, 'edit'])->name('publications.edit');
+    Route::patch('/publicaciones/{car:id}', [VendeController::class, 'update'])->name('publications.update');
+    Route::patch('/publicaciones/{car:id}/status', [PublicationController::class, 'updateStatus'])->name('publications.status');
+    Route::delete('/publicaciones/{car:id}', [PublicationController::class, 'destroy'])->name('publications.destroy');
 
     Route::get('/tramites', [CreditController::class, 'index'])->name('credits');
     Route::get('/perfil-crediticio', [ProfileController::class, 'credit'])->name('credit-profile');
@@ -31,6 +35,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/tipo-cuenta', [ProfileController::class, 'updateAccountType'])->name('account-type');
     Route::post('/avatar', [ProfileController::class, 'updateAvatar'])->name('avatar.update');
     Route::delete('/avatar', [ProfileController::class, 'destroyAvatar'])->name('avatar.destroy');
+
+    Route::get('/favoritos', [FavoriteController::class, 'index'])->name('favorites');
 
     Route::get('/verificacion/retorno', [DiditController::class, 'callback'])->name('identity.callback');
 
@@ -54,8 +60,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::prefix('/{agency:slug}')->group(function () {
             Route::get('/resumen', [AgencyController::class, 'dashboard'])->name('dashboard');
             Route::get('/inventario', [AgencyController::class, 'inventory'])->name('inventory');
-            Route::patch('/inventario/{car}', [AgencyController::class, 'updateCar'])->name('inventory.update');
-            Route::delete('/inventario/{car}', [AgencyController::class, 'destroyCar'])->name('inventory.destroy');
+            Route::patch('/inventario/{car:id}', [AgencyController::class, 'updateCar'])->name('inventory.update');
+            Route::delete('/inventario/{car:id}', [AgencyController::class, 'destroyCar'])->name('inventory.destroy');
             Route::get('/leads', [AgencyController::class, 'leads'])->name('leads');
             Route::patch('/leads/{lead}', [AgencyController::class, 'updateLead'])->name('leads.update');
             Route::get('/equipo', [AgencyController::class, 'team'])->name('team');
@@ -71,6 +77,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     Route::get('/{section}', [DashboardController::class, 'section'])
-        ->whereIn('section', ['favoritos', 'membresia', 'tramites', 'metodos-pago', 'soporte'])
+        ->whereIn('section', ['membresia', 'tramites', 'metodos-pago', 'soporte'])
         ->name('section');
 });

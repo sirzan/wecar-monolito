@@ -82,6 +82,10 @@ return [
         'webhook_secret' => env('DIDIT_WEBHOOK_SECRET'),
     ],
 
+    'zip_code' => [
+        'url' => env('ZIP_CODE_API_URL', 'https://api.zippopotam.us/mx'),
+    ],
+
     'ses' => [
         'key' => env('AWS_ACCESS_KEY_ID'),
         'secret' => env('AWS_SECRET_ACCESS_KEY'),

@@ -44,6 +44,10 @@ class CarResource extends JsonResource
             'fuel' => $this->fuel,
             'body' => $this->body,
             'color' => $this->color,
+            'interior_color' => $this->interior_color,
+            'invoice_type' => $this->invoice_type,
+            'insurance_status' => $this->insurance_status,
+            'owners_count' => $this->owners_count,
             'featured' => (bool) $this->featured,
             'verified' => filled($this->vin)
                 && filled($this->serial_number)

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link, router } from '@inertiajs/vue3';
-import { Car as CarIcon, Eye, Star, Trash2 } from '@lucide/vue';
+import { Car as CarIcon, Eye, Pencil, Star, Trash2 } from '@lucide/vue';
 import PanelLayout from '@/layouts/PanelLayout.vue';
 import Pagination from '@/components/site/Pagination.vue';
 import Button from '@/components/ui/Button.vue';
@@ -10,7 +10,7 @@ defineOptions({ layout: PanelLayout });
 const props = defineProps<{
     agency: { id: string; slug: string; name: string; max_cars: number };
     cars: {
-        data: { id: string; slug: string; title: string; price: number; km: number; image: string | null; status_id: string | null; status: string | null; featured: boolean; url: string }[];
+        data: { id: string; slug: string; title: string; brand?: string | null; model?: string | null; version?: string | null; year?: number; price: number; km: number; city?: string | null; image: string | null; status_id: string | null; status: string | null; featured: boolean; url: string }[];
         current_page: number;
         last_page: number;
         total: number;
@@ -55,13 +55,13 @@ const destroy = (carId: string) => {
         <div v-if="cars.data.length" class="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             <article v-for="car in cars.data" :key="car.id" class="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
                 <Link :href="car.url">
-                    <img v-if="car.image" :src="car.image" :alt="car.title" class="aspect-[4/3] w-full object-cover" />
+                    <img v-if="car.image" :src="car.image" :alt="car.title" class="aspect-[4/3] w-full object-cover" loading="lazy" />
                     <div v-else class="grid aspect-[4/3] place-items-center bg-muted text-muted-foreground"><CarIcon class="h-9 w-9" /></div>
                 </Link>
                 <div class="p-4">
                     <Link :href="car.url" class="font-bold text-secondary hover:text-primary">{{ car.title }}</Link>
                     <p class="mt-1 text-lg font-black text-primary">{{ formatPrice(car.price) }}</p>
-                    <p class="text-xs text-muted-foreground">{{ car.km.toLocaleString('es-MX') }} km</p>
+                    <p class="text-xs text-muted-foreground">{{ [car.year, car.version, `${car.km.toLocaleString('es-MX')} km`, car.city].filter(Boolean).join(' · ') }}</p>
 
                     <select class="mt-3 h-9 w-full rounded-lg border border-input bg-background px-2 text-xs" :value="car.status_id" @change="updateStatus(car.id, $event)">
                         <option v-for="status in statuses" :key="status.id" :value="status.id">{{ status.label }}</option>
@@ -69,6 +69,7 @@ const destroy = (carId: string) => {
 
                     <div class="mt-3 flex gap-2">
                         <Button as="a" :href="car.url" variant="outline" size="sm" class="flex-1"><Eye class="h-3.5 w-3.5" /> Ver</Button>
+                        <Button as="a" :href="`/panel/publicaciones/${car.id}/editar`" variant="outline" size="sm" class="gap-1"><Pencil class="h-3.5 w-3.5" /> Editar</Button>
                         <Button variant="ghost" size="sm" :class="car.featured ? 'text-primary' : 'text-muted-foreground'" @click="toggleFeatured(car.id, car.featured)">
                             <Star class="h-3.5 w-3.5" :fill="car.featured ? 'currentColor' : 'none'" />
                         </Button>

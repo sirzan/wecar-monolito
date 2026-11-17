@@ -7,6 +7,7 @@ use App\Models\Profile;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -46,6 +47,9 @@ class ProfileController extends Controller
         ]);
 
         $user = $request->user();
+        $validated['rfc'] = filled($validated['rfc'] ?? null) ? Str::upper((string) $validated['rfc']) : null;
+        $validated['curp'] = filled($validated['curp'] ?? null) ? Str::upper((string) $validated['curp']) : null;
+
         $user->update([
             'name' => $validated['name'],
             'phone' => $validated['phone'] ?? null,
@@ -132,6 +136,9 @@ class ProfileController extends Controller
             'user_id' => $user->getKey(),
             'full_name' => $user->name,
         ]);
+
+        $validated['rfc'] = filled($validated['rfc'] ?? null) ? Str::upper((string) $validated['rfc']) : null;
+        $validated['curp'] = filled($validated['curp'] ?? null) ? Str::upper((string) $validated['curp']) : null;
 
         $profile->update([
             'full_name' => $validated['full_name'],

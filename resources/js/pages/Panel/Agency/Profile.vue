@@ -5,6 +5,7 @@ import PanelLayout from '@/layouts/PanelLayout.vue';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
+import PhoneInput from '@/components/ui/PhoneInput.vue';
 
 defineOptions({ layout: PanelLayout });
 
@@ -42,8 +43,7 @@ const form = useForm({
     rfc: props.agency.rfc ?? '',
 });
 
-const submit = () => form.post(`${base}/perfil`, { preserveScroll: true });
-</script>
+const submit = () => form.post(`${base}/perfil`, { preserveScroll: true });</script>
 
 <template>
     <div class="mx-auto max-w-3xl">
@@ -80,11 +80,11 @@ const submit = () => form.post(`${base}/perfil`, { preserveScroll: true });
                 </div>
                 <div>
                     <Label for="phone">Teléfono</Label>
-                    <Input id="phone" v-model="form.phone" class="mt-1.5" />
+                    <PhoneInput id="phone" v-model="form.phone" class="mt-1.5" />
                 </div>
                 <div>
                     <Label for="whatsapp">WhatsApp</Label>
-                    <Input id="whatsapp" v-model="form.whatsapp" class="mt-1.5" />
+                    <PhoneInput id="whatsapp" v-model="form.whatsapp" class="mt-1.5" />
                 </div>
                 <div>
                     <Label for="hours">Horario</Label>
@@ -96,7 +96,7 @@ const submit = () => form.post(`${base}/perfil`, { preserveScroll: true });
                 </div>
                 <div>
                     <Label for="rfc">RFC</Label>
-                    <Input id="rfc" v-model="form.rfc" class="mt-1.5" />
+                    <Input id="rfc" v-model="form.rfc" class="mt-1.5" @input="form.rfc = form.rfc.toUpperCase()" />
                 </div>
             </div>
             <Button type="submit" class="mt-6" :disabled="form.processing">Guardar perfil</Button>

@@ -6,6 +6,7 @@ import AdminLayout from '@/layouts/AdminLayout.vue';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
+import PhoneInput from '@/components/ui/PhoneInput.vue';
 import { cn } from '@/lib/utils';
 
 defineOptions({ layout: AdminLayout });
@@ -229,8 +230,8 @@ const save = (key: string, value: Record<string, any>) => {
                 <h2 class="font-semibold">Información de contacto</h2>
                 <div class="mt-4 grid gap-4 sm:grid-cols-2">
                     <div><Label>Email</Label><Input v-model="contact.email" class="mt-1.5" /></div>
-                    <div><Label>Teléfono</Label><Input v-model="contact.phone" class="mt-1.5" /></div>
-                    <div><Label>WhatsApp</Label><Input v-model="contact.whatsapp" class="mt-1.5" /></div>
+                    <div><Label>Teléfono</Label><PhoneInput v-model="contact.phone" class="mt-1.5" /></div>
+                    <div><Label>WhatsApp</Label><PhoneInput v-model="contact.whatsapp" class="mt-1.5" /></div>
                     <div><Label>Horario</Label><Input v-model="contact.hours" class="mt-1.5" /></div>
                     <div class="sm:col-span-2"><Label>Dirección</Label><Input v-model="contact.address" class="mt-1.5" /></div>
                 </div>

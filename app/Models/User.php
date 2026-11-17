@@ -83,6 +83,11 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasMany(PushSubscription::class);
     }
 
+    public function favorites(): HasMany
+    {
+        return $this->hasMany(Favorite::class);
+    }
+
     public function agenciesOwned(): HasMany
     {
         return $this->hasMany(Agency::class, 'owner_id');

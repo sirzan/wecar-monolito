@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import {
     ChevronLeft,
@@ -16,6 +16,7 @@ import {
 } from '@lucide/vue';
 import CarPhotoStrip from '@/components/site/CarPhotoStrip.vue';
 import { useCompareStore } from '@/stores/compare';
+import { useFavoritesStore } from '@/stores/favorites';
 import { cn } from '@/lib/utils';
 
 export interface CarCardData {
@@ -23,8 +24,11 @@ export interface CarCardData {
     slug: string;
     title: string;
     brand?: string | null;
+    brand_id?: string | null;
     model?: string | null;
+    model_id?: string | null;
     version?: string | null;
+    version_id?: string | null;
     year: number;
     km: number;
     price: number;
@@ -47,8 +51,10 @@ export interface CarCardData {
 
 const props = defineProps<{ car: CarCardData }>();
 const compare = useCompareStore();
+const favorites = useFavoritesStore();
+const isFavorite = computed(() => favorites.has(props.car.id));
 
-const favorite = ref(false);
+onMounted(() => void favorites.bootstrap());
 const lightbox = ref(false);
 const lightboxIndex = ref(0);
 
@@ -157,10 +163,10 @@ const whatsappUrl = computed(() => {
                         type="button"
                         aria-label="Favorito"
                         class="grid h-7 w-7 place-items-center rounded-full bg-accent/60 text-muted-foreground transition-all hover:scale-110 hover:text-primary sm:h-8 sm:w-8"
-                        :class="favorite ? 'text-primary' : ''"
-                        @click="favorite = !favorite"
+                        :class="isFavorite ? 'text-primary' : ''"
+                        @click="favorites.toggle(car.id)"
                     >
-                        <Heart class="h-3.5 w-3.5 sm:h-4 sm:w-4" :class="favorite ? 'fill-current' : ''" />
+                        <Heart class="h-3.5 w-3.5 sm:h-4 sm:w-4" :class="isFavorite ? 'fill-current' : ''" />
                     </button>
                     <button
                         type="button"
@@ -220,7 +226,7 @@ const whatsappUrl = computed(() => {
                     {{ compared ? 'Quitar' : 'Comparar auto' }}
                 </button>
                 <Link
-                    :href="`/credito?precio=${car.price}`"
+                    :href="`/credito?precio=${car.price}&brand_id=${car.brand_id ?? ''}&model_id=${car.model_id ?? ''}&version_id=${car.version_id ?? ''}&year=${car.year}&km=${car.km}&car_id=${car.id}`"
                     title="Financiar auto"
                     aria-label="Financiar auto"
                     class="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#0f1729] text-white shadow-soft transition-transform hover:scale-110 hover:bg-[#0f1729]/90 sm:h-10 sm:w-10"

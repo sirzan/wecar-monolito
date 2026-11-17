@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { Link, router } from '@inertiajs/vue3';
 import {
     AlertCircle,
@@ -17,6 +17,7 @@ import {
     DoorOpen,
     Droplet,
     FileCheck2,
+    FileText,
     Fuel,
     Gauge,
     GitBranch,
@@ -45,6 +46,7 @@ import SeoHead from '@/components/site/SeoHead.vue';
 import CarCard, { type CarCardData } from '@/components/site/CarCard.vue';
 import Button from '@/components/ui/Button.vue';
 import FinanciarAutoDialog from '@/components/credito/FinanciarAutoDialog.vue';
+import { useFavoritesStore } from '@/stores/favorites';
 
 defineOptions({ layout: PublicLayout });
 
@@ -54,8 +56,11 @@ const props = defineProps<{
         slug: string;
         title: string;
         brand: string | null;
+        brand_id: string | null;
         model: string | null;
+        model_id: string | null;
         version: string | null;
+        version_id: string | null;
         year: number;
         km: number;
         price: number;
@@ -69,6 +74,9 @@ const props = defineProps<{
         fuel: string | null;
         body: string | null;
         color: string | null;
+        interior_color: string | null;
+        invoice_type: string | null;
+        insurance_status: string | null;
         accepts_trade: boolean;
         status: string | null;
         status_label: string | null;
@@ -86,9 +94,12 @@ const props = defineProps<{
 const images = computed(() => (props.car.gallery.length ? props.car.gallery : props.car.image ? [props.car.image] : []));
 const active = ref(0);
 const zoomOpen = ref(false);
-const fav = ref(false);
 const financiarOpen = ref(false);
 const showFullDescription = ref(false);
+const favorites = useFavoritesStore();
+const isFavorite = computed(() => favorites.has(props.car.id));
+
+onMounted(() => void favorites.bootstrap());
 
 const formatPrice = (value: number) => {
     const amount = Number(value);
@@ -160,6 +171,8 @@ const productSpecs = computed(() => [
     { icon: Snowflake, label: 'Aire', value: 'Acondicionado' },
     { icon: Tag, label: 'Versión', value: props.car.version || 'No especificada' },
     { icon: Palette, label: 'Color', value: props.car.color || 'Plata' },
+    ...(props.car.interior_color ? [{ icon: Palette, label: 'Color interior', value: props.car.interior_color }] : []),
+    ...(props.car.invoice_type ? [{ icon: FileText, label: 'Factura', value: props.car.invoice_type }] : []),
 ]);
 
 const reportItems = [
@@ -452,9 +465,9 @@ const jsonLd = computed(() => [
                                 type="button"
                                 aria-label="Favorito"
                                 class="grid h-9 w-9 place-items-center rounded-full border border-border text-secondary hover:border-primary hover:text-primary transition"
-                                @click="fav = !fav"
+                                @click="favorites.toggle(car.id)"
                             >
-                                <Heart class="h-4 w-4" :class="fav ? 'fill-primary text-primary' : ''" />
+                                <Heart class="h-4 w-4" :class="isFavorite ? 'fill-primary text-primary' : ''" />
                             </button>
                         </div>
                     </div>
@@ -750,8 +763,11 @@ const jsonLd = computed(() => [
             :car="{
                 id: car.id,
                 brand: car.brand,
+                brand_id: car.brand_id,
                 model: car.model,
+                model_id: car.model_id,
                 version: car.version,
+                version_id: car.version_id,
                 year: car.year,
                 price: car.price,
                 km: car.km,
@@ -762,8 +778,13 @@ const jsonLd = computed(() => [
                 downPayment: downPaymentPct,
                 term: termMonths,
                 brand: car.brand || '',
+                brand_id: car.brand_id || '',
                 model: car.model || '',
+                model_id: car.model_id || '',
+                version: car.version || '',
+                version_id: car.version_id || '',
                 year: car.year,
+                km: car.km,
                 price: car.price,
             }"
             @close="financiarOpen = false"

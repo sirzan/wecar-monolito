@@ -52,6 +52,7 @@ class BillingController extends Controller
             'plans' => $plans,
             'activePlan' => $activePlan,
             'invoices' => Payment::query()
+                ->with(['plan', 'subscription.plan'])
                 ->where('user_id', $user->getKey())
                 ->where('status', 'paid')
                 ->latest()
@@ -60,8 +61,11 @@ class BillingController extends Controller
                 ->map(fn (Payment $payment) => [
                     'id' => $payment->getKey(),
                     'date' => $payment->created_at?->format('d/m/Y'),
+                    'concept' => $payment->subscription?->plan?->name ?? $payment->plan?->name ?? 'Pago Wecar',
                     'amount' => (float) $payment->amount,
                     'status' => $payment->status,
+                    'method' => $payment->provider,
+                    'currency' => $payment->currency,
                 ]),
         ]);
     }

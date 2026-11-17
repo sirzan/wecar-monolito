@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { Link, useForm, usePage } from '@inertiajs/vue3';
 import {
     AlertCircle,
@@ -36,6 +36,18 @@ import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
 import { paymentMethodIcon, type PaymentMethodKey, type PaymentMethodOption } from '@/lib/paymentMethods';
+import {
+    bodyTypes,
+    exteriorColors,
+    fuelTypes,
+    insuranceOptions,
+    interiorColors,
+    invoiceTypes,
+    transmissions,
+    vehicleYears,
+    withLegacyOption,
+} from '@/lib/carCatalog';
+import { formatMxn, parseAmount } from '@/lib/currency';
 import type { MarketPrice, PriceComparables } from '@/types/pricing';
 
 const props = defineProps<{
@@ -46,6 +58,35 @@ const props = defineProps<{
     activePlan?: { name: string | null; key: string | null; ends_at: string | null; max_cars: number; used_cars: number } | null;
     agencyPlan?: { name: string; ends_at: string | null; max_cars: number; used_cars: number; active: boolean } | null;
     adminMode?: boolean;
+    editMode?: boolean;
+    car?: {
+        id: string;
+        brand_id: string | null;
+        model_id: string | null;
+        version_id: string | null;
+        version_name: string | null;
+        year: number;
+        km: number;
+        price: number;
+        description: string | null;
+        transmission: string | null;
+        fuel: string | null;
+        body: string | null;
+        color: string | null;
+        interior_color: string | null;
+        invoice_type: string | null;
+        owners_count: number | null;
+        insurance_status: string | null;
+        city: string | null;
+        state: string | null;
+        accepts_trade: boolean;
+        trade_preference: string | null;
+        vin: string | null;
+        serial_number: string | null;
+        plates: string | null;
+        gallery: string[];
+        image: string | null;
+    } | null;
 }>();
 
 const page = usePage<{
@@ -66,35 +107,42 @@ const steps = [
     { n: 4, label: 'Publica', icon: ClipboardCheck },
 ];
 
-const ANIOS = Array.from({ length: 16 }, (_, i) => new Date().getFullYear() + 1 - i);
-
 const form = useForm({
-    brand_id: '',
-    model_id: '',
-    version_id: '',
-    year: new Date().getFullYear() - 2,
-    km: 45000,
-    price: null as number | null,
+    brand_id: props.car?.brand_id ?? '',
+    model_id: props.car?.model_id ?? '',
+    version_id: props.car?.version_id ?? '',
+    year: props.car?.year ?? new Date().getFullYear() - 2,
+    km: props.car?.km ?? 45000,
+    price: props.car?.price ?? (null as number | null),
     price_confirmed: false,
-    description: '',
-    transmission: 'Automática',
-    fuel: 'Gasolina',
-    body: 'Sedán',
-    color: 'Blanco',
-    invoice_type: '',
-    owners_count: '',
-    insurance_status: '',
-    city: 'Monterrey, NL',
-    state: 'Nuevo León',
-    accepts_trade: false,
-    trade_preference: '',
-    vin: '',
-    serial_number: '',
-    plates: '',
+    description: props.car?.description ?? '',
+    transmission: props.car?.transmission ?? 'Automática',
+    fuel: props.car?.fuel ?? 'Gasolina',
+    body: props.car?.body ?? 'Sedán',
+    color: props.car?.color ?? 'Blanco',
+    interior_color: props.car?.interior_color ?? '',
+    invoice_type: props.car?.invoice_type ?? '',
+    owners_count: props.car?.owners_count ?? '',
+    insurance_status: props.car?.insurance_status ?? '',
+    city: props.car?.city ?? 'Monterrey, NL',
+    state: props.car?.state ?? 'Nuevo León',
+    accepts_trade: props.car?.accepts_trade ?? false,
+    trade_preference: props.car?.trade_preference ?? '',
+    vin: props.car?.vin ?? '',
+    serial_number: props.car?.serial_number ?? '',
+    plates: props.car?.plates ?? '',
     plan_key: props.activePlan?.key || props.plans.find(p => p.price === 0)?.key_name || props.plans[0]?.key_name || 'basico',
     payment_method: '' as PaymentMethodKey | '',
     images: [] as File[],
 });
+
+const existingImages = ref<string[]>(
+    props.car
+        ? [...new Set([...(props.car.gallery ?? []), props.car.image].filter((image): image is string => Boolean(image)))]
+        : [],
+);
+const removedExistingImages = ref<string[]>([]);
+const primaryImage = ref<string>(props.car?.image ?? existingImages.value[0] ?? '');
 
 const priceInput = computed<string | number>({
     get: () => form.price ?? '',
@@ -111,9 +159,26 @@ const acceptsTrade = computed({
     },
 });
 
-const invoiceTypes = ['Factura original', 'Factura de agencia', 'Factura de particular', 'Sin factura'];
-const insuranceStatuses = ['Vigente', 'Vencido', 'Sin seguro'];
+const exteriorColorOptions = computed(() =>
+    withLegacyOption(props.filters.colors.length ? props.filters.colors : exteriorColors, form.color),
+);
+const interiorColorOptions = computed(() => withLegacyOption(interiorColors, form.interior_color));
+const invoiceOptions = computed(() => withLegacyOption(invoiceTypes, form.invoice_type));
+const insuranceOptionsList = computed(() => withLegacyOption(insuranceOptions, form.insurance_status));
+const bodyOptions = computed(() =>
+    props.filters.bodies.length ? props.filters.bodies : bodyTypes,
+);
+const transmissionOptions = computed(() =>
+    props.filters.transmissions.length ? props.filters.transmissions : transmissions,
+);
+const fuelOptions = computed(() => (props.filters.fuels.length ? props.filters.fuels : fuelTypes));
+
+const invoiceLabel = (value: string) =>
+    value === 'Factura original' ? 'Factura original (registro anterior)' : value;
+const insuranceLabel = (value: string) =>
+    ({ Vigente: 'Con seguro (registro anterior)', Vencido: 'Sin seguro (registro anterior)' })[value] ?? value;
 const ownerOptions = Array.from({ length: 8 }, (_, index) => index + 1);
+
 
 const fieldClass =
     'mt-1.5 h-[52px] w-full rounded-full border border-input bg-[#FAF9F7] px-4 text-sm font-medium text-secondary outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50';
@@ -121,7 +186,9 @@ const fieldClass =
 const models = computed(() => props.brands.find((brand) => brand.id === form.brand_id)?.models ?? []);
 const selectedBrand = computed(() => props.brands.find((brand) => brand.id === form.brand_id) ?? null);
 const selectedModel = computed(() => selectedBrand.value?.models.find((model) => model.id === form.model_id) ?? null);
-const versions = ref<{ id: string; name: string }[]>([]);
+const versions = ref<{ id: string; name: string }[]>(
+    props.car?.version_id ? [{ id: props.car.version_id, name: props.car.version_name ?? 'Versión actual' }] : [],
+);
 const selectedVersion = computed(() => versions.value.find((version) => version.id === form.version_id) ?? null);
 const previewTitle = computed(
     () =>
@@ -300,22 +367,85 @@ onBeforeUnmount(() => {
     resetPriceSuggestions();
 });
 
-const canContinue = computed(() => {
-    if (step.value === 1) {
-        return form.brand_id !== ''
-            && form.model_id !== ''
-            && form.version_id !== ''
-            && form.year > 0
-            && form.transmission !== ''
-            && form.km >= 0
-            && form.description.length >= 20;
+const stepErrors = ref<Record<string, string>>({});
+
+const errorFor = (field: string): string =>
+    stepErrors.value[field] ?? (form.errors as Record<string, string>)[field] ?? '';
+
+const hasError = (field: string): boolean => Boolean(errorFor(field));
+
+const validateStep = (target: number): boolean => {
+    const errors: Record<string, string> = {};
+
+    if (target === 1) {
+        if (!form.year) errors.year = 'Selecciona el año del auto.';
+        if (!form.brand_id) errors.brand_id = 'Selecciona la marca.';
+        if (!form.model_id) errors.model_id = 'Selecciona el modelo.';
+        if (!form.version_id) errors.version_id = 'Selecciona la versión.';
+        if (!Number.isFinite(Number(form.km)) || Number(form.km) < 0) {
+            errors.km = 'Ingresa un kilometraje válido.';
+        }
+        if (form.description.trim().length < 20) {
+            errors.description = 'La descripción debe tener al menos 20 caracteres.';
+        }
     }
-    if (step.value === 2) {
-        return form.price_confirmed && typeof form.price === 'number' && form.price >= 1000 && form.city.trim() !== '';
+
+    if (target === 2) {
+        const price = parseAmount(form.price as number | null);
+        if (price === null) {
+            errors.price = 'Ingresa el precio del auto.';
+        } else if (price < 1000) {
+            errors.price = 'El precio debe ser de al menos $1,000 MXN.';
+        }
+        if (!form.city.trim()) errors.city = 'Ingresa la ciudad donde está el auto.';
     }
-    if (step.value === 3) return form.images.length >= 1;
+
+    if (target === 3 && existingImages.value.length + form.images.length === 0) {
+        errors.images = 'Sube al menos una fotografía del auto.';
+    }
+
+    stepErrors.value = errors;
+
+    const firstField = Object.keys(errors)[0];
+
+    if (firstField) {
+        void nextTick(() => {
+            const element = document.querySelector<HTMLElement>(`[data-field="${firstField}"]`);
+            element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            element?.focus({ preventScroll: true });
+        });
+
+        return false;
+    }
+
     return true;
-});
+};
+
+const nextStep = () => {
+    if (validateStep(step.value)) {
+        step.value += 1;
+    }
+};
+
+const fieldStateClass = (field: string): string =>
+    hasError(field) ? `${fieldClass} border-destructive ring-2 ring-destructive/20` : fieldClass;
+
+watch(
+    () => form.errors,
+    (errors) => {
+        const firstField = Object.keys(errors)[0];
+
+        if (!firstField) return;
+
+        stepErrors.value = {};
+        void nextTick(() => {
+            const element = document.querySelector<HTMLElement>(`[data-field="${firstField}"]`);
+            element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            element?.focus({ preventScroll: true });
+        });
+    },
+    { deep: true },
+);
 
 const loadVersions = async () => {
     if (!form.model_id || !form.year) {
@@ -343,6 +473,14 @@ const loadVersions = async () => {
         }
 
         versions.value = payload.versions ?? [];
+
+        const currentVersion = props.car?.version_id
+            ? { id: props.car.version_id, name: props.car.version_name ?? 'Versión actual' }
+            : null;
+
+        if (currentVersion && !versions.value.some((version) => version.id === currentVersion.id)) {
+            versions.value = [currentVersion, ...versions.value];
+        }
 
         if (form.version_id && !versions.value.some((version) => version.id === form.version_id)) {
             form.version_id = '';
@@ -372,21 +510,46 @@ const onFiles = (event: Event) => {
     const input = event.target as HTMLInputElement;
     if (!input.files) return;
     const newFiles = Array.from(input.files);
-    // Max 12 images
-    const combined = [...form.images, ...newFiles].slice(0, 12);
-    form.images = combined;
+    const availableSlots = Math.max(12 - existingImages.value.length, 0);
+    form.images = [...form.images, ...newFiles].slice(0, availableSlots);
+    input.value = '';
+    stepErrors.value.images = '';
 };
 
 const removeImage = (index: number) => {
     form.images = form.images.filter((_, i) => i !== index);
+
+    if (primaryImage.value === `new:${index}`) {
+        primaryImage.value = existingImages.value[0] ?? (form.images.length ? 'new:0' : '');
+    }
+};
+
+const removeExistingImage = (image: string) => {
+    existingImages.value = existingImages.value.filter((current) => current !== image);
+    removedExistingImages.value.push(image);
+
+    if (primaryImage.value === image) {
+        primaryImage.value = existingImages.value[0] ?? (form.images.length ? 'new:0' : '');
+    }
+};
+
+const setPrimaryImage = (value: string) => {
+    primaryImage.value = value;
 };
 
 const previewUrls = computed(() => {
     return form.images.map((file) => URL.createObjectURL(file));
 });
 
-const formatPrice = (val: number) =>
-    new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(val);
+const previewImage = computed(() => {
+    if (primaryImage.value.startsWith('new:')) {
+        return previewUrls.value[Number(primaryImage.value.replace('new:', ''))] ?? previewUrls.value[0] ?? '';
+    }
+
+    return primaryImage.value || existingImages.value[0] || previewUrls.value[0] || '';
+});
+
+const formatPrice = (val: number) => formatMxn(val);
 
 const confidenceLabel = (value?: string) =>
     ({ high: 'alta', medium: 'media', low: 'baja', none: 'sin datos' })[value ?? 'none'] ?? 'baja';
@@ -400,7 +563,18 @@ const submit = () => {
     form.transform((data) => ({
         ...data,
         payment_method: requiresMethodSelection.value ? data.payment_method : '',
-    })).post(props.adminMode ? '/admin/autos' : '/vende', { forceFormData: true });
+        existing_images: existingImages.value,
+        removed_images: removedExistingImages.value,
+        primary_image: primaryImage.value,
+    }));
+
+    if (props.editMode && props.car) {
+        form.patch(`/panel/publicaciones/${props.car.id}`, { forceFormData: true, preserveScroll: true });
+
+        return;
+    }
+
+    form.post(props.adminMode ? '/admin/autos' : '/vende', { forceFormData: true });
 };
 
 const goBack = () => {
@@ -426,6 +600,16 @@ const goBack = () => {
                 </div>
                 <Link href="/admin/autos" class="rounded-full border border-border px-4 py-2 text-xs font-bold text-secondary transition hover:border-primary/40 hover:text-primary">
                     Volver a autos
+                </Link>
+            </div>
+
+            <div v-if="editMode" class="mb-5 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h1 class="text-2xl font-black text-secondary sm:text-3xl">Editar publicación</h1>
+                    <p class="mt-1 text-sm text-muted-foreground">Actualiza los datos y fotografías de tu anuncio.</p>
+                </div>
+                <Link href="/panel/publicaciones" class="rounded-full border border-border px-4 py-2 text-xs font-bold text-secondary transition hover:border-primary/40 hover:text-primary">
+                    Volver a publicaciones
                 </Link>
             </div>
 
@@ -524,38 +708,43 @@ const goBack = () => {
                     <div class="grid gap-4 sm:grid-cols-2">
                         <div>
                             <Label class="text-xs font-bold text-secondary">Año *</Label>
-                            <select v-model.number="form.year" :class="fieldClass">
-                                <option v-for="a in ANIOS" :key="a" :value="a">{{ a }}</option>
+                            <select v-model.number="form.year" data-field="year" :class="fieldStateClass('year')">
+                                <option v-for="a in vehicleYears" :key="a" :value="a">{{ a }}</option>
                             </select>
+                            <p v-if="errorFor('year')" class="mt-1 text-xs font-medium text-destructive">{{ errorFor('year') }}</p>
                         </div>
 
                         <div>
                             <Label class="text-xs font-bold text-secondary">Marca *</Label>
                             <select
                                 v-model="form.brand_id"
+                                data-field="brand_id"
                                 :disabled="!form.year"
-                                :class="fieldClass"
-                                @change="form.model_id = ''"
+                                :class="fieldStateClass('brand_id')"
+                                @change="form.model_id = ''; form.version_id = ''"
                             >
                                 <option value="">{{ form.year ? 'Selecciona la marca' : 'Selecciona el año primero' }}</option>
                                 <option v-for="b in brands" :key="b.id" :value="b.id">{{ b.name }}</option>
                             </select>
+                            <p v-if="errorFor('brand_id')" class="mt-1 text-xs font-medium text-destructive">{{ errorFor('brand_id') }}</p>
                         </div>
 
                         <div>
                             <Label class="text-xs font-bold text-secondary">Modelo *</Label>
-                            <select v-model="form.model_id" :disabled="!form.brand_id" :class="fieldClass">
+                            <select v-model="form.model_id" data-field="model_id" :disabled="!form.brand_id" :class="fieldStateClass('model_id')" @change="form.version_id = ''">
                                 <option value="">{{ form.brand_id ? 'Selecciona el modelo' : 'Selecciona la marca primero' }}</option>
                                 <option v-for="m in models" :key="m.id" :value="m.id">{{ m.name }}</option>
                             </select>
+                            <p v-if="errorFor('model_id')" class="mt-1 text-xs font-medium text-destructive">{{ errorFor('model_id') }}</p>
                         </div>
 
                         <div>
                             <Label class="text-xs font-bold text-secondary">Versión *</Label>
                             <select
                                 v-model="form.version_id"
+                                data-field="version_id"
                                 :disabled="!form.model_id || versionsLoading || versions.length === 0"
-                                :class="fieldClass"
+                                :class="fieldStateClass('version_id')"
                             >
                                 <option value="">
                                     {{ !form.model_id
@@ -569,6 +758,7 @@ const goBack = () => {
                                 <option v-for="version in versions" :key="version.id" :value="version.id">{{ version.name }}</option>
                             </select>
                             <p v-if="versionsError" class="mt-1 text-[11px] font-semibold text-destructive">{{ versionsError }}</p>
+                            <p v-if="errorFor('version_id')" class="mt-1 text-xs font-medium text-destructive">{{ errorFor('version_id') }}</p>
                             <button
                                 v-if="!versionsLoading && versions.length === 0 && form.model_id"
                                 type="button"
@@ -582,46 +772,50 @@ const goBack = () => {
                         <div>
                             <Label class="text-xs font-bold text-secondary">Tipo de carrocería</Label>
                             <select v-model="form.body" :class="fieldClass">
-                                <option v-for="body in (filters.bodies.length ? filters.bodies : ['Sedán', 'SUV', 'Hatchback', 'Pickup', 'Coupé'])" :key="body" :value="body">
-                                    {{ body }}
-                                </option>
+                                <option v-for="body in bodyOptions" :key="body" :value="body">{{ body }}</option>
                             </select>
                         </div>
 
                         <div>
                             <Label class="text-xs font-bold text-secondary">Transmisión</Label>
                             <select v-model="form.transmission" :class="fieldClass">
-                                <option value="Automática">Automática</option>
-                                <option value="Manual">Manual</option>
-                                <option value="CVT">CVT</option>
+                                <option v-for="transmission in transmissionOptions" :key="transmission" :value="transmission">{{ transmission }}</option>
                             </select>
                         </div>
 
                         <div>
                             <Label class="text-xs font-bold text-secondary">Combustible</Label>
                             <select v-model="form.fuel" :class="fieldClass">
-                                <option value="Gasolina">Gasolina</option>
-                                <option value="Híbrido">Híbrido</option>
-                                <option value="Diésel">Diésel</option>
-                                <option value="Eléctrico">Eléctrico</option>
+                                <option v-for="fuel in fuelOptions" :key="fuel" :value="fuel">{{ fuel }}</option>
                             </select>
                         </div>
 
                         <div>
-                            <Label class="text-xs font-bold text-secondary">Color</Label>
-                            <Input v-model="form.color" placeholder="Ej. Blanco perla, Gris oxford" :class="fieldClass" />
+                            <Label class="text-xs font-bold text-secondary">Color exterior</Label>
+                            <select v-model="form.color" :class="fieldClass">
+                                <option v-for="color in exteriorColorOptions" :key="color" :value="color">{{ color }}</option>
+                            </select>
                         </div>
 
                         <div>
-                            <Label class="text-xs font-bold text-secondary">Kilometraje</Label>
-                            <Input v-model.number="form.km" type="number" min="0" placeholder="ej. 45000" :class="fieldClass" />
+                            <Label class="text-xs font-bold text-secondary">Color interior</Label>
+                            <select v-model="form.interior_color" :class="fieldClass">
+                                <option value="">Selecciona una opción</option>
+                                <option v-for="color in interiorColorOptions" :key="color" :value="color">{{ color }}</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <Label class="text-xs font-bold text-secondary">Kilometraje *</Label>
+                            <Input v-model.number="form.km" data-field="km" type="number" min="0" placeholder="ej. 45000" :class="fieldStateClass('km')" />
+                            <p v-if="errorFor('km')" class="mt-1 text-xs font-medium text-destructive">{{ errorFor('km') }}</p>
                         </div>
 
                         <div>
                             <Label class="text-xs font-bold text-secondary">Tipo de factura</Label>
                             <select v-model="form.invoice_type" :class="fieldClass">
                                 <option value="">Selecciona una opción</option>
-                                <option v-for="type in invoiceTypes" :key="type" :value="type">{{ type }}</option>
+                                <option v-for="type in invoiceOptions" :key="type" :value="type">{{ invoiceLabel(type) }}</option>
                             </select>
                         </div>
 
@@ -634,10 +828,10 @@ const goBack = () => {
                         </div>
 
                         <div>
-                            <Label class="text-xs font-bold text-secondary">Seguro vigente</Label>
+                            <Label class="text-xs font-bold text-secondary">Seguro de auto</Label>
                             <select v-model="form.insurance_status" :class="fieldClass">
                                 <option value="">Selecciona una opción</option>
-                                <option v-for="status in insuranceStatuses" :key="status" :value="status">{{ status }}</option>
+                                <option v-for="status in insuranceOptionsList" :key="status" :value="status">{{ insuranceLabel(status) }}</option>
                             </select>
                         </div>
                     </div>
@@ -651,10 +845,13 @@ const goBack = () => {
                         </div>
                         <textarea
                             v-model="form.description"
+                            data-field="description"
                             rows="5"
                             placeholder="Cuéntanos detalles relevantes: equipamiento, mantenimientos, etc."
                             class="mt-1.5 min-h-[130px] w-full rounded-[22px] border border-input bg-[#FAF9F7] p-4 text-sm text-secondary outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                            :class="hasError('description') ? 'border-destructive ring-2 ring-destructive/20' : ''"
                         />
+                        <p v-if="errorFor('description')" class="mt-1 text-xs font-medium text-destructive">{{ errorFor('description') }}</p>
                     </div>
 
                     <!-- ¿Aceptas cambios? -->
@@ -712,8 +909,8 @@ const goBack = () => {
                             type="button"
                             variant="hero"
                             class="gap-1.5 rounded-full px-6 shadow-glow"
-                            :disabled="!canContinue"
-                            @click="step++"
+                            :disabled="form.processing"
+                            @click="nextStep"
                         >
                             Continuar <ChevronRight class="h-4 w-4" />
                         </Button>
@@ -729,16 +926,18 @@ const goBack = () => {
 
                     <div class="grid gap-4 sm:grid-cols-2">
                         <div>
-                            <Label class="text-xs font-bold text-secondary">Precio deseado de venta (MXN) *</Label>
+                            <Label class="text-xs font-bold text-secondary">Precio del auto (MXN) *</Label>
                             <div class="relative mt-1.5">
-                                 <Input v-model="priceInput" type="number" min="1000" :class="`${fieldClass} mt-0 pr-16`" />
+                                 <Input v-model="priceInput" data-field="price" type="number" min="1000" :class="`${fieldStateClass('price')} mt-0 pr-16`" />
                                 <span class="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">MXN</span>
                             </div>
+                            <p v-if="errorFor('price')" class="mt-1 text-xs font-medium text-destructive">{{ errorFor('price') }}</p>
                         </div>
 
                         <div>
                             <Label class="text-xs font-bold text-secondary">Ciudad *</Label>
-                            <Input v-model="form.city" placeholder="Ej. Monterrey, NL" :class="fieldClass" />
+                            <Input v-model="form.city" data-field="city" placeholder="Ej. Monterrey, NL" :class="fieldStateClass('city')" />
+                            <p v-if="errorFor('city')" class="mt-1 text-xs font-medium text-destructive">{{ errorFor('city') }}</p>
                         </div>
 
                         <div>
@@ -881,8 +1080,8 @@ const goBack = () => {
                             type="button"
                             variant="hero"
                             class="gap-1.5 rounded-full px-6 shadow-glow"
-                            :disabled="!canContinue"
-                            @click="step++"
+                            :disabled="form.processing"
+                            @click="nextStep"
                         >
                             Continuar <ChevronRight class="h-4 w-4" />
                         </Button>
@@ -896,19 +1095,45 @@ const goBack = () => {
                         <p class="mt-1 text-xs text-muted-foreground sm:text-sm">Sube hasta 12 fotos nítidas (la primera foto será la portada).</p>
                     </div>
 
-                    <div class="rounded-2xl border-2 border-dashed border-border bg-muted/20 p-8 text-center hover:border-primary/50 transition">
+                    <div class="rounded-2xl border-2 border-dashed bg-muted/20 p-8 text-center transition" :class="hasError('images') ? 'border-destructive' : 'border-border hover:border-primary/50'">
                         <Upload class="h-10 w-10 text-muted-foreground mx-auto" />
                         <p class="mt-3 text-sm font-bold text-secondary">Arrastra y suelta tus fotos aquí, o selecciónalas</p>
                         <p class="mt-1 text-xs text-muted-foreground">Formatos JPG, PNG o WebP. Máximo 8 MB por imagen.</p>
-                        <label class="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-soft cursor-pointer hover:bg-primary/90 transition">
+                        <label class="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-soft transition hover:bg-primary/90" data-field="images" tabindex="0">
                             <ImagePlus class="h-4 w-4" /> Seleccionar fotos
                             <input type="file" multiple accept="image/jpeg,image/png,image/webp" class="hidden" @change="onFiles" />
                         </label>
+                        <p v-if="errorFor('images')" class="mt-2 text-xs font-medium text-destructive">{{ errorFor('images') }}</p>
+                    </div>
+
+                    <div v-if="existingImages.length" class="mt-6">
+                        <p class="text-xs font-bold text-muted-foreground mb-3">Fotos actuales ({{ existingImages.length }}):</p>
+                        <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                            <div v-for="image in existingImages" :key="image" class="group relative aspect-[4/3] overflow-hidden rounded-2xl border border-border bg-muted shadow-soft">
+                                <img :src="image" alt="Foto actual" class="h-full w-full object-cover" />
+                                <span v-if="primaryImage === image" class="absolute left-2 top-2 rounded-md bg-primary px-2 py-0.5 text-[10px] font-black text-primary-foreground shadow-soft">Portada</span>
+                                <button
+                                    v-else
+                                    type="button"
+                                    class="absolute left-2 top-2 rounded-md bg-black/60 px-2 py-0.5 text-[10px] font-bold text-white opacity-0 transition group-hover:opacity-100"
+                                    @click="setPrimaryImage(image)"
+                                >
+                                    Hacer portada
+                                </button>
+                                <button
+                                    type="button"
+                                    class="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-black/70 text-white opacity-0 transition hover:bg-destructive group-hover:opacity-100"
+                                    @click="removeExistingImage(image)"
+                                >
+                                    <Trash2 class="h-3.5 w-3.5" />
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     <div v-if="form.images.length" class="mt-6">
                         <p class="text-xs font-bold text-muted-foreground mb-3">
-                            Fotos seleccionadas ({{ form.images.length }} de 12):
+                            Fotos nuevas ({{ form.images.length }}):
                         </p>
                         <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
                             <div
@@ -918,11 +1143,19 @@ const goBack = () => {
                             >
                                 <img :src="url" alt="Preview" class="h-full w-full object-cover" />
                                 <span
-                                    v-if="idx === 0"
+                                    v-if="primaryImage === `new:${idx}`"
                                     class="absolute left-2 top-2 rounded-md bg-primary px-2 py-0.5 text-[10px] font-black text-primary-foreground shadow-soft"
                                 >
                                     Portada
                                 </span>
+                                <button
+                                    v-else
+                                    type="button"
+                                    class="absolute left-2 top-2 rounded-md bg-black/60 px-2 py-0.5 text-[10px] font-bold text-white opacity-0 transition group-hover:opacity-100"
+                                    @click="setPrimaryImage(`new:${idx}`)"
+                                >
+                                    Hacer portada
+                                </button>
                                 <button
                                     type="button"
                                     class="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-black/70 text-white opacity-0 group-hover:opacity-100 transition hover:bg-destructive"
@@ -942,8 +1175,8 @@ const goBack = () => {
                             type="button"
                             variant="hero"
                             class="gap-1.5 rounded-full px-6 shadow-glow"
-                            :disabled="!canContinue"
-                            @click="step++"
+                            :disabled="form.processing"
+                            @click="nextStep"
                         >
                             Continuar <ChevronRight class="h-4 w-4" />
                         </Button>
@@ -954,15 +1187,15 @@ const goBack = () => {
                 <div v-if="step === 4" class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
                     <div class="space-y-6 rounded-[28px] border border-border bg-card p-6 shadow-soft sm:p-8">
                         <div>
-                            <h2 class="text-xl font-black text-secondary sm:text-2xl">{{ coveredPlan ? 'Confirma tu publicación' : 'Elige tu plan de publicación' }}</h2>
-                            <p class="mt-1 text-xs text-muted-foreground sm:text-sm">{{ coveredPlan ? 'Tu plan ya está activo y cubre esta publicación.' : 'Selecciona el nivel de visibilidad para tu anuncio.' }}</p>
+                            <h2 class="text-xl font-black text-secondary sm:text-2xl">{{ editMode ? 'Revisa y guarda tus cambios' : coveredPlan ? 'Confirma tu publicación' : 'Elige tu plan de publicación' }}</h2>
+                            <p class="mt-1 text-xs text-muted-foreground sm:text-sm">{{ editMode ? 'Verifica la información antes de guardar. No se modificarán tu plan ni tus cobros.' : coveredPlan ? 'Tu plan ya está activo y cubre esta publicación.' : 'Selecciona el nivel de visibilidad para tu anuncio.' }}</p>
                         </div>
 
                         <div v-if="isAdmin" class="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm font-semibold text-emerald-700">
                             Modo administrador: la publicación no genera cobro ni suscripción.
                         </div>
 
-                        <div v-if="activePlan" class="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-800">
+                        <div v-if="!editMode && activePlan" class="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-800">
                             <p class="font-black">Plan activo: {{ activePlan.name }}</p>
                             <p class="mt-1 text-xs">
                                 Publicaciones usadas: <strong>{{ activePlan.used_cars }} / {{ activePlan.max_cars }}</strong>.
@@ -973,7 +1206,7 @@ const goBack = () => {
                             </p>
                         </div>
 
-                        <div v-if="agencyPlan" class="rounded-2xl border p-4 text-sm" :class="agencyPlan.active ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-800' : 'border-destructive/30 bg-destructive/10 text-destructive'">
+                        <div v-if="!editMode && agencyPlan" class="rounded-2xl border p-4 text-sm" :class="agencyPlan.active ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-800' : 'border-destructive/30 bg-destructive/10 text-destructive'">
                             <p class="font-black">Plan de agencia: {{ agencyPlan.name }}</p>
                             <p class="mt-1 text-xs">
                                 Publicaciones usadas: <strong>{{ agencyPlan.used_cars }} / {{ agencyPlan.max_cars }}</strong>.
@@ -987,7 +1220,7 @@ const goBack = () => {
                             </p>
                         </div>
 
-                        <div v-if="!coveredPlan" class="grid gap-5 md:grid-cols-3">
+                        <div v-if="!editMode && !coveredPlan" class="grid gap-5 md:grid-cols-3">
                             <div
                                 v-for="plan in plans.filter(p => !p.key_name.startsWith('search_') && !p.key_name.startsWith('membresia_'))"
                                 :key="plan.id"
@@ -1028,7 +1261,7 @@ const goBack = () => {
                         </div>
 
                         <!-- Opciones de pago configuradas por el administrador -->
-                        <div v-if="requiresMethodSelection" class="rounded-2xl border border-border bg-card p-5 space-y-4">
+                        <div v-if="!editMode && requiresMethodSelection" class="rounded-2xl border border-border bg-card p-5 space-y-4">
                             <div>
                                 <h3 class="text-sm font-black text-secondary">Elige tu método de pago</h3>
                                 <p class="mt-1 text-xs text-muted-foreground">
@@ -1096,7 +1329,7 @@ const goBack = () => {
                         </div>
 
                         <!-- Resumen final de cobro -->
-                        <div class="rounded-2xl bg-secondary p-5 text-white flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div v-if="!editMode" class="rounded-2xl bg-secondary p-5 text-white flex flex-col sm:flex-row items-center justify-between gap-4">
                             <div>
                                 <p class="text-xs text-white/70">{{ isAdmin ? 'Costo de publicación:' : coveredPlan ? 'Costo de publicación:' : 'Total a pagar al publicar:' }}</p>
                                 <p class="text-2xl font-black text-primary">
@@ -1122,7 +1355,16 @@ const goBack = () => {
                                 :disabled="form.processing || (requiresMethodSelection && !form.payment_method)"
                             >
                                 <LoaderCircle v-if="form.processing" class="h-5 w-5 animate-spin" />
-                                <span v-else>{{ isAdmin ? 'Publicar auto sin cargo' : coveredPlan ? 'Publicar con mi plan' : 'Confirmar y publicar auto' }}</span>
+                                <span v-else>{{ editMode ? 'Guardar cambios' : isAdmin ? 'Publicar auto sin cargo' : coveredPlan ? 'Publicar con mi plan' : 'Confirmar y publicar auto' }}</span>
+                            </Button>
+                        </div>
+
+                        <div v-if="editMode" class="rounded-2xl bg-secondary p-5 text-white">
+                            <p class="text-xs text-white/70">Edición de publicación</p>
+                            <p class="mt-1 text-lg font-black text-primary">Los cambios se guardarán sin alterar tu plan ni tus cobros.</p>
+                            <Button type="submit" variant="hero" size="lg" class="mt-4 w-full gap-2 rounded-full font-bold" :disabled="form.processing">
+                                <LoaderCircle v-if="form.processing" class="h-5 w-5 animate-spin" />
+                                <span v-else>Guardar cambios</span>
                             </Button>
                         </div>
 
@@ -1146,8 +1388,8 @@ const goBack = () => {
                         <div class="overflow-hidden rounded-[24px] border border-border bg-card shadow-soft">
                             <div class="relative aspect-[4/3] bg-muted">
                                 <img
-                                    v-if="previewUrls.length"
-                                    :src="previewUrls[0]"
+                                    v-if="previewImage"
+                                    :src="previewImage"
                                     alt="Vista previa del auto"
                                     class="h-full w-full object-cover"
                                 />
@@ -1195,8 +1437,8 @@ const goBack = () => {
                                 <div class="mt-3 flex flex-wrap gap-1.5">
                                     <span class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-secondary">{{ form.year }}</span>
                                     <span v-if="form.accepts_trade" class="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">Acepta cambios</span>
-                                    <span v-if="form.invoice_type" class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-secondary">{{ form.invoice_type }}</span>
-                                    <span v-if="form.insurance_status" class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-secondary">Seguro {{ form.insurance_status.toLowerCase() }}</span>
+                                    <span v-if="form.invoice_type" class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-secondary">{{ invoiceLabel(form.invoice_type) }}</span>
+                                    <span v-if="form.insurance_status" class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-secondary">Seguro: {{ insuranceLabel(form.insurance_status) }}</span>
                                 </div>
 
                                 <p v-if="form.city" class="mt-3 flex items-center gap-1 text-[11px] text-muted-foreground">

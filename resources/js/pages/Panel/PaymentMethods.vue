@@ -130,9 +130,12 @@ const brandLabel = (brand: string) => {
                 No hay métodos de pago activos o configurados en este momento.
             </p>
 
-            <p class="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
-                <ShieldCheck class="h-4 w-4 text-success" />
-                Tus pagos se procesan mediante pasarelas externas seguras; no almacenamos los datos de tu tarjeta.
+            <p class="mt-4 flex items-start gap-2 text-xs text-muted-foreground">
+                <ShieldCheck class="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                <span>
+                    Los datos de tu tarjeta se procesan mediante la pasarela de pago y no se almacenan en nuestra base de datos.
+                    <template v-if="methods.spei"> WeCar no solicita ni almacena tus contraseñas o credenciales bancarias para SPEI.</template>
+                </span>
             </p>
         </section>
     </div>

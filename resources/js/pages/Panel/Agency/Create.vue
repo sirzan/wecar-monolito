@@ -5,6 +5,7 @@ import PanelLayout from '@/layouts/PanelLayout.vue';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
+import PhoneInput from '@/components/ui/PhoneInput.vue';
 
 defineOptions({ layout: PanelLayout });
 
@@ -49,11 +50,11 @@ const submit = () => form.post('/panel/agencia/crear');
                 </div>
                 <div>
                     <Label for="phone">Teléfono</Label>
-                    <Input id="phone" v-model="form.phone" class="mt-1.5" />
+                    <PhoneInput id="phone" v-model="form.phone" class="mt-1.5" />
                 </div>
                 <div>
                     <Label for="whatsapp">WhatsApp</Label>
-                    <Input id="whatsapp" v-model="form.whatsapp" class="mt-1.5" />
+                    <PhoneInput id="whatsapp" v-model="form.whatsapp" class="mt-1.5" />
                 </div>
             </div>
             <Button type="submit" class="mt-6" :disabled="form.processing">Crear agencia</Button>

@@ -34,7 +34,7 @@ const footer = computed(() => page.props.site?.footer ?? {});
                         <Music2 class="h-4 w-4" />
                     </a>
                     <a
-                        href="https://wa.me/5218112345678"
+                        :href="`https://wa.me/${(contact.whatsapp || '5218112345678').replace(/\D/g, '')}`"
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label="WhatsApp"

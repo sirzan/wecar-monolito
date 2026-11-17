@@ -6,6 +6,7 @@ use App\Models\Car;
 use App\Models\CarBrand;
 use App\Models\CarModel;
 use App\Models\CarStatus;
+use App\Models\CarVersion;
 use App\Models\Plan;
 use App\Models\Subscription;
 use App\Services\CarCatalog\CarVersionService;
@@ -31,29 +32,7 @@ class VendeController extends Controller
         PaymentCheckoutService $checkout,
     ): SymfonyResponse|RedirectResponse {
         $validated = $request->validate([
-            'brand_id' => ['required', 'uuid', 'exists:car_brands,id'],
-            'model_id' => ['required', 'uuid', 'exists:car_models,id'],
-            'version_id' => ['required', 'uuid', 'exists:car_versions,id'],
-            'year' => ['required', 'integer', 'min:1990', 'max:'.(date('Y') + 1)],
-            'km' => ['required', 'integer', 'min:0', 'max:2000000'],
-            'price' => ['required', 'numeric', 'min:1000', 'max:100000000'],
-            'description' => ['required', 'string', 'min:20', 'max:2000'],
-            'transmission' => ['nullable', Rule::in(['Automática', 'Manual', 'CVT'])],
-            'fuel' => ['nullable', Rule::in(['Gasolina', 'Diésel', 'Híbrido', 'Eléctrico'])],
-            'body' => ['nullable', Rule::in(['Sedán', 'SUV', 'Hatchback', 'Pickup', 'Coupé'])],
-            'color' => ['nullable', 'string', 'max:40'],
-            'invoice_type' => ['nullable', Rule::in(['Factura original', 'Factura de agencia', 'Factura de particular', 'Sin factura'])],
-            'owners_count' => ['nullable', 'integer', 'min:0', 'max:20'],
-            'insurance_status' => ['nullable', Rule::in(['Vigente', 'Vencido', 'Sin seguro'])],
-            'city' => ['required', 'string', 'max:80'],
-            'state' => ['nullable', 'string', 'max:80'],
-            'accepts_trade' => ['boolean'],
-            'trade_preference' => ['nullable', 'string', 'max:160'],
-            'vin' => ['nullable', 'string', 'regex:/^[A-Za-z0-9]{17}$/'],
-            'serial_number' => ['nullable', 'string', 'max:40'],
-            'plates' => ['nullable', 'string', 'max:20'],
-            'plan_key' => ['nullable', 'string', 'exists:plans,key_name'],
-            'payment_method' => ['nullable', 'string', Rule::in($paymentMethods->allKeys())],
+            ...$this->carRules(),
             'images' => ['required', 'array', 'min:1', 'max:12'],
             'images.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:8192'],
         ]);
@@ -234,5 +213,140 @@ class VendeController extends Controller
         return redirect()
             ->route('autos.show', $car->slug)
             ->with('success', 'Tu auto se publicó correctamente.');
+    }
+
+    public function update(
+        Request $request,
+        Car $car,
+        CarVersionService $carVersions,
+    ): RedirectResponse {
+        $this->authorize('update', $car);
+
+        $validated = $request->validate([
+            ...$this->carRules(),
+            'images' => ['nullable', 'array', 'max:12'],
+            'images.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:8192'],
+            'existing_images' => ['nullable', 'array', 'max:12'],
+            'existing_images.*' => ['string', 'max:2048'],
+            'removed_images' => ['nullable', 'array', 'max:12'],
+            'removed_images.*' => ['string', 'max:2048'],
+            'primary_image' => ['nullable', 'string', 'max:2048'],
+        ]);
+
+        $version = $this->validateCarRelations($carVersions, $validated);
+
+        $currentGallery = collect($car->gallery ?? [])
+            ->filter(fn ($image) => is_string($image))
+            ->values();
+
+        $existingImages = collect($validated['existing_images'] ?? [])
+            ->filter(fn ($image) => is_string($image) && $currentGallery->contains($image))
+            ->unique()
+            ->values();
+
+        $gallery = $existingImages->all();
+
+        foreach ($request->file('images', []) as $image) {
+            $path = $image->store("cars/{$car->getKey()}", 'public');
+            $gallery[] = Storage::disk('public')->url($path);
+        }
+
+        $primaryImage = $validated['primary_image'] ?? null;
+
+        if (is_string($primaryImage) && str_starts_with($primaryImage, 'new:')) {
+            $primaryImage = $gallery[(int) Str::after($primaryImage, 'new:')] ?? null;
+        }
+
+        if (! is_string($primaryImage) || ! in_array($primaryImage, $gallery, true)) {
+            $primaryImage = $gallery[0] ?? null;
+        }
+
+        $car->update([
+            ...collect($validated)->except([
+                'images',
+                'existing_images',
+                'removed_images',
+                'primary_image',
+                'plan_key',
+                'payment_method',
+            ])->all(),
+            'version_id' => $version->getKey(),
+            'gallery' => array_values($gallery),
+            'image' => $primaryImage,
+        ]);
+
+        return redirect()
+            ->route('panel.publications')
+            ->with('success', 'Publicación actualizada correctamente.');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function carRules(): array
+    {
+        return [
+            'brand_id' => ['required', 'uuid', 'exists:car_brands,id'],
+            'model_id' => ['required', 'uuid', 'exists:car_models,id'],
+            'version_id' => ['required', 'uuid', 'exists:car_versions,id'],
+            'year' => ['required', 'integer', 'min:1990', 'max:'.(date('Y') + 1)],
+            'km' => ['required', 'integer', 'min:0', 'max:2000000'],
+            'price' => ['required', 'numeric', 'min:1000', 'max:100000000'],
+            'description' => ['required', 'string', 'min:20', 'max:2000'],
+            'transmission' => ['nullable', Rule::in(['Automática', 'Manual', 'CVT'])],
+            'fuel' => ['nullable', Rule::in(['Gasolina', 'Diésel', 'Híbrido', 'Eléctrico'])],
+            'body' => ['nullable', Rule::in(['Sedán', 'SUV', 'Hatchback', 'Pickup', 'Coupé', 'Van'])],
+            'color' => ['nullable', 'string', 'max:40'],
+            'interior_color' => ['nullable', 'string', 'max:40'],
+            'invoice_type' => ['nullable', Rule::in([
+                'Factura original',
+                'Factura de agencia',
+                'Factura de particular',
+                'Factura de seguro',
+                'Factura de seminuevo',
+                'Sin factura',
+            ])],
+            'owners_count' => ['nullable', 'integer', 'min:0', 'max:20'],
+            'insurance_status' => ['nullable', Rule::in([
+                'Con seguro',
+                'Sin seguro',
+                'Vigente',
+                'Vencido',
+            ])],
+            'city' => ['required', 'string', 'max:80'],
+            'state' => ['nullable', 'string', 'max:80'],
+            'accepts_trade' => ['boolean'],
+            'trade_preference' => ['nullable', 'string', 'max:160'],
+            'vin' => ['nullable', 'string', 'regex:/^[A-Za-z0-9]{17}$/'],
+            'serial_number' => ['nullable', 'string', 'max:40'],
+            'plates' => ['nullable', 'string', 'max:20'],
+            'plan_key' => ['nullable', 'string', 'exists:plans,key_name'],
+            'payment_method' => ['nullable', 'string', Rule::in(app(PaymentMethodsService::class)->allKeys())],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    private function validateCarRelations(CarVersionService $carVersions, array $validated): CarVersion
+    {
+        $brand = CarBrand::query()->find($validated['brand_id']);
+        $model = CarModel::query()->find($validated['model_id']);
+
+        if (! $model || $model->brand_id !== $brand?->getKey()) {
+            throw ValidationException::withMessages([
+                'model_id' => 'El modelo no pertenece a la marca seleccionada.',
+            ]);
+        }
+
+        $version = $carVersions->validateForModel($model, $validated['version_id'], (int) $validated['year']);
+
+        if (! $version) {
+            throw ValidationException::withMessages([
+                'version_id' => 'La versión no pertenece al modelo o año seleccionado.',
+            ]);
+        }
+
+        return $version;
     }
 }
