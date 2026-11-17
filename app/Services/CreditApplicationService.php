@@ -72,28 +72,36 @@ class CreditApplicationService
      */
     private function updateProfile(User $user, array $data): void
     {
+        $profileData = [
+            'full_name' => $data['full_name'],
+            'phone' => $data['phone'],
+            'birthdate' => $data['birthdate'] ?? null,
+            'rfc' => $data['rfc'] ?? null,
+            'curp' => $data['curp'] ?? null,
+            'calle' => $data['calle'] ?? null,
+            'colonia' => $data['colonia'] ?? null,
+            'cp' => $data['cp'] ?? null,
+            'alcaldia' => $data['alcaldia'] ?? null,
+            'pais' => $data['pais'] ?? 'México',
+            'ocupacion' => $data['ocupacion'] ?? null,
+            'empresa' => $data['empresa'] ?? null,
+            'antiguedad' => $data['antiguedad'] ?? null,
+            'ingreso_mensual' => $data['ingreso_mensual'] ?? null,
+        ];
+
+        foreach (['ciudad' => 'city', 'banco' => 'banco', 'tipo_cuenta' => 'tipo_cuenta'] as $input => $column) {
+            if (filled($data[$input] ?? null)) {
+                $profileData[$column] = $data[$input];
+            }
+        }
+
+        if (filled($data['down_payment'] ?? null)) {
+            $profileData['enganche_disponible'] = $data['down_payment'];
+        }
+
         Profile::query()->updateOrCreate(
             ['user_id' => $user->getKey()],
-            [
-                'full_name' => $data['full_name'],
-                'phone' => $data['phone'],
-                'birthdate' => $data['birthdate'] ?? null,
-                'rfc' => $data['rfc'] ?? null,
-                'curp' => $data['curp'] ?? null,
-                'calle' => $data['calle'] ?? null,
-                'colonia' => $data['colonia'] ?? null,
-                'cp' => $data['cp'] ?? null,
-                'alcaldia' => $data['alcaldia'] ?? null,
-                'city' => $data['ciudad'] ?? null,
-                'pais' => $data['pais'] ?? 'México',
-                'ocupacion' => $data['ocupacion'] ?? null,
-                'empresa' => $data['empresa'] ?? null,
-                'antiguedad' => $data['antiguedad'] ?? null,
-                'ingreso_mensual' => $data['ingreso_mensual'] ?? null,
-                'banco' => $data['banco'] ?? null,
-                'tipo_cuenta' => $data['tipo_cuenta'] ?? null,
-                'enganche_disponible' => $data['down_payment'] ?? null,
-            ],
+            $profileData,
         );
     }
 

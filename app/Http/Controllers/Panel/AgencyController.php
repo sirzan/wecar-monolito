@@ -9,6 +9,7 @@ use App\Models\AgencyMember;
 use App\Models\Car;
 use App\Models\CarLead;
 use App\Models\CarStatus;
+use App\Models\Payment;
 use App\Models\Subscription;
 use App\Services\PublicationPlanService;
 use App\Support\AgencyContext;
@@ -115,7 +116,7 @@ class AgencyController extends Controller
         $this->authorize('view', $agency);
 
         $cars = $agency->cars()
-            ->with(['brand', 'model', 'status'])
+            ->with(['brand', 'model', 'version', 'status'])
             ->latest()
             ->paginate(12);
 
@@ -125,8 +126,13 @@ class AgencyController extends Controller
                 'id' => $car->getKey(),
                 'slug' => $car->slug,
                 'title' => trim(($car->brand?->name ?? '').' '.($car->model?->name ?? '').' '.$car->year),
+                'brand' => $car->brand?->name,
+                'model' => $car->model?->name,
+                'version' => $car->version?->name,
+                'year' => (int) $car->year,
                 'price' => (float) $car->price,
                 'km' => (int) $car->km,
+                'city' => $car->city,
                 'image' => $car->image,
                 'status_id' => $car->status_id,
                 'status' => $car->status?->label ?? $car->status?->name,
@@ -275,6 +281,8 @@ class AgencyController extends Controller
             'rfc' => ['nullable', 'string', 'max:20'],
         ]);
 
+        $validated['rfc'] = filled($validated['rfc'] ?? null) ? Str::upper((string) $validated['rfc']) : null;
+
         $agency->update($validated);
 
         return back()->with('success', 'Perfil de agencia actualizado.');
@@ -307,6 +315,21 @@ class AgencyController extends Controller
                 'price' => (float) $plan->price,
                 'duration_weeks' => (int) $plan->duration_weeks,
             ] : null,
+            'invoices' => Payment::query()
+                ->with(['plan', 'subscription.plan'])
+                ->whereHas('subscription', fn ($query) => $query->where('agency_id', $agency->getKey()))
+                ->where('status', 'paid')
+                ->latest()
+                ->limit(20)
+                ->get()
+                ->map(fn (Payment $payment) => [
+                    'id' => $payment->getKey(),
+                    'date' => $payment->created_at?->format('d/m/Y'),
+                    'concept' => $payment->subscription?->plan?->name ?? $payment->plan?->name ?? 'Plan de agencia',
+                    'amount' => (float) $payment->amount,
+                    'status' => $payment->status,
+                    'method' => $payment->provider,
+                ]),
         ]);
     }
 

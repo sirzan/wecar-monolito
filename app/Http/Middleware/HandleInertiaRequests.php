@@ -75,6 +75,7 @@ class HandleInertiaRequests extends Middleware
                 'enabled' => (bool) config('external_search.enabled', true)
                     && (filled(config('services.firecrawl.key')) || (bool) config('services.apify.facebook_enabled')),
             ],
+            'favoriteIds' => $user ? fn () => $user->favorites()->pluck('car_id') : [],
             'push' => [
                 'publicKey' => config('services.webpush.public_key'),
             ],

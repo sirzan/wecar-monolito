@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 #[Fillable([
     'owner_id', 'agency_id', 'seller_id', 'brand_id', 'model_id', 'version_id', 'status_id',
     'slug', 'year', 'km', 'price', 'previous_price', 'city', 'state', 'description', 'image',
-    'gallery', 'transmission', 'fuel', 'body', 'color', 'invoice_type', 'owners_count',
+    'gallery', 'transmission', 'fuel', 'body', 'color', 'interior_color', 'invoice_type', 'owners_count',
     'insurance_status', 'featured', 'accepts_trade',
     'trade_preference', 'vin', 'serial_number', 'plates', 'plan', 'seo_title',
     'seo_description', 'is_published', 'published_at',
@@ -69,6 +69,11 @@ class Car extends Model
     public function leads(): HasMany
     {
         return $this->hasMany(CarLead::class);
+    }
+
+    public function favorites(): HasMany
+    {
+        return $this->hasMany(Favorite::class);
     }
 
     public function scopePublished(Builder $query): Builder

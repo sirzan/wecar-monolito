@@ -17,6 +17,8 @@ import ExternalAdModal from '@/components/external/ExternalAdModal.vue';
 import SearchTokensCard from '@/components/external/SearchTokensCard.vue';
 import SearchRewardAdDialog from '@/components/external/SearchRewardAdDialog.vue';
 import { useExternalSearch } from '@/composables/useExternalSearch';
+import { vehicleYears } from '@/lib/carCatalog';
+import { formatMxn } from '@/lib/currency';
 import type { ExternalCar } from '@/types/external';
 
 defineOptions({ layout: PublicLayout });
@@ -54,6 +56,8 @@ const form = ref({
     max_price: props.filters.max_price ?? '',
     min_year: props.filters.min_year ?? '',
     max_year: props.filters.max_year ?? '',
+    min_km: props.filters.min_km ?? '',
+    max_km: props.filters.max_km ?? '',
     sort: props.filters.sort ?? 'recent',
 });
 
@@ -91,6 +95,7 @@ const openGroups = ref<Record<string, boolean>>({
     color: false,
     price: false,
     year: false,
+    km: false,
 });
 
 const toggleGroup = (key: string) => {
@@ -112,6 +117,7 @@ const versionOptions = computed(() =>
 );
 
 const showFilters = ref(false);
+const filtering = ref(false);
 const aiLoading = ref(false);
 const externalSearch = useExternalSearch();
 const rewardOpen = ref(false);
@@ -125,15 +131,67 @@ const activeFiltersCount = computed(
     () => Object.entries(form.value).filter(([key, value]) => key !== 'sort' && value).length,
 );
 
+const filterLabel = (key: string, value: string): string => {
+    if (key === 'brand') return props.options.brands.find((brand) => brand.slug === value)?.name ?? value;
+    if (key === 'model') return props.options.models.find((model) => model.id === value)?.name ?? value;
+    if (key === 'version') return props.options.versions.find((version) => version.id === value)?.name ?? value;
+    if (key === 'min_price') return `Desde ${formatMxn(value)}`;
+    if (key === 'max_price') return `Hasta ${formatMxn(value)}`;
+    if (key === 'min_year') return `Año desde ${value}`;
+    if (key === 'max_year') return `Año hasta ${value}`;
+    if (key === 'min_km') return `Km desde ${Number(value).toLocaleString('es-MX')}`;
+    if (key === 'max_km') return `Km hasta ${Number(value).toLocaleString('es-MX')}`;
+    if (key === 'q') return `“${value}”`;
+    if (key === 'city') return `Ciudad: ${value}`;
+    if (key === 'body') return `Carrocería: ${value}`;
+    if (key === 'transmission') return `Transmisión: ${value}`;
+    if (key === 'fuel') return `Combustible: ${value}`;
+    if (key === 'color') return `Color: ${value}`;
+    return value;
+};
+
+const activeChips = computed(() =>
+    Object.entries(form.value)
+        .filter(([key, value]) => key !== 'sort' && value)
+        .map(([key, value]) => ({ key, label: filterLabel(key, String(value)) })),
+);
+
+const removeFilter = (key: string) => {
+    (form.value as Record<string, string>)[key] = '';
+    apply(true);
+};
+
+const normalizeRanges = () => {
+    for (const [minKey, maxKey] of [
+        ['min_price', 'max_price'],
+        ['min_year', 'max_year'],
+        ['min_km', 'max_km'],
+    ] as const) {
+        const min = Number(form.value[minKey]);
+        const max = Number(form.value[maxKey]);
+
+        if (form.value[minKey] && form.value[maxKey] && Number.isFinite(min) && Number.isFinite(max) && min > max) {
+            [form.value[minKey], form.value[maxKey]] = [form.value[maxKey], form.value[minKey]];
+        }
+    }
+};
+
 const apply = (immediate = false) => {
     if (debounce) clearTimeout(debounce);
     debounce = setTimeout(
         () => {
+            normalizeRanges();
             const params: Record<string, string> = {};
             Object.entries(form.value).forEach(([key, value]) => {
-                if (value) params[key] = value;
+                if (value) params[key] = String(value);
             });
-            router.get('/comprar', params, { preserveState: true, preserveScroll: true, replace: true });
+            router.get('/comprar', params, {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+                onStart: () => { filtering.value = true; },
+                onFinish: () => { filtering.value = false; },
+            });
         },
         immediate ? 0 : 350,
     );
@@ -141,7 +199,7 @@ const apply = (immediate = false) => {
 
 watch(() => form.value.q, () => apply());
 watch(
-    () => [form.value.brand, form.value.model, form.value.version, form.value.city, form.value.body, form.value.transmission, form.value.fuel, form.value.color, form.value.min_price, form.value.max_price, form.value.min_year, form.value.max_year, form.value.sort],
+    () => [form.value.brand, form.value.model, form.value.version, form.value.city, form.value.body, form.value.transmission, form.value.fuel, form.value.color, form.value.min_price, form.value.max_price, form.value.min_year, form.value.max_year, form.value.min_km, form.value.max_km, form.value.sort],
     () => apply(true),
 );
 
@@ -238,12 +296,15 @@ const retryExternalSearch = () => {
 };
 
 const clear = () => {
-    form.value = { q: '', brand: '', model: '', version: '', city: '', body: '', transmission: '', fuel: '', color: '', min_price: '', max_price: '', min_year: '', max_year: '', sort: 'recent' };
+    form.value = { q: '', brand: '', model: '', version: '', city: '', body: '', transmission: '', fuel: '', color: '', min_price: '', max_price: '', min_year: '', max_year: '', min_km: '', max_km: '', sort: 'recent' };
+    showFilters.value = false;
 };
 </script>
 
 <template>
     <SeoHead :title="seo.title" :description="seo.description" :canonical="seo.canonical" :noindex="seo.noindex ?? false" />
+
+    <div v-if="showFilters" class="fixed inset-0 z-40 bg-black/50 lg:hidden" @click="showFilters = false" />
 
     <section class="bg-gradient-hero px-4 pb-2 pt-5 sm:px-6 sm:pb-3 sm:pt-6">
         <div class="mx-auto flex max-w-7xl items-start justify-between gap-3">
@@ -263,13 +324,16 @@ const clear = () => {
     </section>
 
     <section class="mx-auto flex max-w-7xl gap-8 px-4 py-8 sm:px-6">
-        <aside :class="['w-72 shrink-0', showFilters ? 'block' : 'hidden lg:block']">
+        <aside :class="['shrink-0', showFilters ? 'fixed inset-y-0 left-0 z-50 block w-[min(88vw,340px)] overflow-y-auto bg-background p-4 shadow-2xl lg:static lg:z-auto lg:w-72 lg:overflow-visible lg:bg-transparent lg:p-0 lg:shadow-none' : 'hidden w-72 lg:block']">
             <div class="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto rounded-3xl border border-border bg-card p-6 shadow-soft">
             <div class="mb-5 flex items-center justify-between">
                 <div class="flex items-center gap-2">
                     <h2 class="text-2xl font-bold text-secondary">Filtros</h2>
                     <span v-if="activeFiltersCount" class="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-bold text-secondary-foreground">{{ activeFiltersCount }}</span>
                 </div>
+                <button type="button" class="rounded-full p-1.5 text-muted-foreground hover:bg-accent lg:hidden" aria-label="Cerrar filtros" @click="showFilters = false">
+                    <X class="h-4 w-4" />
+                </button>
             </div>
 
             <div class="border-t border-border/60 py-3 first:border-t-0 first:pt-0">
@@ -384,10 +448,25 @@ const clear = () => {
                     <span class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Precio (MXN)</span>
                     <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="openGroups.price ? 'rotate-180' : ''" />
                 </button>
-                <div v-show="openGroups.price" class="mt-2 flex items-center gap-2">
-                    <Input v-model="form.min_price" type="number" placeholder="Mín" class="no-spinner h-10" />
+                <div v-show="openGroups.price" class="mt-2">
+                    <div class="flex items-center gap-2">
+                        <Input v-model="form.min_price" type="number" placeholder="Mín" class="no-spinner h-10" />
+                        <span class="text-muted-foreground">–</span>
+                        <Input v-model="form.max_price" type="number" placeholder="Máx" class="no-spinner h-10" />
+                    </div>
+                    <p class="mt-1 text-[10px] text-muted-foreground">Disponible: {{ formatMxn(options.price.min) }} – {{ formatMxn(options.price.max) }}</p>
+                </div>
+            </div>
+
+            <div class="border-t border-border/60 py-3">
+                <button type="button" class="flex w-full items-center justify-between gap-2 text-left" :aria-expanded="openGroups.km" @click="toggleGroup('km')">
+                    <span class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Kilometraje</span>
+                    <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="openGroups.km ? 'rotate-180' : ''" />
+                </button>
+                <div v-show="openGroups.km" class="mt-2 flex items-center gap-2">
+                    <Input v-model="form.min_km" type="number" min="0" placeholder="Mín km" class="no-spinner h-10" />
                     <span class="text-muted-foreground">–</span>
-                    <Input v-model="form.max_price" type="number" placeholder="Máx" class="no-spinner h-10" />
+                    <Input v-model="form.max_km" type="number" min="0" placeholder="Máx km" class="no-spinner h-10" />
                 </div>
             </div>
 
@@ -397,9 +476,15 @@ const clear = () => {
                     <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="openGroups.year ? 'rotate-180' : ''" />
                 </button>
                 <div v-show="openGroups.year" class="mt-2 flex items-center gap-2">
-                    <Input v-model="form.min_year" type="number" placeholder="Desde" class="no-spinner h-10" />
+                    <select v-model="form.min_year" class="h-10 min-w-0 flex-1 rounded-lg border border-input bg-background px-2 text-sm">
+                        <option value="">Desde</option>
+                        <option v-for="year in vehicleYears" :key="`min-${year}`" :value="String(year)">{{ year }}</option>
+                    </select>
                     <span class="text-muted-foreground">–</span>
-                    <Input v-model="form.max_year" type="number" placeholder="Hasta" class="no-spinner h-10" />
+                    <select v-model="form.max_year" class="h-10 min-w-0 flex-1 rounded-lg border border-input bg-background px-2 text-sm">
+                        <option value="">Hasta</option>
+                        <option v-for="year in vehicleYears" :key="`max-${year}`" :value="String(year)">{{ year }}</option>
+                    </select>
                 </div>
             </div>
 
@@ -471,8 +556,25 @@ const clear = () => {
                 <p class="text-xs text-muted-foreground sm:text-sm">
                     {{ cars.meta.total.toLocaleString('es-MX') }} {{ cars.meta.total === 1 ? 'auto encontrado' : 'autos encontrados' }}
                 </p>
+                <span v-if="filtering" class="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                    <LoaderCircle class="h-3.5 w-3.5 animate-spin" /> Actualizando…
+                </span>
             </div>
-            <div v-if="cars.data.length" class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+
+            <div v-if="activeChips.length" class="mb-4 flex flex-wrap gap-2">
+                <button
+                    v-for="chip in activeChips"
+                    :key="chip.key"
+                    type="button"
+                    class="inline-flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1 text-[11px] font-semibold text-secondary transition hover:border-destructive/40 hover:text-destructive"
+                    @click="removeFilter(chip.key)"
+                >
+                    {{ chip.label }} <X class="h-3 w-3" />
+                </button>
+                <button type="button" class="rounded-full px-2 py-1 text-[11px] font-bold text-primary hover:underline" @click="clear">Limpiar todo</button>
+            </div>
+
+            <div v-if="cars.data.length" class="grid gap-5 transition-opacity sm:grid-cols-2 lg:grid-cols-3" :class="filtering ? 'pointer-events-none opacity-50' : ''">
                 <CarCard v-for="car in cars.data" :key="car.id" :car="car" />
             </div>
 

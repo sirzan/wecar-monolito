@@ -5,6 +5,7 @@ import PublicLayout from '@/layouts/PublicLayout.vue';
 import SeoHead from '@/components/site/SeoHead.vue';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
+import PhoneInput from '@/components/ui/PhoneInput.vue';
 
 defineOptions({ layout: PublicLayout });
 
@@ -78,7 +79,7 @@ const submit = () => {
                     <p v-if="form.errors.email" class="mt-1 text-xs text-destructive">{{ form.errors.email }}</p>
                 </div>
                 <div>
-                    <Input v-model="form.phone" type="tel" placeholder="81 1234 5678" autocomplete="tel" />
+                    <PhoneInput v-model="form.phone" placeholder="81 1234 5678" autocomplete="tel" />
                     <p v-if="form.errors.phone" class="mt-1 text-xs text-destructive">{{ form.errors.phone }}</p>
                 </div>
                 <div>

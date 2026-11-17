@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import { ArrowRight, Coins, Globe, ShieldCheck, Sparkles } from '@lucide/vue';
 import { Link } from '@inertiajs/vue3';
 import Button from '@/components/ui/Button.vue';
+import { formatMxn } from '@/lib/currency';
 import type { ExternalSearchStatus } from '@/types/external';
 
 const props = defineProps<{
@@ -35,7 +36,7 @@ const hasCoupon = computed(() => props.status?.has_coupon ?? false);
                     {{ isAdmin ? 'Acceso administrador: búsquedas y vistas ilimitadas.' : 'Membresía activa: búsquedas y vistas ilimitadas.' }}
                 </template>
                 <template v-else>
-                    3 búsquedas gratis al día. Después, con tokens desde $49 MXN o membresía desde $499 MXN al mes.
+                    3 búsquedas gratis al día. Después, con tokens desde {{ formatMxn(49) }} o membresía desde {{ formatMxn(499) }} al mes.
                     <span v-if="hasCoupon" class="font-bold text-primary"> · 50% con cupón TKNS50</span>
                 </template>
             </p>

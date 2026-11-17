@@ -66,7 +66,12 @@ it('allows a verified seller into the panel', function () {
     $this->actingAs($user)
         ->get('/panel')
         ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page->component('Panel/Dashboard'));
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Panel/Dashboard')
+            ->where('auth.user.name', $user->name)
+            ->where('stats.active_cars', 0)
+            ->where('stats.leads', 0)
+        );
 });
 
 it('only lists own and member-agency cars in publications', function () {

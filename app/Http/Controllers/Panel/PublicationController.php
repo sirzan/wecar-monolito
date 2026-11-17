@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Panel;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CarResource;
 use App\Models\Car;
+use App\Models\CarBrand;
 use App\Models\CarStatus;
+use App\Models\Plan;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -40,9 +42,43 @@ class PublicationController extends Controller
         ]);
     }
 
+    public function edit(Request $request, Car $car): Response
+    {
+        $this->authorize('update', $car);
+
+        $car->load(['brand', 'model', 'version', 'status', 'agency']);
+
+        $data = (new CarResource($car))->resolve($request);
+        $data['version_name'] = $car->version?->name;
+
+        return Inertia::render('Public/Vende', [
+            'editMode' => true,
+            'car' => $data,
+            'brands' => CarBrand::query()->with('models:id,brand_id,name')->orderBy('name')->get(['id', 'name', 'slug']),
+            'plans' => Plan::query()
+                ->where('is_active', true)
+                ->where('type', 'publication')
+                ->orderBy('sort_order')
+                ->get(),
+            'activePlan' => null,
+            'agencyPlan' => null,
+            'filters' => [
+                'bodies' => ['Sedán', 'SUV', 'Hatchback', 'Pickup', 'Coupé', 'Van'],
+                'transmissions' => ['Automática', 'Manual', 'CVT'],
+                'fuels' => ['Gasolina', 'Diésel', 'Híbrido', 'Eléctrico'],
+                'colors' => ['Blanco', 'Negro', 'Gris', 'Plata', 'Rojo', 'Azul', 'Verde'],
+            ],
+            'seo' => [
+                'title' => 'Editar publicación — Wecar',
+                'description' => 'Actualiza los datos de tu publicación en Wecar.',
+                'canonical' => route('panel.publications.edit', $car->getKey()),
+            ],
+        ]);
+    }
+
     public function updateStatus(Request $request, Car $car): RedirectResponse
     {
-        $this->authorizeCar($request, $car);
+        $this->authorize('update', $car);
 
         $validated = $request->validate([
             'status_id' => ['required', 'uuid', 'exists:car_statuses,id'],
@@ -55,25 +91,10 @@ class PublicationController extends Controller
 
     public function destroy(Request $request, Car $car): RedirectResponse
     {
-        $this->authorizeCar($request, $car);
+        $this->authorize('delete', $car);
 
         $car->delete();
 
         return back()->with('success', 'Publicación eliminada.');
-    }
-
-    private function authorizeCar(Request $request, Car $car): void
-    {
-        $user = $request->user();
-
-        if ($car->owner_id === $user->getKey()) {
-            return;
-        }
-
-        if ($car->agency_id && $car->agency && in_array($user->agencyRole($car->agency), ['owner', 'admin'], true)) {
-            return;
-        }
-
-        abort(403);
     }
 }

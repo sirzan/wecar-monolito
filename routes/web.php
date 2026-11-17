@@ -11,11 +11,13 @@ use App\Http\Controllers\ContactController;
 use App\Http\Controllers\CreditController;
 use App\Http\Controllers\DiditController;
 use App\Http\Controllers\ExternalSearchController;
+use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PublicController;
 use App\Http\Controllers\PushController;
 use App\Http\Controllers\SitemapController;
 use App\Http\Controllers\VendeController;
+use App\Http\Controllers\ZipCodeController;
 use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Http\Controllers\RegisteredUserController;
 
@@ -59,6 +61,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/api/notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
     Route::post('/api/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
     Route::get('/api/credito/documentos', [CreditController::class, 'documents'])->name('credit.documents');
+    Route::get('/api/credito/perfil', [CreditController::class, 'profile'])->name('credit.profile');
+    Route::get('/api/codigo-postal/{cp}', ZipCodeController::class)->middleware('throttle:30,1')->name('zip-code');
     Route::post('/api/credito/documentos', [CreditController::class, 'uploadDocument'])->name('credit.documents.store');
     Route::post('/api/credito/solicitudes', [CreditController::class, 'submit'])->middleware('throttle:10,1')->name('credit.apply');
     Route::get('/api/credito/solicitudes/{application}/documentos/{slot}', [CreditController::class, 'showDocument'])->name('credit.documents.show');
@@ -66,6 +70,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/api/external-search/reward/claim', [ExternalSearchController::class, 'rewardClaim'])->middleware('throttle:5,1')->name('external-search.reward.claim');
     Route::post('/api/push/subscribe', [PushController::class, 'subscribe'])->name('push.subscribe');
     Route::delete('/api/push/unsubscribe', [PushController::class, 'unsubscribe'])->name('push.unsubscribe');
+
+    Route::get('/api/favorites', [FavoriteController::class, 'ids'])->name('favorites.ids');
+    Route::post('/api/favorites/sync', [FavoriteController::class, 'sync'])->name('favorites.sync');
+    Route::post('/api/favorites/{car:id}', [FavoriteController::class, 'toggle'])->name('favorites.toggle');
 });
 
 Route::post('/webhooks/stripe', [CheckoutController::class, 'stripeWebhook'])->name('webhooks.stripe');

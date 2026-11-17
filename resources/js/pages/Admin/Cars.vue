@@ -15,6 +15,8 @@ interface AdminCar {
     title: string;
     price: number;
     km: number;
+    version?: string | null;
+    city?: string | null;
     image: string | null;
     status_id: string | null;
     status: string | null;
@@ -111,10 +113,10 @@ const destroy = (car: AdminCar) => {
                     <tr v-for="car in cars.data" :key="car.id">
                         <td class="p-4">
                             <div class="flex items-center gap-3">
-                                <img v-if="car.image" :src="car.image" :alt="car.title" class="h-12 w-16 rounded-lg object-cover" />
+                                <img v-if="car.image" :src="car.image" :alt="car.title" class="h-12 w-16 rounded-lg object-cover" loading="lazy" />
                                 <div>
                                     <p class="font-medium">{{ car.title }}</p>
-                                    <p class="text-xs text-muted-foreground">{{ car.km.toLocaleString('es-MX') }} km · {{ car.slug }}</p>
+                                    <p class="text-xs text-muted-foreground">{{ [car.version, `${car.km.toLocaleString('es-MX')} km`, car.city].filter(Boolean).join(' · ') }}</p>
                                 </div>
                             </div>
                         </td>

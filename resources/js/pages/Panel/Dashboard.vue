@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
-import { ArrowRight, Building2, Car, Check, CreditCard, Inbox, Plus, ShieldCheck, Sparkles } from '@lucide/vue';
+import { computed } from 'vue';
+import { Link, usePage } from '@inertiajs/vue3';
+import { ArrowRight, Building2, Car, Check, CreditCard, Plus, Sparkles } from '@lucide/vue';
 import PanelLayout from '@/layouts/PanelLayout.vue';
 import Button from '@/components/ui/Button.vue';
 
 defineOptions({ layout: PanelLayout });
+
+const page = usePage<{ auth: { user: { name: string } | null } }>();
+const userName = computed(() => page.props.auth.user?.name ?? '');
 
 defineProps<{
     stats: { cars: number; active_cars: number; agency_cars: number; leads: number };
@@ -21,7 +25,7 @@ const formatPrice = (value: number) =>
 <template>
     <div class="space-y-6">
         <div>
-            <h1 class="text-2xl font-black text-secondary sm:text-3xl">Panel de Control</h1>
+            <h1 class="text-2xl font-black text-secondary sm:text-3xl">Hola, {{ userName }}</h1>
             <p class="mt-1 text-sm text-muted-foreground">Administra tus publicaciones de vehículos, agencias y solicitudes de crédito.</p>
         </div>
 
@@ -48,7 +52,7 @@ const formatPrice = (value: number) =>
         </div>
 
         <!-- Métricas numéricas -->
-        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="grid gap-4 sm:grid-cols-2">
             <div class="rounded-3xl border border-border/70 bg-card p-5 shadow-soft">
                 <div class="flex items-center justify-between">
                     <p class="text-xs font-bold text-muted-foreground">Mis publicaciones</p>
@@ -60,15 +64,6 @@ const formatPrice = (value: number) =>
                 </Link>
             </div>
 
-            <div class="rounded-3xl border border-border/70 bg-card p-5 shadow-soft">
-                <div class="flex items-center justify-between">
-                    <p class="text-xs font-bold text-muted-foreground">Autos activos</p>
-                    <ShieldCheck class="h-4 w-4 text-emerald-600" />
-                </div>
-                <p class="mt-3 text-3xl font-black text-secondary">{{ stats.active_cars }}</p>
-                <p class="mt-2 text-xs text-muted-foreground">Visibles en el catálogo público</p>
-            </div>
-
             <div v-if="agencies.length" class="rounded-3xl border border-border/70 bg-card p-5 shadow-soft">
                 <div class="flex items-center justify-between">
                     <p class="text-xs font-bold text-muted-foreground">Autos de agencia</p>
@@ -76,15 +71,6 @@ const formatPrice = (value: number) =>
                 </div>
                 <p class="mt-3 text-3xl font-black text-secondary">{{ stats.agency_cars }}</p>
                 <p class="mt-2 text-xs text-muted-foreground">Inventario compartido de red</p>
-            </div>
-
-            <div class="rounded-3xl border border-border/70 bg-card p-5 shadow-soft">
-                <div class="flex items-center justify-between">
-                    <p class="text-xs font-bold text-muted-foreground">Prospectos / Leads</p>
-                    <Inbox class="h-4 w-4 text-primary" />
-                </div>
-                <p class="mt-3 text-3xl font-black text-secondary">{{ stats.leads }}</p>
-                <p class="mt-2 text-xs text-muted-foreground">Interesados en tus autos</p>
             </div>
         </div>
 

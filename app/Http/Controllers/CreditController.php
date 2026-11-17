@@ -14,6 +14,7 @@ use App\Services\CreditScoringService;
 use App\Services\MembershipService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -39,6 +40,35 @@ class CreditController extends Controller
         ]);
     }
 
+    public function profile(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $profile = $user->profile;
+
+        return response()->json([
+            'profile' => [
+                'full_name' => $profile?->full_name ?? $user->name,
+                'email' => $user->email,
+                'phone' => $profile?->phone ?? $user->phone,
+                'birthdate' => $profile?->birthdate?->toDateString(),
+                'rfc' => $profile?->rfc,
+                'curp' => $profile?->curp,
+                'gender' => $profile?->genero,
+                'calle' => $profile?->calle,
+                'colonia' => $profile?->colonia,
+                'cp' => $profile?->cp,
+                'alcaldia' => $profile?->alcaldia,
+                'state' => $profile?->state,
+                'ocupacion' => $profile?->ocupacion ?? data_get($profile?->metadata, 'ocupacion'),
+                'empresa' => $profile?->empresa ?? data_get($profile?->metadata, 'empresa'),
+                'antiguedad' => $profile?->antiguedad ?? data_get($profile?->metadata, 'antiguedad'),
+                'tipo_trabajo' => $profile?->tipo_trabajo ?? data_get($profile?->metadata, 'tipo_trabajo'),
+                'ingreso_mensual' => $profile?->ingreso_mensual,
+                'deuda_mensual' => $profile?->deuda_mensual,
+            ],
+        ]);
+    }
+
     public function evaluate(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -55,9 +85,9 @@ class CreditController extends Controller
             'perfil.plazoMeses' => ['required', 'integer', 'min:12', 'max:84'],
             'perfil.historialBuro' => ['required', Rule::in(['excelente', 'bueno', 'regular', 'sin-historial', 'malo'])],
             'perfil.tipoEmpleo' => ['required', Rule::in(['fijo', 'honorarios', 'negocio', 'eventual'])],
-            'perfil.antiguedadLaboralAnios' => ['nullable', 'numeric', 'min:0'],
+            'perfil.antiguedadLaboralAnios' => ['required', 'numeric', 'min:0'],
             'perfil.deudasMensuales' => ['nullable', 'numeric', 'min:0'],
-            'perfil.edad' => ['nullable', 'integer', 'min:18', 'max:99'],
+            'perfil.edad' => ['required', 'integer', 'min:18', 'max:99'],
         ]);
 
         return response()->json(
@@ -107,15 +137,15 @@ class CreditController extends Controller
             'colonia' => ['required', 'string', 'max:120'],
             'cp' => ['required', 'string', 'max:10'],
             'alcaldia' => ['required', 'string', 'max:120'],
-            'ciudad' => ['required', 'string', 'max:120'],
+            'ciudad' => ['nullable', 'string', 'max:120'],
             'pais' => ['required', 'string', 'max:80'],
             'ocupacion' => ['required', 'string', 'max:120'],
             'empresa' => ['nullable', 'string', 'max:160'],
             'antiguedad' => ['nullable', 'string', 'max:80'],
             'ingreso_mensual' => ['required', 'numeric', 'min:1'],
             'deuda_mensual' => ['nullable', 'numeric', 'min:0'],
-            'banco' => ['required', 'string', 'max:80'],
-            'tipo_cuenta' => ['required', 'string', 'max:80'],
+            'banco' => ['nullable', 'string', 'max:80'],
+            'tipo_cuenta' => ['nullable', 'string', 'max:80'],
             'car_brand' => ['required', 'string', 'max:120'],
             'car_model' => ['required', 'string', 'max:120'],
             'car_version' => ['nullable', 'string', 'max:160'],
@@ -126,10 +156,10 @@ class CreditController extends Controller
             'financiera_name' => ['required', 'string', 'max:160'],
             'car_id' => ['nullable', 'uuid', 'exists:cars,id'],
             'car_condition' => ['nullable', Rule::in(['new', 'used'])],
-            'bureau' => ['nullable', Rule::in(['excelente', 'bueno', 'regular', 'sin-historial', 'malo'])],
-            'employment' => ['nullable', Rule::in(['fijo', 'honorarios', 'negocio', 'eventual'])],
-            'tenure' => ['nullable', 'numeric', 'min:0'],
-            'age' => ['nullable', 'integer', 'min:18', 'max:99'],
+            'bureau' => ['required', Rule::in(['excelente', 'bueno', 'regular', 'sin-historial', 'malo'])],
+            'employment' => ['required', Rule::in(['fijo', 'honorarios', 'negocio', 'eventual'])],
+            'tenure' => ['required', 'numeric', 'min:0'],
+            'age' => ['required', 'integer', 'min:18', 'max:99'],
             'score' => ['nullable', 'integer', 'min:0', 'max:1000'],
             'risk_level' => ['nullable', 'string', 'max:40'],
             'down_payment' => ['required', 'numeric', 'min:0'],
@@ -152,6 +182,9 @@ class CreditController extends Controller
             ->whereKey($validated['financiera_id'])
             ->where('activo', true)
             ->firstOrFail();
+
+        $validated['rfc'] = filled($validated['rfc'] ?? null) ? Str::upper((string) $validated['rfc']) : null;
+        $validated['curp'] = filled($validated['curp'] ?? null) ? Str::upper((string) $validated['curp']) : null;
 
         if ($validated['car_id'] ?? null) {
             $car = Car::query()
@@ -182,10 +215,10 @@ class CreditController extends Controller
 
         $input = [
             'ingreso' => (float) $validated['ingreso_mensual'],
-            'edad' => (int) ($validated['age'] ?? 30),
-            'antiguedad' => (float) ($validated['tenure'] ?? 0),
-            'empleo' => (string) ($validated['employment'] ?? 'fijo'),
-            'historial' => (string) ($validated['bureau'] ?? 'bueno'),
+            'edad' => (int) $validated['age'],
+            'antiguedad' => (float) $validated['tenure'],
+            'empleo' => (string) $validated['employment'],
+            'historial' => (string) $validated['bureau'],
             'deudas' => (float) ($validated['deuda_mensual'] ?? 0),
             'precio' => (float) $validated['car_price'],
             'enganche' => (float) $validated['down_payment'],

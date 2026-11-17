@@ -146,8 +146,10 @@ const pay = (method: PaymentMethodKey) => {
                         No hay métodos de pago habilitados o configurados. Contacta a soporte para completar tu publicación.
                     </p>
 
-                    <p class="mt-5 inline-flex items-center gap-2 text-[11px] text-muted-foreground">
-                        <ShieldCheck class="h-4 w-4 text-success" /> Pago protegido. Tus datos no se almacenan en Wecar.
+                    <p class="mt-5 flex items-start gap-2 text-[11px] text-muted-foreground">
+                        <ShieldCheck class="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                        <span v-if="spei">WeCar no solicita ni almacena tus contraseñas o credenciales bancarias. Solo mostramos los datos de la cuenta receptora.</span>
+                        <span v-else>Pago protegido. Los datos de tu tarjeta se procesan a través de la pasarela de pago y no se almacenan en nuestra base de datos.</span>
                     </p>
                 </div>
             </div>

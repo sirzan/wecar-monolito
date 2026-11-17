@@ -7,6 +7,8 @@ import PanelLayout from '@/layouts/PanelLayout.vue';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
+import PhoneInput from '@/components/ui/PhoneInput.vue';
+import ZipCodeFields from '@/components/forms/ZipCodeFields.vue';
 
 defineOptions({ layout: PanelLayout });
 
@@ -71,6 +73,22 @@ const completion = computed(() => {
 });
 
 const submit = () => form.post('/panel/perfil-crediticio', { preserveScroll: true });
+
+const tipoTrabajoOptions = computed(() => {
+    const options = ['Formal', 'Independiente', 'Honorarios', 'Negocio propio', 'Eventual'];
+
+    return form.tipo_trabajo && !options.includes(form.tipo_trabajo) ? [form.tipo_trabajo, ...options] : options;
+});
+
+const antiguedadOptions = computed(() => {
+    const options = ['Menos de 1 año', '1 a 3 años', '3 a 5 años', 'Más de 5 años'];
+
+    return form.antiguedad && !options.includes(form.antiguedad) ? [form.antiguedad, ...options] : options;
+});
+
+const uppercase = (field: 'rfc' | 'curp') => {
+    form[field] = form[field].toUpperCase();
+};
 
 // Expediente digital
 const docSlots = [
@@ -243,7 +261,7 @@ onMounted(() => {
                 </div>
                 <div>
                     <Label for="phone">Teléfono</Label>
-                    <Input id="phone" v-model="form.phone" class="mt-1.5" />
+                    <PhoneInput id="phone" v-model="form.phone" class="mt-1.5" />
                 </div>
                 <div>
                     <Label for="birthdate">Fecha de nacimiento</Label>
@@ -251,11 +269,11 @@ onMounted(() => {
                 </div>
                 <div>
                     <Label for="rfc">RFC</Label>
-                    <Input id="rfc" v-model="form.rfc" class="mt-1.5" />
+                    <Input id="rfc" v-model="form.rfc" class="mt-1.5" @input="uppercase('rfc')" />
                 </div>
                 <div>
                     <Label for="curp">CURP</Label>
-                    <Input id="curp" v-model="form.curp" class="mt-1.5" />
+                    <Input id="curp" v-model="form.curp" class="mt-1.5" @input="uppercase('curp')" />
                 </div>
                 <div>
                     <Label for="gender">Género</Label>
@@ -275,26 +293,7 @@ onMounted(() => {
                     <Label for="calle">Calle y número</Label>
                     <Input id="calle" v-model="form.calle" class="mt-1.5" />
                 </div>
-                <div>
-                    <Label for="colonia">Colonia</Label>
-                    <Input id="colonia" v-model="form.colonia" class="mt-1.5" />
-                </div>
-                <div>
-                    <Label for="cp">Código postal</Label>
-                    <Input id="cp" v-model="form.cp" maxlength="10" class="mt-1.5" />
-                </div>
-                <div>
-                    <Label for="alcaldia">Alcaldía / Municipio</Label>
-                    <Input id="alcaldia" v-model="form.alcaldia" class="mt-1.5" />
-                </div>
-                <div>
-                    <Label for="city">Ciudad</Label>
-                    <Input id="city" v-model="form.city" class="mt-1.5" />
-                </div>
-                <div>
-                    <Label for="state">Estado</Label>
-                    <Input id="state" v-model="form.state" class="mt-1.5" />
-                </div>
+                <ZipCodeFields v-model:cp="form.cp" v-model:colonia="form.colonia" v-model:alcaldia="form.alcaldia" v-model:state="form.state" />
                 <div>
                     <Label for="country">País</Label>
                     <Input id="country" v-model="form.country" class="mt-1.5" />
@@ -313,11 +312,17 @@ onMounted(() => {
                 </div>
                 <div>
                     <Label for="tipo_trabajo">Tipo de trabajo</Label>
-                    <Input id="tipo_trabajo" v-model="form.tipo_trabajo" class="mt-1.5" placeholder="Formal / Independiente" />
+                    <select id="tipo_trabajo" v-model="form.tipo_trabajo" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                        <option value="">Selecciona una opción</option>
+                        <option v-for="option in tipoTrabajoOptions" :key="option" :value="option">{{ option }}</option>
+                    </select>
                 </div>
                 <div>
                     <Label for="antiguedad">Antigüedad</Label>
-                    <Input id="antiguedad" v-model="form.antiguedad" class="mt-1.5" placeholder="Ej. 3 años" />
+                    <select id="antiguedad" v-model="form.antiguedad" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                        <option value="">Selecciona una opción</option>
+                        <option v-for="option in antiguedadOptions" :key="option" :value="option">{{ option }}</option>
+                    </select>
                 </div>
                 <div>
                     <Label for="ingreso_mensual">Ingreso mensual (MXN)</Label>
@@ -326,18 +331,6 @@ onMounted(() => {
                 <div>
                     <Label for="deuda_mensual">Deuda mensual (MXN)</Label>
                     <Input id="deuda_mensual" v-model="form.deuda_mensual" type="number" min="0" class="mt-1.5" />
-                </div>
-                <div>
-                    <Label for="banco">Banco</Label>
-                    <Input id="banco" v-model="form.banco" class="mt-1.5" />
-                </div>
-                <div>
-                    <Label for="tipo_cuenta">Tipo de cuenta</Label>
-                    <Input id="tipo_cuenta" v-model="form.tipo_cuenta" class="mt-1.5" placeholder="Nómina / Débito" />
-                </div>
-                <div>
-                    <Label for="enganche_disponible">Enganche disponible (MXN)</Label>
-                    <Input id="enganche_disponible" v-model="form.enganche_disponible" type="number" min="0" class="mt-1.5" />
                 </div>
             </div>
 
