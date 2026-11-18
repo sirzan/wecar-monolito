@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
-import { usePage } from '@inertiajs/vue3';
+import { usePage, Link } from '@inertiajs/vue3';
 import {
     AlertCircle,
     Banknote,
@@ -8,6 +8,7 @@ import {
     CheckCircle2,
     ChevronLeft,
     ChevronRight,
+    ChevronDown,
     FileText,
     Loader2,
     ShieldCheck,
@@ -17,6 +18,7 @@ import {
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
+import MoneyInput from '@/components/ui/MoneyInput.vue';
 import PhoneInput from '@/components/ui/PhoneInput.vue';
 import ZipCodeFields from '@/components/forms/ZipCodeFields.vue';
 import { vehicleYears } from '@/lib/carCatalog';
@@ -59,7 +61,7 @@ const props = withDefaults(
             version?: string;
             version_id?: string;
             year?: number;
-            km?: number;
+            km?: number | null;
             price?: number;
         };
     }>(),
@@ -74,13 +76,18 @@ const emit = defineEmits<{ close: [] }>();
 
 const page = usePage<{ auth: { user: { id: string; name: string; email: string } | null } }>();
 const user = computed(() => page.props.auth.user);
+const stepLabels = ['Datos', 'Precalificación', 'Ofertas', 'Cuenta', 'Solicitud'];
 
-type Step = 1 | 2 | 3 | 4;
+type Step = 1 | 2 | 3 | 4 | 5;
 const step = ref<Step>(1);
 const evaluating = ref(false);
 const submitting = ref(false);
 const submitError = ref<string | null>(null);
 const successFolio = ref<string | null>(null);
+const showAllOffers = ref(false);
+const accountCompleted = ref(false);
+const documentsOpen = ref(true);
+const loginPromptOpen = ref(false);
 
 const basics = reactive({
     phone: '',
@@ -263,6 +270,13 @@ const evaluation = ref<any | null>(null);
 const selectedSlug = ref<string | null>(null);
 
 const selectedOffer = computed(() => offers.value.find((offer) => offer.slug === selectedSlug.value) ?? null);
+const visibleOffers = computed(() => offers.value.slice(0, showAllOffers.value ? 8 : 5));
+const hiddenOffersCount = computed(() => Math.max(offers.value.length - visibleOffers.value.length, 0));
+const savedDocumentsCount = computed(() =>
+    (['ine', 'domicilio', 'estado_cuenta'] as DocSlot[]).filter((slot) => documents[slot].saved).length,
+);
+const documentProgress = computed(() => (accountCompleted.value ? 1 : 0) + savedDocumentsCount.value);
+const summaryRate = computed(() => Number(selectedOffer.value?.tasaEstimadaAnual ?? 12.5));
 const price = computed(() => Number(profile.price || 0));
 const downPaymentAmount = computed(() => Math.round((price.value * basics.downPayment) / 100));
 const financedAmount = computed(() => Math.max(price.value - downPaymentAmount.value, 0));
@@ -317,6 +331,9 @@ const reset = () => {
     pawnOffers.value = [];
     evaluation.value = null;
     selectedSlug.value = null;
+    showAllOffers.value = false;
+    accountCompleted.value = false;
+    documentsOpen.value = true;
     documents.ine = {};
     documents.domicilio = {};
     documents.estado_cuenta = {};
@@ -367,6 +384,7 @@ watch(
         if (open) {
             reset();
             syncFromInitial();
+            loginPromptOpen.value = !user.value;
             application.full_name = user.value?.name ?? '';
             application.email = user.value?.email ?? '';
             application.phone = basics.phone;
@@ -526,6 +544,8 @@ const evaluate = async () => {
         offers.value = (evaluation.value.opcionesRecomendadas ?? []).map(normalizeOffer);
         pawnOffers.value = (evaluation.value.opcionesPrendarias ?? []).map(normalizeOffer);
         selectedSlug.value = offers.value.find((offer) => offer.califica)?.slug ?? null;
+        showAllOffers.value = false;
+        accountCompleted.value = false;
         step.value = 3;
     } catch (error) {
         submitError.value = error instanceof Error ? error.message : 'No se pudo evaluar tu perfil.';
@@ -541,16 +561,52 @@ const goToApplication = () => {
     }
 
     if (!user.value) {
-        submitError.value = 'Inicia sesión para enviar tu solicitud.';
+        loginPromptOpen.value = true;
         return;
     }
 
     submitError.value = null;
+    accountCompleted.value = false;
     step.value = 4;
 };
 
+const goToDocuments = () => {
+    const required: [string, string | null | undefined][] = [
+        ['nombre completo', application.full_name],
+        ['correo', application.email],
+        ['teléfono', application.phone],
+        ['fecha de nacimiento', application.birthdate],
+        ['calle y número', application.calle],
+        ['colonia', application.colonia],
+        ['código postal', application.cp],
+        ['alcaldía o municipio', application.alcaldia],
+        ['ocupación', application.ocupacion],
+    ];
+
+    const missing = required.find(([, value]) => !String(value ?? '').trim());
+
+    if (missing) {
+        submitError.value = `Completa tu ${missing[0]} para continuar.`;
+        return;
+    }
+
+    submitError.value = null;
+    accountCompleted.value = true;
+    documentsOpen.value = true;
+    step.value = 5;
+};
+
+const printQuote = () => {
+    window.print();
+};
+
 const submit = async () => {
-    if (!selectedOffer.value || !user.value) return;
+    if (!selectedOffer.value) return;
+
+    if (!user.value) {
+        loginPromptOpen.value = true;
+        return;
+    }
 
     const requiredDocs = (['ine', 'domicilio', 'estado_cuenta'] as DocSlot[]).every(
         (slot) => documents[slot].saved,
@@ -639,30 +695,71 @@ const submit = async () => {
 <template>
     <Teleport to="body">
         <div v-if="open" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" @click="emit('close')">
-            <div class="relative flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-elegant" @click.stop>
-                <div class="flex items-center justify-between border-b border-border px-5 py-4">
-                    <div>
-                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-primary">Crédito WeCar</p>
-                        <h2 class="text-lg font-black text-secondary">
-                            {{ successFolio ? 'Solicitud enviada' : ['Datos', 'Precalificación', 'Ofertas', 'Solicitud'][step - 1] }}
-                        </h2>
+            <div v-if="loginPromptOpen" class="absolute inset-0 z-[130] grid place-items-center bg-secondary/75 p-4 backdrop-blur-sm" @click.stop>
+                <div class="w-full max-w-md rounded-3xl border border-border bg-card p-6 text-center shadow-elegant sm:p-8" @click.stop>
+                    <span class="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-primary/10 text-primary">
+                        <ShieldCheck class="h-7 w-7" />
+                    </span>
+                    <h3 class="mt-4 text-xl font-black text-secondary">Inicia sesión para continuar</h3>
+                    <p class="mt-2 text-sm text-muted-foreground">
+                        Para precalificar tu crédito, guardar tu avance y enviar tu solicitud necesitas una cuenta en WeCar.
+                    </p>
+                    <div class="mt-6 grid gap-2">
+                        <Link href="/login" class="inline-flex h-11 w-full items-center justify-center rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground transition hover:bg-primary/90">
+                            Iniciar sesión
+                        </Link>
+                        <Link href="/registro" class="inline-flex h-11 w-full items-center justify-center rounded-full border border-input bg-background px-5 text-sm font-bold text-secondary transition hover:bg-accent">
+                            Crear una cuenta
+                        </Link>
                     </div>
-                    <button type="button" aria-label="Cerrar" class="grid h-9 w-9 place-items-center rounded-full text-muted-foreground hover:bg-accent" @click="emit('close')">
+                    <button type="button" class="mt-4 text-xs font-semibold text-muted-foreground hover:text-secondary" @click="loginPromptOpen = false; emit('close')">
+                        Ahora no, seguir explorando
+                    </button>
+                </div>
+            </div>
+
+            <div class="credit-print-area relative flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-elegant" @click.stop>
+                <div class="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
+                    <div class="flex min-w-0 items-start gap-3">
+                        <button
+                            type="button"
+                            aria-label="Volver"
+                            class="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-border text-secondary transition hover:border-primary/40 hover:text-primary"
+                            @click="step > 1 ? step = (step - 1) as Step : emit('close')"
+                        >
+                            <ChevronLeft class="h-5 w-5" />
+                        </button>
+                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-accent text-accent-foreground">
+                            <Banknote class="h-5 w-5" />
+                        </span>
+                        <div class="min-w-0">
+                            <h2 class="text-lg font-black leading-tight text-secondary sm:text-xl">
+                                {{ successFolio ? 'Solicitud enviada' : 'Financiar este auto' }}
+                            </h2>
+                            <p class="mt-0.5 text-xs text-muted-foreground">
+                                {{ successFolio ? 'Tu expediente fue recibido.' : 'Sigue los pasos para conocer tus opciones y enviar tu solicitud.' }}
+                            </p>
+                        </div>
+                    </div>
+                    <button type="button" aria-label="Cerrar" class="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-accent" @click="emit('close')">
                         <X class="h-4 w-4" />
                     </button>
                 </div>
 
-                <div v-if="!successFolio" class="flex items-center gap-2 border-b border-border px-5 py-3">
-                    <div v-for="n in 4" :key="n" class="flex flex-1 items-center gap-2">
-                        <span
-                            class="grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] font-bold"
-                            :class="step >= n ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'"
-                        >
-                            <Check v-if="step > n" class="h-3.5 w-3.5" />
-                            <template v-else>{{ n }}</template>
-                        </span>
-                        <span v-if="n < 4" class="h-px flex-1" :class="step > n ? 'bg-primary' : 'bg-border'" />
-                    </div>
+                <div v-if="!successFolio" class="hidden items-center gap-1 border-b border-border px-5 py-3 sm:flex">
+                    <template v-for="(label, index) in stepLabels" :key="label">
+                        <div class="flex items-center gap-2">
+                            <span
+                                class="grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] font-bold"
+                                :class="step > index + 1 ? 'bg-emerald-500 text-white' : step === index + 1 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'"
+                            >
+                                <Check v-if="step > index + 1" class="h-3.5 w-3.5" />
+                                <template v-else>{{ index + 1 }}</template>
+                            </span>
+                            <span class="whitespace-nowrap text-xs font-semibold" :class="step >= index + 1 ? 'text-secondary' : 'text-muted-foreground'">{{ label }}</span>
+                        </div>
+                        <span v-if="index < stepLabels.length - 1" class="mx-1 h-px flex-1" :class="step > index + 1 ? 'bg-emerald-500' : 'bg-border'" />
+                    </template>
                 </div>
 
                 <div class="flex-1 overflow-y-auto p-5 sm:p-6">
@@ -679,38 +776,52 @@ const submit = async () => {
                     </div>
 
                     <template v-else>
+                        <div class="mb-5 rounded-3xl bg-secondary p-5 text-secondary-foreground shadow-soft">
+                            <div class="grid gap-4 sm:grid-cols-3">
+                                <div>
+                                    <div class="flex items-center justify-between gap-2 text-xs">
+                                        <span class="text-secondary-foreground/65">Precio del auto</span>
+                                        <strong class="text-base font-black">{{ formatPrice(price) }}</strong>
+                                    </div>
+                                    <input v-model.number="profile.price" type="range" min="50000" max="5000000" step="10000" :disabled="step > 2" class="mt-2 w-full accent-[hsl(var(--primary))] disabled:opacity-60" />
+                                </div>
+                                <div>
+                                    <div class="flex items-center justify-between gap-2 text-xs">
+                                        <span class="text-secondary-foreground/65">Enganche</span>
+                                        <strong class="text-base font-black">{{ formatPrice(downPaymentAmount) }} · {{ basics.downPayment }}%</strong>
+                                    </div>
+                                    <input v-model.number="basics.downPayment" type="range" min="10" max="80" step="5" :disabled="step > 2" class="mt-2 w-full accent-[hsl(var(--primary))] disabled:opacity-60" />
+                                </div>
+                                <div>
+                                    <div class="flex items-center justify-between gap-2 text-xs">
+                                        <span class="text-secondary-foreground/65">Plazo</span>
+                                        <strong class="text-base font-black">{{ basics.term }} meses</strong>
+                                    </div>
+                                    <input v-model.number="basics.term" type="range" min="12" max="72" step="12" :disabled="step > 2" class="mt-2 w-full accent-[hsl(var(--primary))] disabled:opacity-60" />
+                                </div>
+                            </div>
+                            <div class="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-white/10 pt-4 text-xs">
+                                <span class="text-secondary-foreground/65">Mensualidad estimada <strong class="ml-1 text-base text-white">{{ formatPrice(monthlyEstimate) }}</strong></span>
+                                <span class="text-secondary-foreground/65">Monto a financiar <strong class="ml-1 text-white">{{ formatPrice(financedAmount) }}</strong></span>
+                                <span class="text-secondary-foreground/65">Tasa desde <strong class="ml-1 text-white">{{ summaryRate }}%</strong></span>
+                                <button type="button" class="ml-auto inline-flex items-center gap-1.5 rounded-full border border-white/25 px-3 py-1.5 font-bold text-white transition hover:bg-white/10" @click="printQuote">
+                                    <FileText class="h-3.5 w-3.5" /> Descargar cotización
+                                </button>
+                            </div>
+                        </div>
+
                         <!-- Paso 1 -->
                         <div v-if="step === 1" class="grid gap-5">
-                            <div class="rounded-2xl bg-accent/40 p-4">
-                                <p class="text-sm font-bold text-secondary">{{ props.car?.title || `${profile.brand} ${profile.model} ${profile.year}` }}</p>
-                                <p class="mt-1 text-2xl font-black text-primary">{{ formatPrice(price) }}</p>
+                            <div class="rounded-2xl border border-border bg-accent/30 p-4">
+                                <p class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Vehículo a financiar</p>
+                                <p class="mt-1 text-lg font-black text-secondary">{{ props.car?.title || `${profile.brand} ${profile.model} ${profile.year}` }}</p>
+                                <p class="mt-1 text-xs text-muted-foreground">Ajusta precio, enganche y plazo en el resumen superior.</p>
                             </div>
 
                             <div>
-                                <div class="flex items-center justify-between text-sm">
-                                    <Label>Enganche</Label>
-                                    <span class="font-bold text-secondary">{{ basics.downPayment }}% · {{ formatPrice(downPaymentAmount) }}</span>
-                                </div>
-                                <input v-model.number="basics.downPayment" type="range" min="10" max="80" step="5" class="mt-2 w-full accent-[hsl(var(--primary))]" />
-                            </div>
-
-                            <div>
-                                <div class="flex items-center justify-between text-sm">
-                                    <Label>Plazo</Label>
-                                    <span class="font-bold text-secondary">{{ basics.term }} meses</span>
-                                </div>
-                                <input v-model.number="basics.term" type="range" min="12" max="72" step="12" class="mt-2 w-full accent-[hsl(var(--primary))]" />
-                            </div>
-
-                            <div>
-                                <Label for="phone">Teléfono</Label>
+                                <Label for="phone">Teléfono de contacto</Label>
                                 <PhoneInput id="phone" v-model="basics.phone" class="mt-1.5" placeholder="81 1234 5678" />
-                            </div>
-
-                            <div class="rounded-2xl bg-secondary p-4 text-secondary-foreground">
-                                <p class="text-[11px] font-bold text-primary">Mensualidad estimada</p>
-                                <p class="mt-1 text-3xl font-black">{{ formatPrice(monthlyEstimate) }}<span class="text-xs font-semibold text-secondary-foreground/60">/mes</span></p>
-                                <p class="mt-2 text-xs text-secondary-foreground/60">Monto a financiar: {{ formatPrice(financedAmount) }}</p>
+                                <p class="mt-1 text-[11px] text-muted-foreground">Lo usaremos para dar seguimiento a tu solicitud.</p>
                             </div>
                         </div>
 
@@ -718,7 +829,7 @@ const submit = async () => {
                         <div v-else-if="step === 2" class="grid gap-4 sm:grid-cols-2">
                             <div class="sm:col-span-2">
                                 <Label for="income">Ingreso mensual neto *</Label>
-                                <Input id="income" v-model.number="profile.income" type="number" min="1" class="mt-1.5" placeholder="Ej. 25,000" />
+                                <MoneyInput id="income" v-model="profile.income" class="mt-1.5" placeholder="Ej. 25,000" />
                             </div>
                             <div>
                                 <Label for="tenure">Antigüedad laboral (años) *</Label>
@@ -726,7 +837,7 @@ const submit = async () => {
                             </div>
                             <div>
                                 <Label for="debts">Deudas mensuales</Label>
-                                <Input id="debts" v-model.number="profile.debts" type="number" min="0" class="mt-1.5" placeholder="0" />
+                                <MoneyInput id="debts" v-model="profile.debts" class="mt-1.5" placeholder="0" />
                             </div>
                             <div>
                                 <Label for="age">Edad *</Label>
@@ -778,7 +889,7 @@ const submit = async () => {
                                 </div>
                                 <div>
                                     <Label for="price">Precio</Label>
-                                    <Input id="price" v-model.number="profile.price" type="number" min="1" class="mt-1.5" placeholder="Ej. 250000" />
+                                    <MoneyInput id="price" v-model="profile.price" class="mt-1.5" placeholder="Ej. 250,000" />
                                 </div>
                             </template>
 
@@ -834,7 +945,7 @@ const submit = async () => {
 
                                 <div class="space-y-3">
                                     <article
-                                        v-for="offer in offers"
+                                        v-for="offer in visibleOffers"
                                         :key="offer.slug"
                                         class="rounded-2xl border p-4 transition"
                                         :class="selectedSlug === offer.slug ? 'border-primary ring-2 ring-primary/20' : 'border-border'"
@@ -868,6 +979,12 @@ const submit = async () => {
                                     </article>
                                 </div>
 
+                                <div v-if="!showAllOffers && hiddenOffersCount > 0" class="flex justify-center pt-1">
+                                    <Button variant="outline" size="sm" @click="showAllOffers = true">
+                                        Ver {{ Math.min(3, hiddenOffersCount) }} opciones más
+                                    </Button>
+                                </div>
+
                                 <div v-if="pawnOffers.length" class="mt-5">
                                     <h3 class="text-sm font-black text-secondary">Préstamo prendario</h3>
                                     <p class="mt-1 text-xs text-muted-foreground">Opciones para obtener liquidez usando tu auto como garantía; no forman parte del crédito de compra.</p>
@@ -885,64 +1002,111 @@ const submit = async () => {
                             </template>
                         </div>
 
-                        <!-- Paso 4 -->
-                        <div v-else class="space-y-4">
-                            <div class="rounded-2xl bg-accent/40 p-4">
-                                <p class="text-sm font-bold text-secondary">{{ selectedOffer?.nombre }}</p>
-                                <p class="text-xs text-muted-foreground">
+                        <!-- Paso 4: Cuenta -->
+                        <div v-else-if="step === 4" class="space-y-5">
+                            <div>
+                                <h3 class="text-lg font-black text-secondary">Tus datos de cuenta</h3>
+                                <p class="mt-1 text-sm text-muted-foreground">Usaremos esta información para integrar tu expediente y contactarte.</p>
+                            </div>
+
+                            <div class="rounded-2xl border border-primary/20 bg-accent/30 p-4 text-sm">
+                                <p class="font-bold text-secondary">{{ selectedOffer?.nombre }}</p>
+                                <p class="mt-1 text-xs text-muted-foreground">
                                     {{ formatPrice(selectedOffer?.mensualidad ?? 0) }}/mes · {{ selectedOffer?.plazoEfectivo ?? basics.term }} meses
                                     · Tasa {{ selectedOffer?.tasaEstimadaAnual ?? 0 }}% · CAT {{ selectedOffer?.cat ?? 0 }}%
-                                </p>
-                                <p class="mt-1 text-xs text-muted-foreground">
-                                    Total estimado {{ formatPrice(selectedOffer?.total ?? 0) }} · Cargo por servicio {{ formatPrice(selectedOffer?.cargoServicio ?? 0) }}
                                 </p>
                             </div>
 
                             <div class="grid gap-4 sm:grid-cols-2">
-                                <div><Label>Nombre completo</Label><Input v-model="application.full_name" class="mt-1.5" /></div>
-                                <div><Label>Correo</Label><Input v-model="application.email" type="email" class="mt-1.5" /></div>
-                                <div><Label>Teléfono</Label><PhoneInput v-model="application.phone" class="mt-1.5" /></div>
-                                <div><Label>Fecha de nacimiento</Label><Input v-model="application.birthdate" type="date" class="mt-1.5" /></div>
+                                <div><Label>Nombre completo *</Label><Input v-model="application.full_name" class="mt-1.5" /></div>
+                                <div><Label>Correo *</Label><Input v-model="application.email" type="email" class="mt-1.5" /></div>
+                                <div><Label>Teléfono *</Label><PhoneInput v-model="application.phone" class="mt-1.5" /></div>
+                                <div><Label>Fecha de nacimiento *</Label><Input v-model="application.birthdate" type="date" class="mt-1.5" /></div>
                                 <div><Label>RFC</Label><Input v-model="application.rfc" class="mt-1.5" @input="application.rfc = application.rfc.toUpperCase()" /></div>
                                 <div><Label>CURP</Label><Input v-model="application.curp" class="mt-1.5" @input="application.curp = application.curp.toUpperCase()" /></div>
-                                <div class="sm:col-span-2"><Label>Calle y número</Label><Input v-model="application.calle" class="mt-1.5" /></div>
+                                <div class="sm:col-span-2"><Label>Calle y número *</Label><Input v-model="application.calle" class="mt-1.5" /></div>
                                 <ZipCodeFields v-model:cp="application.cp" v-model:colonia="application.colonia" v-model:alcaldia="application.alcaldia" v-model:state="application.state" />
-                                <div><Label>Ocupación</Label><Input v-model="application.ocupacion" class="mt-1.5" /></div>
+                                <div><Label>Ocupación *</Label><Input v-model="application.ocupacion" class="mt-1.5" /></div>
                                 <div><Label>Empresa</Label><Input v-model="application.empresa" class="mt-1.5" /></div>
                                 <div><Label>Antigüedad</Label><Input v-model="application.antiguedad" class="mt-1.5" placeholder="3 años" /></div>
                             </div>
 
-                            <div class="space-y-3">
-                                <p class="text-sm font-bold text-secondary">Documentos</p>
-                                <div v-for="slot in (['ine', 'domicilio', 'estado_cuenta'] as DocSlot[])" :key="slot" class="rounded-xl border border-border p-3">
-                                    <div class="flex items-center justify-between gap-3">
-                                        <div class="flex items-center gap-2">
-                                            <FileText class="h-4 w-4 text-primary" />
+                            <p v-if="submitError" class="rounded-xl bg-destructive/10 p-3 text-sm font-semibold text-destructive">{{ submitError }}</p>
+                        </div>
+
+                        <!-- Paso 5: Solicitud y documentación -->
+                        <div v-else class="space-y-5">
+                            <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm">
+                                <p class="font-bold text-emerald-800">Financiera elegida: {{ selectedOffer?.nombre }}</p>
+                                <button type="button" class="font-bold text-emerald-700 underline underline-offset-2 hover:text-emerald-900" @click="step = 3">
+                                    Cambiar
+                                </button>
+                            </div>
+
+                            <section class="overflow-hidden rounded-3xl border border-border">
+                                <button type="button" class="flex w-full items-center justify-between gap-3 bg-card px-5 py-4 text-left" @click="documentsOpen = !documentsOpen">
+                                    <div>
+                                        <h3 class="text-lg font-black text-secondary">Solicitud y documentación</h3>
+                                        <p class="mt-1 text-xs text-muted-foreground">Llena tu solicitud y sube tus documentos en PDF.</p>
+                                    </div>
+                                    <div class="flex items-center gap-3">
+                                        <span class="rounded-full bg-muted px-2.5 py-1 text-xs font-bold text-secondary">{{ documentProgress }}/4</span>
+                                        <ChevronDown class="h-4 w-4 text-muted-foreground transition-transform" :class="documentsOpen ? 'rotate-180' : ''" />
+                                    </div>
+                                </button>
+
+                                <div v-show="documentsOpen" class="space-y-3 border-t border-border bg-background p-4 sm:p-5">
+                                    <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-dashed border-primary/40 bg-accent/20 p-4">
+                                        <div class="flex items-start gap-3">
+                                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
+                                                <CheckCircle2 v-if="accountCompleted" class="h-5 w-5 text-emerald-600" />
+                                                <FileText v-else class="h-5 w-5" />
+                                            </span>
                                             <div>
-                                                <p class="text-sm font-semibold text-secondary">{{ docLabels[slot] }}</p>
-                                                <p class="text-[11px] text-muted-foreground">{{ documents[slot].name || 'PDF · máx. 5 MB' }}</p>
+                                                <p class="text-sm font-bold text-secondary">Llenar solicitud</p>
+                                                <p class="mt-0.5 text-xs text-muted-foreground">Datos personales, domicilio, laborales y del crédito.</p>
                                             </div>
                                         </div>
-                                        <label class="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-primary/40 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/10">
-                                            <Upload class="h-3.5 w-3.5" />
-                                            {{ documents[slot].saved ? 'Cambiar' : 'Subir' }}
-                                            <input type="file" accept="application/pdf" class="hidden" @change="uploadDocument(slot, $event)" />
-                                        </label>
+                                        <button type="button" class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/10" @click="step = 4">
+                                            {{ accountCompleted ? 'Editar' : 'Comenzar' }} <ChevronRight class="h-3.5 w-3.5" />
+                                        </button>
                                     </div>
-                                    <p v-if="documents[slot].saved" class="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
-                                        <CheckCircle2 class="h-3.5 w-3.5" /> Documento listo
-                                    </p>
-                                    <p v-if="documents[slot].error" class="mt-2 text-[11px] font-semibold text-destructive">{{ documents[slot].error }}</p>
+
+                                    <div v-for="slot in (['ine', 'domicilio', 'estado_cuenta'] as DocSlot[])" :key="slot" class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4">
+                                        <div class="flex items-start gap-3">
+                                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-full" :class="documents[slot].saved ? 'bg-emerald-500/10 text-emerald-600' : 'bg-primary/10 text-primary'">
+                                                <CheckCircle2 v-if="documents[slot].saved" class="h-5 w-5" />
+                                                <Upload v-else class="h-5 w-5" />
+                                            </span>
+                                            <div>
+                                                <p class="text-sm font-bold text-secondary">{{ docLabels[slot] }}</p>
+                                                <p class="mt-0.5 text-xs text-muted-foreground">{{ documents[slot].name || 'Selecciona un PDF · máx. 5 MB' }}</p>
+                                                <p v-if="documents[slot].error" class="mt-1 text-[11px] font-semibold text-destructive">{{ documents[slot].error }}</p>
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="rounded-full px-2.5 py-1 text-[10px] font-bold uppercase" :class="documents[slot].saved ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground'">
+                                                {{ documents[slot].saved ? 'Listo' : 'Pendiente' }}
+                                            </span>
+                                            <label class="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-primary/40 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/10">
+                                                <Upload class="h-3.5 w-3.5" />
+                                                {{ documents[slot].saved ? 'Cambiar' : 'Subir' }}
+                                                <input type="file" accept="application/pdf" class="hidden" @change="uploadDocument(slot, $event)" />
+                                            </label>
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
+                            </section>
 
                             <p class="flex items-center gap-2 text-[11px] text-muted-foreground">
                                 <ShieldCheck class="h-4 w-4 text-emerald-500" />
                                 Tus documentos se guardan de forma privada y solo los revisa WeCar.
                             </p>
+
+                            <p v-if="submitError" class="rounded-xl bg-destructive/10 p-3 text-sm font-semibold text-destructive">{{ submitError }}</p>
                         </div>
 
-                        <p v-if="submitError" class="mt-4 rounded-xl bg-destructive/10 p-3 text-sm font-semibold text-destructive">{{ submitError }}</p>
+                        <p v-if="submitError && step < 4" class="mt-4 rounded-xl bg-destructive/10 p-3 text-sm font-semibold text-destructive">{{ submitError }}</p>
                     </template>
                 </div>
 
@@ -957,7 +1121,10 @@ const submit = async () => {
                         Ver ofertas <ChevronRight class="h-4 w-4" />
                     </Button>
                     <Button v-else-if="step === 3" variant="hero" :disabled="!selectedOffer" @click="goToApplication">
-                        <Banknote class="h-4 w-4" /> Iniciar trámite
+                        <Banknote class="h-4 w-4" /> Continuar
+                    </Button>
+                    <Button v-else-if="step === 4" variant="hero" :disabled="submitting" @click="goToDocuments">
+                        Continuar a solicitud <ChevronRight class="h-4 w-4" />
                     </Button>
                     <Button v-else variant="hero" :disabled="submitting" @click="submit">
                         <Loader2 v-if="submitting" class="h-4 w-4 animate-spin" />
@@ -968,3 +1135,31 @@ const submit = async () => {
         </div>
     </Teleport>
 </template>
+
+<style>
+@media print {
+    body * {
+        visibility: hidden;
+    }
+
+    .credit-print-area,
+    .credit-print-area * {
+        visibility: visible;
+    }
+
+    .credit-print-area {
+        position: fixed;
+        inset: 0;
+        max-height: none !important;
+        overflow: visible !important;
+        border: 0 !important;
+        box-shadow: none !important;
+    }
+
+    .credit-print-area button,
+    .credit-print-area input[type='range'],
+    .credit-print-area input[type='file'] {
+        display: none !important;
+    }
+}
+</style>

@@ -6,6 +6,7 @@ import AdminLayout from '@/layouts/AdminLayout.vue';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
+import MoneyInput from '@/components/ui/MoneyInput.vue';
 import { formatMxn } from '@/lib/currency';
 
 defineOptions({ layout: AdminLayout });
@@ -120,7 +121,7 @@ const destroy = (plan: PlanItem) => {
                     </div>
                     <div><Label>Nombre</Label><Input v-model="form.name" class="mt-1.5" /></div>
                     <div class="grid grid-cols-2 gap-3">
-                        <div><Label>Precio</Label><Input v-model.number="form.price" type="number" min="0" class="mt-1.5" /></div>
+                        <div><Label>Precio</Label><MoneyInput v-model="form.price" class="mt-1.5" /></div>
                         <div><Label>Máx. autos</Label><Input v-model.number="form.max_cars" type="number" min="0" class="mt-1.5" /></div>
                     </div>
                     <div class="grid grid-cols-2 gap-3">

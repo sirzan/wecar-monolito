@@ -7,6 +7,7 @@ import PanelLayout from '@/layouts/PanelLayout.vue';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
+import MoneyInput from '@/components/ui/MoneyInput.vue';
 import PhoneInput from '@/components/ui/PhoneInput.vue';
 import ZipCodeFields from '@/components/forms/ZipCodeFields.vue';
 
@@ -326,11 +327,11 @@ onMounted(() => {
                 </div>
                 <div>
                     <Label for="ingreso_mensual">Ingreso mensual (MXN)</Label>
-                    <Input id="ingreso_mensual" v-model="form.ingreso_mensual" type="number" min="0" class="mt-1.5" />
+                    <MoneyInput id="ingreso_mensual" v-model="form.ingreso_mensual" class="mt-1.5" />
                 </div>
                 <div>
                     <Label for="deuda_mensual">Deuda mensual (MXN)</Label>
-                    <Input id="deuda_mensual" v-model="form.deuda_mensual" type="number" min="0" class="mt-1.5" />
+                    <MoneyInput id="deuda_mensual" v-model="form.deuda_mensual" class="mt-1.5" />
                 </div>
             </div>
 

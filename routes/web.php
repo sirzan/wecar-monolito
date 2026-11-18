@@ -26,6 +26,7 @@ Route::get('/comprar', [PublicController::class, 'comprar'])->name('comprar');
 Route::get('/comprar/marca/{brand:slug}', [PublicController::class, 'brandLanding'])->name('comprar.brand');
 Route::get('/comprar/ciudad/{city}', [PublicController::class, 'cityLanding'])->name('comprar.city');
 Route::get('/comprar/tipo/{body}', [PublicController::class, 'bodyLanding'])->name('comprar.body');
+Route::get('/auto-externo/{slug}', [PublicController::class, 'externalDetail'])->name('external.detail');
 Route::get('/auto/externo/{id}', [PublicController::class, 'externalShow'])->name('external.show');
 Route::get('/auto/{car}', [PublicController::class, 'autoShow'])->name('autos.show');
 Route::get('/comparar', [PublicController::class, 'comparar'])->name('comparar');

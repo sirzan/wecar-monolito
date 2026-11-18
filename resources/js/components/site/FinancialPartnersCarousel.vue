@@ -33,6 +33,7 @@ const partners: Partner[] = [
 
 const isPaused = ref(false);
 const failedPartners = ref<Record<string, boolean>>({});
+const visiblePartners = partners.slice(0, 5);
 </script>
 
 <template>
@@ -50,7 +51,7 @@ const failedPartners = ref<Record<string, boolean>>({});
                 :aria-hidden="groupIndex === 2 ? 'true' : undefined"
             >
                 <div
-                    v-for="(partner, idx) in partners"
+                    v-for="(partner, idx) in visiblePartners"
                     :key="`${groupIndex}-${partner.name}-${idx}`"
                     class="partner-slot"
                 >
@@ -88,8 +89,8 @@ const failedPartners = ref<Record<string, boolean>>({});
 
 .partners-track {
     display: flex;
-    width: calc(var(--card-width) * 20);
-    animation: partners-step 30s ease-in-out infinite;
+    width: calc(var(--card-width) * 10);
+    animation: partners-step 20s ease-in-out infinite;
     will-change: transform;
 }
 
@@ -133,28 +134,8 @@ const failedPartners = ref<Record<string, boolean>>({});
         transform: translateX(calc(var(--card-width) * -5));
     }
 
-    60%,
-    68% {
-        transform: translateX(calc(var(--card-width) * -6));
-    }
-
-    70%,
-    78% {
-        transform: translateX(calc(var(--card-width) * -7));
-    }
-
-    80%,
-    88% {
-        transform: translateX(calc(var(--card-width) * -8));
-    }
-
-    90%,
-    98% {
-        transform: translateX(calc(var(--card-width) * -9));
-    }
-
     100% {
-        transform: translateX(calc(var(--card-width) * -10));
+        transform: translateX(calc(var(--card-width) * -5));
     }
 }
 

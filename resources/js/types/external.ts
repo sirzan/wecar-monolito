@@ -1,5 +1,7 @@
 export interface ExternalCar {
     id: string;
+    slug?: string;
+    url?: string;
     title: string;
     price: number | null;
     year: number | null;
