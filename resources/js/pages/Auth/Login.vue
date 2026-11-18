@@ -8,16 +8,26 @@ import Logo from '@/components/site/Logo.vue';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
+import FormErrorSummary from '@/components/ui/FormErrorSummary.vue';
+import FormFieldError from '@/components/ui/FormFieldError.vue';
+import { useRequiredValidation } from '@/composables/useRequiredValidation';
 
 defineOptions({ layout: PublicLayout });
 
 const form = useForm({ email: '', password: '', remember: false });
 const showPassword = ref(false);
+const validation = useRequiredValidation(form, {
+    email: 'correo electrónico',
+    password: 'contraseña',
+});
 
-const submit = () =>
+const submit = () => {
+    if (!validation.validate()) return;
+
     form.post('/login', {
         onFinish: () => form.reset('password'),
     });
+};
 </script>
 
 <template>
@@ -51,10 +61,11 @@ const submit = () =>
             </div>
 
             <form class="grid gap-4" @submit.prevent="submit">
+                <FormErrorSummary :fields="validation.summary.value" />
                 <div>
                     <Label for="email">Correo electrónico</Label>
-                    <Input id="email" v-model="form.email" type="email" class="mt-1.5 placeholder:text-muted-foreground/60" autocomplete="email" placeholder="tu@correo.com" />
-                    <p v-if="form.errors.email" class="mt-1 text-xs font-medium text-destructive">{{ form.errors.email }}</p>
+                    <Input id="email" v-model="form.email" type="email" :invalid="validation.hasError('email')" class="mt-1.5" autocomplete="email" placeholder="tu@correo.com" @input="validation.clearField('email')" />
+                    <FormFieldError :message="validation.fieldError('email')" />
                 </div>
 
                 <div>
@@ -69,8 +80,10 @@ const submit = () =>
                             id="password"
                             v-model="form.password"
                             :type="showPassword ? 'text' : 'password'"
+                            :invalid="validation.hasError('password')"
                             class="pr-11"
                             autocomplete="current-password"
+                            @input="validation.clearField('password')"
                         />
                         <button
                             type="button"
@@ -82,7 +95,7 @@ const submit = () =>
                             <Eye v-else class="h-4 w-4" />
                         </button>
                     </div>
-                    <p v-if="form.errors.password" class="mt-1 text-xs font-medium text-destructive">{{ form.errors.password }}</p>
+                    <FormFieldError :message="validation.fieldError('password')" />
                 </div>
 
                 <label class="flex items-center gap-2 text-sm text-muted-foreground">

@@ -72,4 +72,36 @@ class ExternalListingPresenter
             'priceAvailable' => $listing->price !== null && (float) $listing->price > 0,
         ];
     }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function card(ExternalListing $listing): array
+    {
+        $images = collect($listing->images ?? [])
+            ->filter(fn ($image) => is_string($image) && $image !== '')
+            ->unique()
+            ->values();
+
+        $platform = collect(config('external_search.platforms', []))
+            ->firstWhere('id', $listing->source);
+
+        return [
+            'id' => $listing->external_id,
+            'slug' => $listing->slug,
+            'url' => route('external.detail', $listing->slug),
+            'title' => $listing->title,
+            'price' => $listing->price !== null ? (float) $listing->price : null,
+            'year' => $listing->year,
+            'km' => $listing->mileage,
+            'location' => $listing->location,
+            'imageUrl' => $images->first(),
+            'gallery' => $images->slice(1)->values()->all(),
+            'sourceUrl' => $listing->source_url,
+            'platformId' => $listing->source,
+            'platformName' => (string) ($platform['name'] ?? $listing->source),
+            'platformColor' => (string) ($platform['color'] ?? '#0f1729'),
+            'platformInitials' => (string) ($platform['initials'] ?? strtoupper(substr($listing->source, 0, 2))),
+        ];
+    }
 }

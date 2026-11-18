@@ -10,6 +10,7 @@ const props = withDefaults(
         disabled?: boolean;
         autocomplete?: string;
         required?: boolean;
+        invalid?: boolean;
     }>(),
     {
         placeholder: '81 1234 5678',
@@ -81,7 +82,7 @@ const onCountryChange = () => {
             cn(
                 'flex h-10 w-full overflow-hidden rounded-md border border-input bg-background ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2',
                 props.class,
-                isInvalid ? 'border-destructive' : '',
+                invalid || isInvalid ? 'border-destructive ring-2 ring-destructive/20' : '',
             )
         "
     >
@@ -103,7 +104,8 @@ const onCountryChange = () => {
             :disabled="disabled"
             :autocomplete="autocomplete"
             :required="required"
-            class="h-full min-w-0 flex-1 border-0 bg-transparent px-3 text-sm outline-none"
+            :aria-invalid="invalid || isInvalid || undefined"
+            class="h-full min-w-0 flex-1 border-0 bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground/45"
             @input="sync"
         />
     </div>

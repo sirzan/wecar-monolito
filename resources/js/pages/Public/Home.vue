@@ -205,7 +205,8 @@ const jsonLd = [
 
     <ExternalSearchModal :open="externalSearch.showModal.value" :loading="externalSearch.loading.value"
         :results="externalSearch.results.value" :error="externalSearch.error.value"
-        :query="externalSearch.lastQuery.value" @close="externalSearch.closeModal" @open="externalSearch.openExternal"
+        :query="externalSearch.lastQuery.value" :platforms="externalSearch.status.value?.platforms ?? []"
+        @close="externalSearch.closeModal" @open="externalSearch.openExternal"
         @retry="retryExternalSearch" />
 
     <ExternalSearchLimitModal :open="externalSearch.showLimitModal.value" :status="externalSearch.status.value"

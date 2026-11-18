@@ -35,6 +35,7 @@ import SeoHead from '@/components/site/SeoHead.vue';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
+import FormErrorSummary from '@/components/ui/FormErrorSummary.vue';
 import MoneyInput from '@/components/ui/MoneyInput.vue';
 import { paymentMethodIcon, type PaymentMethodKey, type PaymentMethodOption } from '@/lib/paymentMethods';
 import {
@@ -423,6 +424,17 @@ const nextStep = () => {
 const fieldStateClass = (field: string): string =>
     hasError(field) ? `${fieldClass} border-destructive ring-2 ring-destructive/20` : fieldClass;
 
+const fieldLabels: Record<string, string> = {
+    year: 'año', brand_id: 'marca', model_id: 'modelo', version_id: 'versión', km: 'kilometraje',
+    description: 'descripción', price: 'precio', city: 'ciudad', images: 'fotografías',
+};
+
+const missingSummary = computed(() =>
+    Object.keys({ ...stepErrors.value, ...(form.errors as Record<string, string>) })
+        .map((field) => fieldLabels[field] ?? field)
+        .filter(Boolean),
+);
+
 watch(
     () => form.errors,
     (errors) => {
@@ -691,6 +703,7 @@ const goBack = () => {
             </div>
 
             <form @submit.prevent="submit">
+                <FormErrorSummary :fields="missingSummary" class="mb-5" />
                 <!-- ════════════ PASO 1: DATOS DEL VEHÍCULO ════════════ -->
                 <div v-if="step === 1" class="space-y-6 rounded-[28px] border border-border bg-card p-6 shadow-soft sm:p-8">
                     <div>

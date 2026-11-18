@@ -101,7 +101,7 @@ const zoomOpen = ref(false);
 const financiarOpen = ref(false);
 const showFullDescription = ref(false);
 const favorites = useFavoritesStore();
-const isFavorite = computed(() => favorites.has(props.car.id));
+const isFavorite = computed(() => (isExternal.value ? favorites.hasExternal(props.car.id) : favorites.has(props.car.id)));
 
 onMounted(() => void favorites.bootstrap());
 
@@ -476,8 +476,7 @@ const jsonLd = computed(() => [
                                 type="button"
                                 aria-label="Favorito"
                                 class="grid h-9 w-9 place-items-center rounded-full border border-border text-secondary hover:border-primary hover:text-primary transition"
-                                :class="isExternal ? 'hidden' : ''"
-                                @click="favorites.toggle(car.id)"
+                                @click="isExternal ? favorites.toggleExternal(car.id) : favorites.toggle(car.id)"
                             >
                                 <Heart class="h-4 w-4" :class="isFavorite ? 'fill-primary text-primary' : ''" />
                             </button>

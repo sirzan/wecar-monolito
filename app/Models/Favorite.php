@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['user_id', 'car_id'])]
+#[Fillable(['user_id', 'car_id', 'external_listing_id'])]
 class Favorite extends Model
 {
     use HasUuids;
@@ -20,5 +20,10 @@ class Favorite extends Model
     public function car(): BelongsTo
     {
         return $this->belongsTo(Car::class);
+    }
+
+    public function externalListing(): BelongsTo
+    {
+        return $this->belongsTo(ExternalListing::class);
     }
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, nextTick, reactive, ref, watch } from 'vue';
 import { usePage, Link } from '@inertiajs/vue3';
 import {
     AlertCircle,
@@ -18,6 +18,7 @@ import {
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
+import FormFieldError from '@/components/ui/FormFieldError.vue';
 import MoneyInput from '@/components/ui/MoneyInput.vue';
 import PhoneInput from '@/components/ui/PhoneInput.vue';
 import ZipCodeFields from '@/components/forms/ZipCodeFields.vue';
@@ -88,6 +89,30 @@ const showAllOffers = ref(false);
 const accountCompleted = ref(false);
 const documentsOpen = ref(true);
 const loginPromptOpen = ref(false);
+const fieldErrors = ref<Record<string, string>>({});
+
+const fieldInvalid = (field: string): boolean => Boolean(fieldErrors.value[field]);
+const fieldMessage = (field: string): string => fieldErrors.value[field] ?? '';
+
+const focusField = (field: string) => {
+    void nextTick(() => {
+        const element = document.querySelector<HTMLElement>(`[data-field="${field}"]`) ?? document.getElementById(field);
+        element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        element?.focus({ preventScroll: true });
+    });
+};
+
+const applyFieldErrors = (errors: Record<string, string>, message: string): boolean => {
+    fieldErrors.value = errors;
+
+    if (Object.keys(errors).length) {
+        submitError.value = message;
+        focusField(Object.keys(errors)[0]);
+        return false;
+    }
+
+    return true;
+};
 
 const basics = reactive({
     phone: '',
@@ -334,6 +359,7 @@ const reset = () => {
     showAllOffers.value = false;
     accountCompleted.value = false;
     documentsOpen.value = true;
+    fieldErrors.value = {};
     documents.ine = {};
     documents.domicilio = {};
     documents.estado_cuenta = {};
@@ -468,35 +494,24 @@ const goToProfile = () => {
 };
 
 const evaluate = async () => {
-    if (profile.income === null || profile.income <= 0) {
-        submitError.value = 'Ingresa tu ingreso mensual.';
-        return;
-    }
+    const errors: Record<string, string> = {};
 
-    if (profile.age === null || profile.age < 18 || profile.age > 99) {
-        submitError.value = 'Ingresa una edad válida (18 a 99 años).';
-        return;
-    }
+    if (profile.income === null || profile.income <= 0) errors.income = 'Ingresa tu ingreso mensual.';
+    if (profile.age === null || profile.age < 18 || profile.age > 99) errors.age = 'Ingresa una edad válida (18 a 99 años).';
+    if (!profile.employment) errors.employment = 'Selecciona tu tipo de empleo.';
+    if (!profile.bureau) errors.bureau = 'Selecciona tu historial crediticio.';
+    if (profile.tenure === null || profile.tenure < 0) errors.tenure = 'Ingresa tu antigüedad laboral.';
+    if (!profile.year) errors.year = 'Selecciona el año del vehículo.';
+    if (!profile.price) errors.price = 'Ingresa el precio del vehículo.';
 
-    if (!profile.employment) {
-        submitError.value = 'Selecciona tu tipo de empleo.';
-        return;
-    }
+    const labels: Record<string, string> = {
+        income: 'ingreso mensual', age: 'edad', employment: 'tipo de empleo', bureau: 'historial crediticio',
+        tenure: 'antigüedad laboral', year: 'año del vehículo', price: 'precio del vehículo',
+    };
 
-    if (!profile.bureau) {
-        submitError.value = 'Selecciona tu historial crediticio.';
-        return;
-    }
+    const missing = Object.keys(errors).map((field) => labels[field]).filter(Boolean);
 
-    if (profile.tenure === null || profile.tenure < 0) {
-        submitError.value = 'Ingresa tu antigüedad laboral.';
-        return;
-    }
-
-    if (!profile.year || !profile.price) {
-        submitError.value = 'Completa el año y el precio del vehículo.';
-        return;
-    }
+    if (!applyFieldErrors(errors, `Completa: ${missing.join(', ')}.`)) return;
 
     submitError.value = null;
     evaluating.value = true;
@@ -571,24 +586,29 @@ const goToApplication = () => {
 };
 
 const goToDocuments = () => {
-    const required: [string, string | null | undefined][] = [
-        ['nombre completo', application.full_name],
-        ['correo', application.email],
-        ['teléfono', application.phone],
-        ['fecha de nacimiento', application.birthdate],
-        ['calle y número', application.calle],
-        ['colonia', application.colonia],
-        ['código postal', application.cp],
-        ['alcaldía o municipio', application.alcaldia],
-        ['ocupación', application.ocupacion],
+    const required: [string, string, string | null | undefined][] = [
+        ['full_name', 'nombre completo', application.full_name],
+        ['email', 'correo', application.email],
+        ['phone', 'teléfono', application.phone],
+        ['birthdate', 'fecha de nacimiento', application.birthdate],
+        ['calle', 'calle y número', application.calle],
+        ['colonia', 'colonia', application.colonia],
+        ['cp', 'código postal', application.cp],
+        ['alcaldia', 'alcaldía o municipio', application.alcaldia],
+        ['ocupacion', 'ocupación', application.ocupacion],
     ];
 
-    const missing = required.find(([, value]) => !String(value ?? '').trim());
+    const errors: Record<string, string> = {};
+    const missing: string[] = [];
 
-    if (missing) {
-        submitError.value = `Completa tu ${missing[0]} para continuar.`;
-        return;
+    for (const [field, label, value] of required) {
+        if (!String(value ?? '').trim()) {
+            errors[field] = 'Este campo es obligatorio.';
+            missing.push(label);
+        }
     }
+
+    if (!applyFieldErrors(errors, `Completa: ${missing.join(', ')}.`)) return;
 
     submitError.value = null;
     accountCompleted.value = true;
@@ -829,11 +849,13 @@ const submit = async () => {
                         <div v-else-if="step === 2" class="grid gap-4 sm:grid-cols-2">
                             <div class="sm:col-span-2">
                                 <Label for="income">Ingreso mensual neto *</Label>
-                                <MoneyInput id="income" v-model="profile.income" class="mt-1.5" placeholder="Ej. 25,000" />
+                                <MoneyInput id="income" v-model="profile.income" data-field="income" :invalid="fieldInvalid('income')" class="mt-1.5" placeholder="Ej. 25,000" />
+                                <FormFieldError :message="fieldMessage('income')" />
                             </div>
                             <div>
                                 <Label for="tenure">Antigüedad laboral (años) *</Label>
-                                <Input id="tenure" v-model.number="profile.tenure" type="number" min="0" class="mt-1.5" placeholder="Ej. 3" />
+                                <Input id="tenure" v-model.number="profile.tenure" data-field="tenure" :invalid="fieldInvalid('tenure')" type="number" min="0" class="mt-1.5" placeholder="Ej. 3" />
+                                <FormFieldError :message="fieldMessage('tenure')" />
                             </div>
                             <div>
                                 <Label for="debts">Deudas mensuales</Label>
@@ -841,21 +863,23 @@ const submit = async () => {
                             </div>
                             <div>
                                 <Label for="age">Edad *</Label>
-                                <Input id="age" v-model.number="profile.age" type="number" min="18" max="99" class="mt-1.5" placeholder="Ej. 35" />
+                                <Input id="age" v-model.number="profile.age" data-field="age" :invalid="fieldInvalid('age')" type="number" min="18" max="99" class="mt-1.5" placeholder="Ej. 35" />
+                                <FormFieldError :message="fieldMessage('age')" />
                             </div>
                             <div>
                                 <Label for="employment">Tipo de empleo *</Label>
-                                <select id="employment" v-model="profile.employment" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                                <select id="employment" v-model="profile.employment" data-field="employment" :aria-invalid="fieldInvalid('employment') || undefined" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" :class="fieldInvalid('employment') ? 'border-destructive ring-2 ring-destructive/20' : ''">
                                     <option value="">Selecciona una opción</option>
                                     <option value="fijo">Empleado fijo</option>
                                     <option value="honorarios">Honorarios</option>
                                     <option value="negocio">Negocio propio</option>
                                     <option value="eventual">Eventual</option>
                                 </select>
+                                <FormFieldError :message="fieldMessage('employment')" />
                             </div>
                             <div class="sm:col-span-2">
                                 <Label for="bureau">Historial en Buró / Círculo *</Label>
-                                <select id="bureau" v-model="profile.bureau" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                                <select id="bureau" v-model="profile.bureau" data-field="bureau" :aria-invalid="fieldInvalid('bureau') || undefined" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" :class="fieldInvalid('bureau') ? 'border-destructive ring-2 ring-destructive/20' : ''">
                                     <option value="">Selecciona una opción</option>
                                     <option value="excelente">Excelente — sin atrasos</option>
                                     <option value="bueno">Bueno — pagos puntuales</option>
@@ -863,6 +887,7 @@ const submit = async () => {
                                     <option value="sin-historial">Sin historial</option>
                                     <option value="malo">Malo — cuentas vencidas</option>
                                 </select>
+                                <FormFieldError :message="fieldMessage('bureau')" />
                             </div>
 
                             <template v-if="!props.car">
@@ -882,14 +907,16 @@ const submit = async () => {
                                 </div>
                                 <div>
                                     <Label for="year">Año</Label>
-                                    <select id="year" v-model.number="profile.year" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                                    <select id="year" v-model.number="profile.year" data-field="year" :aria-invalid="fieldInvalid('year') || undefined" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" :class="fieldInvalid('year') ? 'border-destructive ring-2 ring-destructive/20' : ''">
                                         <option :value="null">Selecciona el año</option>
                                         <option v-for="year in vehicleYears" :key="year" :value="year">{{ year }}</option>
                                     </select>
+                                    <FormFieldError :message="fieldMessage('year')" />
                                 </div>
                                 <div>
                                     <Label for="price">Precio</Label>
-                                    <MoneyInput id="price" v-model="profile.price" class="mt-1.5" placeholder="Ej. 250,000" />
+                                    <MoneyInput id="price" v-model="profile.price" data-field="price" :invalid="fieldInvalid('price')" class="mt-1.5" placeholder="Ej. 250,000" />
+                                    <FormFieldError :message="fieldMessage('price')" />
                                 </div>
                             </template>
 
@@ -1018,15 +1045,15 @@ const submit = async () => {
                             </div>
 
                             <div class="grid gap-4 sm:grid-cols-2">
-                                <div><Label>Nombre completo *</Label><Input v-model="application.full_name" class="mt-1.5" /></div>
-                                <div><Label>Correo *</Label><Input v-model="application.email" type="email" class="mt-1.5" /></div>
-                                <div><Label>Teléfono *</Label><PhoneInput v-model="application.phone" class="mt-1.5" /></div>
-                                <div><Label>Fecha de nacimiento *</Label><Input v-model="application.birthdate" type="date" class="mt-1.5" /></div>
+                                <div><Label>Nombre completo *</Label><Input v-model="application.full_name" data-field="full_name" :invalid="fieldInvalid('full_name')" class="mt-1.5" /><FormFieldError :message="fieldMessage('full_name')" /></div>
+                                <div><Label>Correo *</Label><Input v-model="application.email" data-field="email" :invalid="fieldInvalid('email')" type="email" class="mt-1.5" /><FormFieldError :message="fieldMessage('email')" /></div>
+                                <div><Label>Teléfono *</Label><PhoneInput v-model="application.phone" data-field="phone" :invalid="fieldInvalid('phone')" class="mt-1.5" /><FormFieldError :message="fieldMessage('phone')" /></div>
+                                <div><Label>Fecha de nacimiento *</Label><Input v-model="application.birthdate" data-field="birthdate" :invalid="fieldInvalid('birthdate')" type="date" class="mt-1.5" /><FormFieldError :message="fieldMessage('birthdate')" /></div>
                                 <div><Label>RFC</Label><Input v-model="application.rfc" class="mt-1.5" @input="application.rfc = application.rfc.toUpperCase()" /></div>
                                 <div><Label>CURP</Label><Input v-model="application.curp" class="mt-1.5" @input="application.curp = application.curp.toUpperCase()" /></div>
-                                <div class="sm:col-span-2"><Label>Calle y número *</Label><Input v-model="application.calle" class="mt-1.5" /></div>
+                                <div class="sm:col-span-2"><Label>Calle y número *</Label><Input v-model="application.calle" data-field="calle" :invalid="fieldInvalid('calle')" class="mt-1.5" /><FormFieldError :message="fieldMessage('calle')" /></div>
                                 <ZipCodeFields v-model:cp="application.cp" v-model:colonia="application.colonia" v-model:alcaldia="application.alcaldia" v-model:state="application.state" />
-                                <div><Label>Ocupación *</Label><Input v-model="application.ocupacion" class="mt-1.5" /></div>
+                                <div><Label>Ocupación *</Label><Input v-model="application.ocupacion" data-field="ocupacion" :invalid="fieldInvalid('ocupacion')" class="mt-1.5" /><FormFieldError :message="fieldMessage('ocupacion')" /></div>
                                 <div><Label>Empresa</Label><Input v-model="application.empresa" class="mt-1.5" /></div>
                                 <div><Label>Antigüedad</Label><Input v-model="application.antiguedad" class="mt-1.5" placeholder="3 años" /></div>
                             </div>

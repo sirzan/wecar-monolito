@@ -621,6 +621,7 @@ const clear = () => {
         :results="externalSearch.results.value"
         :error="externalSearch.error.value"
         :query="externalSearch.lastQuery.value"
+        :platforms="externalSearch.status.value?.platforms ?? []"
         @close="externalSearch.closeModal"
         @open="externalSearch.openExternal"
         @retry="retryExternalSearch"

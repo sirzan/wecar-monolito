@@ -73,6 +73,40 @@ it('redirects the legacy external route to the canonical slug', function () {
         ->assertStatus(301);
 });
 
+it('allows users to favorite and list external listings', function () {
+    $listing = externalListing();
+    $user = User::factory()->create(['email_verified_at' => now()]);
+
+    $this->actingAs($user)
+        ->postJson("/api/favorites/external/{$listing->external_id}")
+        ->assertOk()
+        ->assertJson(['favorited' => true]);
+
+    $this->assertDatabaseHas('favorites', [
+        'user_id' => $user->getKey(),
+        'external_listing_id' => $listing->getKey(),
+    ]);
+
+    $this->actingAs($user)
+        ->get('/panel/favoritos')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('items', 1)
+            ->where('items.0.type', 'external')
+            ->where('items.0.external.id', $listing->external_id)
+        );
+
+    $this->actingAs($user)
+        ->postJson("/api/favorites/external/{$listing->external_id}")
+        ->assertOk()
+        ->assertJson(['favorited' => false]);
+
+    $this->assertDatabaseMissing('favorites', [
+        'user_id' => $user->getKey(),
+        'external_listing_id' => $listing->getKey(),
+    ]);
+});
+
 it('marks stale external listings and exposes the original link', function () {
     $listing = externalListing(['last_seen_at' => now()->subDays(8)]);
 

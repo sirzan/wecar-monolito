@@ -5,6 +5,9 @@ import PanelLayout from '@/layouts/PanelLayout.vue';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
+import FormErrorSummary from '@/components/ui/FormErrorSummary.vue';
+import FormFieldError from '@/components/ui/FormFieldError.vue';
+import { useRequiredValidation } from '@/composables/useRequiredValidation';
 
 defineOptions({ layout: PanelLayout });
 
@@ -30,7 +33,11 @@ const form = useForm({
     role: 'seller',
 });
 
+const validation = useRequiredValidation(form, { email: 'correo electrónico' });
+
 const invite = () => {
+    if (!validation.validate()) return;
+
     form.post(`${base}/equipo/invitar`, {
         preserveScroll: true,
         onSuccess: () => form.reset('email'),
@@ -59,10 +66,11 @@ const removeMember = (member: Member) => {
                 <h2 class="font-black text-secondary">Invitar miembro</h2>
             </div>
             <div class="mt-4 grid gap-4 sm:grid-cols-[1fr_180px_auto] sm:items-end">
+                <FormErrorSummary :fields="validation.summary.value" class="sm:col-span-3" />
                 <div>
                     <Label for="email">Correo electrónico</Label>
-                    <Input id="email" v-model="form.email" type="email" class="mt-1.5" placeholder="vendedor@agencia.com" />
-                    <p v-if="form.errors.email" class="mt-1 text-xs text-destructive">{{ form.errors.email }}</p>
+                    <Input id="email" v-model="form.email" type="email" :invalid="validation.hasError('email')" class="mt-1.5" placeholder="vendedor@agencia.com" @input="validation.clearField('email')" />
+                    <FormFieldError :message="validation.fieldError('email')" />
                 </div>
                 <div>
                     <Label for="role">Rol</Label>

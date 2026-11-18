@@ -74,6 +74,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('/api/favorites', [FavoriteController::class, 'ids'])->name('favorites.ids');
     Route::post('/api/favorites/sync', [FavoriteController::class, 'sync'])->name('favorites.sync');
+    Route::post('/api/favorites/external/{listing:external_id}', [FavoriteController::class, 'toggleExternal'])->name('favorites.external.toggle');
     Route::post('/api/favorites/{car:id}', [FavoriteController::class, 'toggle'])->name('favorites.toggle');
 });
 

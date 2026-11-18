@@ -450,7 +450,7 @@ class PublicController extends Controller
                 'bodies' => ['Sedán', 'SUV', 'Hatchback', 'Pickup', 'Coupé', 'Van'],
                 'transmissions' => ['Automática', 'Manual', 'CVT'],
                 'fuels' => ['Gasolina', 'Diésel', 'Híbrido', 'Eléctrico'],
-                'colors' => ['Blanco', 'Negro', 'Gris', 'Plata', 'Rojo', 'Azul', 'Verde'],
+                'colors' => ['Blanco', 'Blanco perla', 'Negro', 'Negro brillante', 'Gris', 'Gris Oxford', 'Gris grafito', 'Plata', 'Platinado', 'Rojo', 'Vino', 'Guinda', 'Azul', 'Azul marino', 'Turquesa', 'Verde', 'Verde oliva', 'Café', 'Beige', 'Arena', 'Amarillo', 'Naranja', 'Dorado', 'Bronce', 'Morado', 'Rosa', 'Otro'],
             ],
             'seo' => [
                 'title' => 'Vende tu auto en minutos — Wecar',
