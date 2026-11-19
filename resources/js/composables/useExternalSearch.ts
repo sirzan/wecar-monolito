@@ -1,4 +1,5 @@
 import { computed, ref } from 'vue';
+import { router } from '@inertiajs/vue3';
 import type {
     ExternalCar,
     ExternalResolveResponse,
@@ -40,7 +41,6 @@ export function useExternalSearch() {
     const lastQuery = ref('');
     const showModal = ref(false);
     const showLimitModal = ref(false);
-    const externalAd = ref<{ car: ExternalCar; sourceUrl: string } | null>(null);
 
     const enabled = computed(() => status.value?.enabled ?? false);
     const subscribed = computed(() => status.value?.subscribed ?? false);
@@ -107,7 +107,14 @@ export function useExternalSearch() {
         }
     };
 
-    const openExternal = async (car: ExternalCar) => {
+    const openExternal = (car: ExternalCar) => {
+        if (!car.id) return;
+
+        showModal.value = false;
+        router.visit(car.url || `/auto-externo/${encodeURIComponent(car.slug || car.id)}`);
+    };
+
+    const openOriginal = async (car: ExternalCar) => {
         if (!car.id) return;
 
         try {
@@ -122,8 +129,8 @@ export function useExternalSearch() {
             }
 
             if (response.allowed && response.sourceUrl) {
-                externalAd.value = { car, sourceUrl: response.sourceUrl };
                 await refreshStatus();
+                window.open(response.sourceUrl, '_blank', 'noopener,noreferrer');
                 return;
             }
 
@@ -150,10 +157,6 @@ export function useExternalSearch() {
         showLimitModal.value = false;
     };
 
-    const closeExternalAd = () => {
-        externalAd.value = null;
-    };
-
     const startReward = () =>
         request<{ viewId: string }>('/api/external-search/reward/start', { method: 'POST' });
 
@@ -176,7 +179,6 @@ export function useExternalSearch() {
         lastQuery,
         showModal,
         showLimitModal,
-        externalAd,
         enabled,
         subscribed,
         unlimited,
@@ -189,11 +191,11 @@ export function useExternalSearch() {
         loadCached,
         search,
         openExternal,
+        openOriginal,
         openModal,
         closeModal,
         openLimitModal,
         closeLimitModal,
-        closeExternalAd,
         startReward,
         claimReward,
     };

@@ -2,6 +2,7 @@
 
 namespace App\Services\ExternalSearch;
 
+use App\Support\ExternalListingSlug;
 use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
@@ -633,6 +634,11 @@ class ExternalCarNormalizer
 
         return [
             'id' => $this->externalId($sourceUrl),
+            'slug' => ExternalListingSlug::make(
+                is_numeric($car['year'] ?? null) ? (int) $car['year'] : null,
+                trim((string) $car['title']),
+                $this->externalId($sourceUrl),
+            ),
             'title' => trim((string) $car['title']),
             'price' => is_numeric($car['price'] ?? null) ? (int) round((float) $car['price']) : null,
             'year' => is_numeric($car['year'] ?? null) ? (int) $car['year'] : null,
@@ -674,6 +680,7 @@ class ExternalCarNormalizer
     {
         return array_map(function (array $car) use ($allowSourceUrl): array {
             $car['sourceUrl'] = $allowSourceUrl ? ($car['sourceUrl'] ?? '') : '';
+            $car['url'] = route('external.detail', $car['slug'] ?? $car['id']);
             unset($car['platformLogo']);
 
             return $car;

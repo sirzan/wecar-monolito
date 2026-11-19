@@ -227,7 +227,14 @@
 
 .theme-admin input::placeholder,
 .theme-admin textarea::placeholder {
-    color: color-mix(in oklch, var(--muted-foreground) 85%, transparent);
+    color: #9ca3af !important;
+    opacity: 0.85;
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: #9ca3af !important;
+    opacity: 0.85;
 }
 
 /* ============================================================

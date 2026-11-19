@@ -3,13 +3,17 @@ import { router } from '@inertiajs/vue3';
 import { Heart, HeartOff, ImageOff } from '@lucide/vue';
 import PanelLayout from '@/layouts/PanelLayout.vue';
 import CarCard, { type CarCardData } from '@/components/site/CarCard.vue';
+import ExternalCarCard from '@/components/external/ExternalCarCard.vue';
 import Button from '@/components/ui/Button.vue';
+import type { ExternalCar } from '@/types/external';
 
 defineOptions({ layout: PanelLayout });
 
 type FavoriteItem = {
+    type: 'car' | 'external';
     id: string;
     car: CarCardData | null;
+    external: ExternalCar | null;
     title: string;
     image: string | null;
     available: boolean;
@@ -23,7 +27,11 @@ const removeFavorite = async (item: FavoriteItem) => {
 
     if (!id) return;
 
-    await fetch(`/api/favorites/${id}`, {
+    const endpoint = item.type === 'external'
+        ? `/api/favorites/external/${id}`
+        : `/api/favorites/${id}`;
+
+    await fetch(endpoint, {
         method: 'POST',
         headers: {
             Accept: 'application/json',
@@ -43,8 +51,9 @@ const removeFavorite = async (item: FavoriteItem) => {
         </div>
 
         <div v-if="props.items.length" class="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            <div v-for="item in props.items" :key="item.car?.id ?? item.url" class="relative">
-                <CarCard v-if="item.car" :car="item.car" />
+            <div v-for="item in props.items" :key="item.type + item.id" class="relative">
+                <ExternalCarCard v-if="item.external" :car="item.external" @open="router.visit(item.external?.url || item.url)" />
+                <CarCard v-else-if="item.car" :car="item.car" />
                 <article v-else class="overflow-hidden rounded-3xl border border-border bg-card shadow-soft">
                     <div class="grid aspect-[4/3] place-items-center bg-muted text-muted-foreground">
                         <img v-if="item.image" :src="item.image" :alt="item.title" class="h-full w-full object-cover opacity-60" />

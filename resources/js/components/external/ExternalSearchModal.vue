@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { Globe, LoaderCircle, SearchX, X } from '@lucide/vue';
+import { Globe, SearchX, X } from '@lucide/vue';
 import Button from '@/components/ui/Button.vue';
 import ExternalCarCard from '@/components/external/ExternalCarCard.vue';
-import type { ExternalCar } from '@/types/external';
+import ExternalSearchAnimation from '@/components/external/ExternalSearchAnimation.vue';
+import type { ExternalCar, ExternalPlatform } from '@/types/external';
 
 defineProps<{
     open: boolean;
@@ -10,6 +11,7 @@ defineProps<{
     results: ExternalCar[];
     error: string | null;
     query: string;
+    platforms: ExternalPlatform[];
 }>();
 
 const emit = defineEmits<{ close: []; open: [car: ExternalCar]; retry: [] }>();
@@ -31,10 +33,8 @@ const emit = defineEmits<{ close: []; open: [car: ExternalCar]; retry: [] }>();
                 </div>
 
                 <div class="flex-1 overflow-y-auto p-5">
-                    <div v-if="loading" class="flex flex-col items-center justify-center py-20 text-center">
-                        <LoaderCircle class="h-10 w-10 animate-spin text-primary" />
-                        <p class="mt-4 text-sm font-bold text-secondary">Buscando más opciones...</p>
-                        <p class="mt-1 text-xs text-muted-foreground">Explorando Mercado Libre, Facebook, Seminuevos, Kavak y Autoscosmos.</p>
+                    <div v-if="loading">
+                        <ExternalSearchAnimation :platforms="platforms" class="py-8 sm:py-10" />
                     </div>
 
                     <div v-else-if="error && results.length === 0" class="flex flex-col items-center justify-center py-16 text-center">

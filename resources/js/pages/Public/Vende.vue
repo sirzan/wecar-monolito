@@ -35,6 +35,8 @@ import SeoHead from '@/components/site/SeoHead.vue';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
+import FormErrorSummary from '@/components/ui/FormErrorSummary.vue';
+import MoneyInput from '@/components/ui/MoneyInput.vue';
 import { paymentMethodIcon, type PaymentMethodKey, type PaymentMethodOption } from '@/lib/paymentMethods';
 import {
     bodyTypes,
@@ -143,14 +145,6 @@ const existingImages = ref<string[]>(
 );
 const removedExistingImages = ref<string[]>([]);
 const primaryImage = ref<string>(props.car?.image ?? existingImages.value[0] ?? '');
-
-const priceInput = computed<string | number>({
-    get: () => form.price ?? '',
-    set: (value) => {
-        form.price = value === '' ? null : Number(value);
-        form.price_confirmed = true;
-    },
-});
 
 const acceptsTrade = computed({
     get: () => (form.accepts_trade ? '1' : '0'),
@@ -430,6 +424,17 @@ const nextStep = () => {
 const fieldStateClass = (field: string): string =>
     hasError(field) ? `${fieldClass} border-destructive ring-2 ring-destructive/20` : fieldClass;
 
+const fieldLabels: Record<string, string> = {
+    year: 'año', brand_id: 'marca', model_id: 'modelo', version_id: 'versión', km: 'kilometraje',
+    description: 'descripción', price: 'precio', city: 'ciudad', images: 'fotografías',
+};
+
+const missingSummary = computed(() =>
+    Object.keys({ ...stepErrors.value, ...(form.errors as Record<string, string>) })
+        .map((field) => fieldLabels[field] ?? field)
+        .filter(Boolean),
+);
+
 watch(
     () => form.errors,
     (errors) => {
@@ -698,6 +703,7 @@ const goBack = () => {
             </div>
 
             <form @submit.prevent="submit">
+                <FormErrorSummary :fields="missingSummary" class="mb-5" />
                 <!-- ════════════ PASO 1: DATOS DEL VEHÍCULO ════════════ -->
                 <div v-if="step === 1" class="space-y-6 rounded-[28px] border border-border bg-card p-6 shadow-soft sm:p-8">
                     <div>
@@ -807,7 +813,7 @@ const goBack = () => {
 
                         <div>
                             <Label class="text-xs font-bold text-secondary">Kilometraje *</Label>
-                            <Input v-model.number="form.km" data-field="km" type="number" min="0" placeholder="ej. 45000" :class="fieldStateClass('km')" />
+                            <MoneyInput v-model="form.km" data-field="km" :min="0" placeholder="ej. 45,000" :class="fieldStateClass('km')" />
                             <p v-if="errorFor('km')" class="mt-1 text-xs font-medium text-destructive">{{ errorFor('km') }}</p>
                         </div>
 
@@ -928,7 +934,7 @@ const goBack = () => {
                         <div>
                             <Label class="text-xs font-bold text-secondary">Precio del auto (MXN) *</Label>
                             <div class="relative mt-1.5">
-                                 <Input v-model="priceInput" data-field="price" type="number" min="1000" :class="`${fieldStateClass('price')} mt-0 pr-16`" />
+                                 <MoneyInput v-model="form.price" data-field="price" :min="1000" :class="`${fieldStateClass('price')} mt-0 pr-16`" />
                                 <span class="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">MXN</span>
                             </div>
                             <p v-if="errorFor('price')" class="mt-1 text-xs font-medium text-destructive">{{ errorFor('price') }}</p>

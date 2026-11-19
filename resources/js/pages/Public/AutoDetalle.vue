@@ -16,6 +16,7 @@ import {
     Compass,
     DoorOpen,
     Droplet,
+    ExternalLink,
     FileCheck2,
     FileText,
     Fuel,
@@ -62,7 +63,7 @@ const props = defineProps<{
         version: string | null;
         version_id: string | null;
         year: number;
-        km: number;
+        km: number | null;
         price: number;
         previous_price: number | null;
         city: string | null;
@@ -88,8 +89,11 @@ const props = defineProps<{
     similar: CarCardData[];
     priceReference: { samples: number; min: number | null; p25: number | null; median: number | null; p75: number | null; max: number | null; confidence: string; scope: string };
     financing: { min_rate: number; max_term: number; service_fee_rate: number };
+    external?: { sourceName: string; sourceUrl: string; lastSeenAt: string | null; stale: boolean; priceAvailable: boolean } | null;
     seo: { title: string; description: string; canonical: string; image: string | null; images: string[]; noindex: boolean; robots: string; availability: string };
 }>();
+
+const isExternal = computed(() => Boolean(props.external));
 
 const images = computed(() => (props.car.gallery.length ? props.car.gallery : props.car.image ? [props.car.image] : []));
 const active = ref(0);
@@ -97,7 +101,7 @@ const zoomOpen = ref(false);
 const financiarOpen = ref(false);
 const showFullDescription = ref(false);
 const favorites = useFavoritesStore();
-const isFavorite = computed(() => favorites.has(props.car.id));
+const isFavorite = computed(() => (isExternal.value ? favorites.hasExternal(props.car.id) : favorites.has(props.car.id)));
 
 onMounted(() => void favorites.bootstrap());
 
@@ -109,8 +113,8 @@ const formatPrice = (value: number) => {
     return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(amount);
 };
 
-const formatKm = (value: number) =>
-    new Intl.NumberFormat('es-MX').format(value) + ' km';
+const formatKm = (value: number | null) =>
+    value == null ? 'Kilometraje no especificado' : new Intl.NumberFormat('es-MX').format(value) + ' km';
 
 // Finance Calculator State
 const downPaymentPct = ref(20);
@@ -230,7 +234,9 @@ const shareCar = () => {
 };
 
 const whatsappUrl = computed(() => {
-    const text = `Hola, me interesa el auto ${props.car.title} con precio de ${formatPrice(props.car.price)} que vi en WeCar: ${props.seo.canonical}`;
+    const text = isExternal.value && props.external
+        ? `Hola, vi este auto externo "${props.car.title}" publicado en ${props.external.sourceName} y quiero más información. Anuncio: ${props.external.sourceUrl}`
+        : `Hola, me interesa el auto ${props.car.title} con precio de ${formatPrice(props.car.price)} que vi en WeCar: ${props.seo.canonical}`;
     const phone = props.car.agency?.whatsapp || '528180131279';
     return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
 });
@@ -347,11 +353,16 @@ const jsonLd = computed(() => [
 
                     <!-- Badges superiores -->
                     <div class="absolute left-4 top-4 z-20 flex flex-wrap gap-2">
-                        <span class="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-xs font-bold text-secondary shadow-soft">
-                            <CheckCircle2 class="h-4 w-4 text-emerald-500" /> Auto verificado
-                        </span>
-                        <span class="inline-flex items-center gap-1.5 rounded-full bg-secondary/95 px-3 py-1.5 text-xs font-bold text-white shadow-soft">
-                            <ShieldCheck class="h-4 w-4 text-primary" /> Garantía WeCar
+                        <template v-if="!isExternal">
+                            <span class="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-xs font-bold text-secondary shadow-soft">
+                                <CheckCircle2 class="h-4 w-4 text-emerald-500" /> Auto verificado
+                            </span>
+                            <span class="inline-flex items-center gap-1.5 rounded-full bg-secondary/95 px-3 py-1.5 text-xs font-bold text-white shadow-soft">
+                                <ShieldCheck class="h-4 w-4 text-primary" /> Garantía WeCar
+                            </span>
+                        </template>
+                        <span v-else class="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-xs font-bold text-secondary shadow-soft">
+                            <ExternalLink class="h-4 w-4 text-primary" /> Anuncio externo
                         </span>
                     </div>
 
@@ -465,7 +476,7 @@ const jsonLd = computed(() => [
                                 type="button"
                                 aria-label="Favorito"
                                 class="grid h-9 w-9 place-items-center rounded-full border border-border text-secondary hover:border-primary hover:text-primary transition"
-                                @click="favorites.toggle(car.id)"
+                                @click="isExternal ? favorites.toggleExternal(car.id) : favorites.toggle(car.id)"
                             >
                                 <Heart class="h-4 w-4" :class="isFavorite ? 'fill-primary text-primary' : ''" />
                             </button>
@@ -474,22 +485,34 @@ const jsonLd = computed(() => [
 
                     <!-- Datos básicos -->
                     <p class="mt-2 text-xs font-bold text-muted-foreground">
-                        {{ car.year }} · {{ formatKm(car.km) }} · {{ car.city || 'México' }}
+                        {{ car.year || 'Año no especificado' }} · {{ formatKm(car.km) }} · {{ car.city || 'México' }}
                     </p>
 
+                    <div v-if="isExternal && external" class="mt-3 flex flex-wrap items-center gap-2">
+                        <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
+                            <ExternalLink class="h-3.5 w-3.5" /> Publicado en {{ external.sourceName }}
+                        </span>
+                        <span v-if="external.stale" class="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1 text-xs font-bold text-amber-700">
+                            Este anuncio puede ya no estar disponible
+                        </span>
+                    </div>
+
                     <!-- CAFFAX Badge -->
-                    <div class="mt-4 inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
+                    <div v-if="!isExternal" class="mt-4 inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
                         <CheckCircle2 class="h-3.5 w-3.5" /> Historial validado por CAFFAX
                     </div>
 
                     <!-- Precio de contado -->
-                    <div class="mt-4 flex items-baseline gap-3">
-                        <span v-if="car.previous_price" class="text-base font-bold text-muted-foreground line-through">
-                            {{ formatPrice(car.previous_price) }}
-                        </span>
-                        <p class="text-3xl font-black text-secondary">
-                            {{ formatPrice(car.price) }}
-                        </p>
+                    <div class="mt-4">
+                        <p v-if="isExternal" class="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Precio estimado</p>
+                        <div class="flex items-baseline gap-3">
+                            <span v-if="car.previous_price" class="text-base font-bold text-muted-foreground line-through">
+                                {{ formatPrice(car.previous_price) }}
+                            </span>
+                            <p class="text-3xl font-black text-secondary">
+                                {{ formatPrice(car.price) }}
+                            </p>
+                        </div>
                     </div>
 
                     <!-- WeCar Crédito Teaser -->
@@ -567,6 +590,15 @@ const jsonLd = computed(() => [
 
                     <!-- Botones de Acción / CTAs -->
                     <div class="mt-6 space-y-2.5">
+                        <a
+                            v-if="isExternal && external"
+                            :href="external.sourceUrl"
+                            target="_blank"
+                            rel="noopener nofollow"
+                            class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-secondary px-4 py-3 text-sm font-bold text-secondary-foreground shadow-soft transition hover:bg-secondary/90"
+                        >
+                            <ExternalLink class="h-4 w-4" /> Ver anuncio original
+                        </a>
                         <Button
                             variant="hero"
                             size="lg"
@@ -599,7 +631,7 @@ const jsonLd = computed(() => [
                 </div>
 
                 <!-- Precio de referencia (histograma) -->
-                <div class="rounded-3xl border border-border bg-card p-6 shadow-soft">
+                <div v-if="!isExternal" class="rounded-3xl border border-border bg-card p-6 shadow-soft">
                     <h3 class="font-black text-secondary text-base">Precio de referencia de mercado</h3>
                     <p class="text-xs text-muted-foreground mt-0.5">Basado en autos similares publicados en WeCar</p>
 
@@ -630,7 +662,7 @@ const jsonLd = computed(() => [
                 </div>
 
                 <!-- Reporte de confianza -->
-                <div class="rounded-3xl border border-border bg-card p-6 shadow-soft">
+                <div v-if="!isExternal" class="rounded-3xl border border-border bg-card p-6 shadow-soft">
                     <h3 class="font-black text-secondary text-base">Reporte de confianza WeCar</h3>
                     <ul class="mt-4 space-y-2.5">
                         <li v-for="r in reportItems" :key="r" class="flex items-center gap-2 text-xs font-medium text-secondary">
@@ -641,17 +673,17 @@ const jsonLd = computed(() => [
 
                 <!-- Vendedor verificado -->
                 <div class="rounded-3xl border border-border bg-card p-6 shadow-soft">
-                    <h3 class="font-black text-secondary text-base">Información del vendedor</h3>
+                    <h3 class="font-black text-secondary text-base">{{ isExternal ? 'Fuente del anuncio' : 'Información del vendedor' }}</h3>
                     <div class="mt-4 flex items-center gap-3.5">
                         <span class="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-muted text-secondary">
                             <UserCircle2 class="h-8 w-8" />
                         </span>
                         <div class="min-w-0">
-                            <p class="font-bold text-sm text-secondary">{{ car.agency?.name || car.owner_name || 'Vendedor particular verificado' }}</p>
-                            <p class="text-xs text-muted-foreground">{{ car.city || 'México' }} · Miembro verificado WeCar</p>
+                            <p class="font-bold text-sm text-secondary">{{ isExternal ? external?.sourceName : (car.agency?.name || car.owner_name || 'Vendedor particular verificado') }}</p>
+                            <p class="text-xs text-muted-foreground">{{ isExternal ? 'Anuncio de una plataforma externa' : `${car.city || 'México'} · Miembro verificado WeCar` }}</p>
                         </div>
                     </div>
-                    <div class="mt-4 flex flex-wrap gap-2">
+                    <div v-if="!isExternal" class="mt-4 flex flex-wrap gap-2">
                         <span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-bold text-emerald-600">
                             <CheckCircle2 class="h-3.5 w-3.5" /> Identidad validada
                         </span>
@@ -664,7 +696,7 @@ const jsonLd = computed(() => [
         </div>
 
         <!-- ════════════ SECCIÓN: ¿POR QUÉ COMPRAR CON WECAR? ════════════ -->
-        <section class="mt-12 rounded-3xl border border-border bg-accent/40 p-6 sm:p-8">
+        <section v-if="!isExternal" class="mt-12 rounded-3xl border border-border bg-accent/40 p-6 sm:p-8">
             <h2 class="text-center font-black text-secondary text-xl sm:text-2xl">
                 ¿Por qué comprar con WeCar?
             </h2>

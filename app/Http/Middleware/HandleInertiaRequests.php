@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\ExternalListing;
 use App\Models\SiteSetting;
 use App\Models\User;
 use App\Services\PaymentMethodsService;
@@ -75,7 +76,10 @@ class HandleInertiaRequests extends Middleware
                 'enabled' => (bool) config('external_search.enabled', true)
                     && (filled(config('services.firecrawl.key')) || (bool) config('services.apify.facebook_enabled')),
             ],
-            'favoriteIds' => $user ? fn () => $user->favorites()->pluck('car_id') : [],
+            'favoriteIds' => $user ? fn () => $user->favorites()->whereNotNull('car_id')->pluck('car_id') : [],
+            'externalFavoriteIds' => $user ? fn () => ExternalListing::query()
+                ->whereIn('id', $user->favorites()->whereNotNull('external_listing_id')->pluck('external_listing_id'))
+                ->pluck('external_id') : [],
             'push' => [
                 'publicKey' => config('services.webpush.public_key'),
             ],

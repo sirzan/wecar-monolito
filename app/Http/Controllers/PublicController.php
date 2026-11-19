@@ -8,6 +8,7 @@ use App\Models\Car;
 use App\Models\CarBrand;
 use App\Models\CarModel;
 use App\Models\CarVersion;
+use App\Models\ExternalListing;
 use App\Models\Financiera;
 use App\Models\Plan;
 use App\Models\SiteSetting;
@@ -16,6 +17,7 @@ use App\Services\ExternalSearch\ExternalSearchService;
 use App\Services\Pricing\CarPriceSuggestionService;
 use App\Services\PublicationPlanService;
 use App\Support\AgencyContext;
+use App\Support\ExternalListingPresenter;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -192,20 +194,69 @@ class PublicController extends Controller
         ]);
     }
 
-    public function externalShow(Request $request, string $id): Response
+    public function externalShow(Request $request, string $id): RedirectResponse
     {
-        $cars = $this->externalSearch->cached($request->user(), 60)['results'];
-        $car = collect($cars)->firstWhere('id', $id);
+        $listing = ExternalListing::query()
+            ->where('external_id', $id)
+            ->orWhere('slug', $id)
+            ->first();
 
-        abort_if(! $car, 404);
+        abort_if($listing === null, 404);
 
-        return Inertia::render('Public/ExternalAutoDetalle', [
+        return redirect()->route('external.detail', $listing->slug, 301);
+    }
+
+    public function externalDetail(string $slug): Response
+    {
+        $listing = ExternalListing::query()
+            ->where('slug', $slug)
+            ->first();
+
+        abort_if($listing === null, 404);
+
+        $financing = [
+            'min_rate' => (float) (Financiera::query()
+                ->where('activo', true)
+                ->whereNotNull('tasa_min')
+                ->where('tasa_min', '>', 0)
+                ->min('tasa_min') ?? 12.5),
+            'max_term' => max(12, (int) (Financiera::query()
+                ->where('activo', true)
+                ->where('plazo_max', '>', 0)
+                ->max('plazo_max') ?? 72)),
+            'service_fee_rate' => 0.025,
+        ];
+
+        $car = ExternalListingPresenter::car($listing);
+        $external = ExternalListingPresenter::external($listing);
+
+        return Inertia::render('Public/AutoDetalle', [
             'car' => $car,
+            'external' => $external,
+            'similar' => [],
+            'priceReference' => [
+                'samples' => 0,
+                'min' => null,
+                'p25' => null,
+                'median' => null,
+                'p75' => null,
+                'max' => null,
+                'confidence' => 'none',
+                'scope' => 'external',
+            ],
+            'financing' => $financing,
             'seo' => [
-                'title' => $car['title'].' — Wecar',
-                'description' => 'Anuncio externo encontrado por la búsqueda inteligente de Wecar.',
-                'canonical' => route('external.show', $id),
+                'title' => $listing->title.' — Wecar',
+                'description' => Str::limit(
+                    'Anuncio externo publicado en '.$listing->source.'. '.$listing->title.'. Revisa el precio, kilometraje y detalles antes de contactar al vendedor.',
+                    160,
+                ),
+                'canonical' => route('external.detail', $listing->slug),
+                'image' => $car['image'],
+                'images' => array_values(array_filter($car['gallery'] ?? [])),
                 'noindex' => true,
+                'robots' => 'noindex,follow',
+                'availability' => 'https://schema.org/InStock',
             ],
         ]);
     }
@@ -399,7 +450,7 @@ class PublicController extends Controller
                 'bodies' => ['Sedán', 'SUV', 'Hatchback', 'Pickup', 'Coupé', 'Van'],
                 'transmissions' => ['Automática', 'Manual', 'CVT'],
                 'fuels' => ['Gasolina', 'Diésel', 'Híbrido', 'Eléctrico'],
-                'colors' => ['Blanco', 'Negro', 'Gris', 'Plata', 'Rojo', 'Azul', 'Verde'],
+                'colors' => ['Blanco', 'Blanco perla', 'Negro', 'Negro brillante', 'Gris', 'Gris Oxford', 'Gris grafito', 'Plata', 'Platinado', 'Rojo', 'Vino', 'Guinda', 'Azul', 'Azul marino', 'Turquesa', 'Verde', 'Verde oliva', 'Café', 'Beige', 'Arena', 'Amarillo', 'Naranja', 'Dorado', 'Bronce', 'Morado', 'Rosa', 'Otro'],
             ],
             'seo' => [
                 'title' => 'Vende tu auto en minutos — Wecar',

@@ -43,7 +43,14 @@ const form = useForm({
     rfc: props.agency.rfc ?? '',
 });
 
-const submit = () => form.post(`${base}/perfil`, { preserveScroll: true });</script>
+const submit = () => {
+    if (!form.name.trim()) {
+        form.setError('name', 'Ingresa el nombre de la agencia.');
+        return;
+    }
+
+    form.post(`${base}/perfil`, { preserveScroll: true });
+};</script>
 
 <template>
     <div class="mx-auto max-w-3xl">
@@ -59,7 +66,7 @@ const submit = () => form.post(`${base}/perfil`, { preserveScroll: true });</scr
             <div class="grid gap-4 sm:grid-cols-2">
                 <div class="sm:col-span-2">
                     <Label for="name">Nombre de la agencia</Label>
-                    <Input id="name" v-model="form.name" class="mt-1.5" />
+                    <Input id="name" v-model="form.name" :invalid="Boolean(form.errors.name)" class="mt-1.5" />
                     <p v-if="form.errors.name" class="mt-1 text-xs text-destructive">{{ form.errors.name }}</p>
                 </div>
                 <div class="sm:col-span-2">

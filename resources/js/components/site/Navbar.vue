@@ -1,29 +1,25 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { Link, usePage } from '@inertiajs/vue3';
-import { LayoutDashboard, Menu, Plus, X } from '@lucide/vue';
+import { Heart, Landmark, LayoutDashboard, Menu, Plus, X } from '@lucide/vue';
 import Button from '@/components/ui/Button.vue';
 import Logo from '@/components/site/Logo.vue';
 import NotificationBell from '@/components/site/NotificationBell.vue';
 import NavbarInstallApp from '@/components/site/NavbarInstallApp.vue';
+import { useFavoritesStore } from '@/stores/favorites';
 
 const page = usePage<{ auth: { user: { id: string; name: string } | null } }>();
 const open = ref(false);
+const favorites = useFavoritesStore();
 
 const links = [
     { href: '/comprar', label: 'Comprar' },
-    { href: '/vende', label: 'Vende tu auto' },
     { href: '/credito', label: 'Crédito' },
-    { href: '/garantia', label: 'Garantía' },
-    { href: '/certificaciones', label: 'Certificaciones' },
-    {
-        href: 'https://motorevs.com.mx/?gad_source=1&gad_campaignid=22786191493',
-        label: 'Cuida tu auto',
-        external: true,
-    },
 ];
 
-const isActive = (href: string) => !href.startsWith('http') && page.url.startsWith(href);
+const isActive = (href: string) => page.url.startsWith(href);
+
+onMounted(() => void favorites.bootstrap());
 </script>
 
 <template>
@@ -31,31 +27,47 @@ const isActive = (href: string) => !href.startsWith('http') && page.url.startsWi
         <div class="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-2 sm:px-6 lg:gap-4 lg:py-3">
             <Logo />
 
-            <nav class="hidden items-center gap-1 lg:flex">
-                <template v-for="link in links" :key="link.href">
-                    <a
-                        v-if="link.external"
-                        :href="link.href"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="whitespace-nowrap rounded-lg px-3 py-2 text-[14.3px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-primary"
-                    >
-                        {{ link.label }}
-                    </a>
-                    <Link
-                        v-else
-                        :href="link.href"
-                        class="whitespace-nowrap rounded-lg px-3 py-2 text-[14.3px] font-semibold transition-colors hover:bg-accent hover:text-primary"
-                        :class="isActive(link.href) ? 'text-primary' : 'text-muted-foreground'"
-                    >
-                        {{ link.label }}
-                    </Link>
-                </template>
-            </nav>
-
             <div class="hidden items-center gap-2 lg:flex">
                 <template v-if="page.props.auth.user">
+                    <Link
+                        href="/panel/favoritos"
+                        aria-label="Favoritos"
+                        class="relative grid h-10 w-10 shrink-0 place-items-center rounded-full border border-border bg-background text-secondary transition hover:border-primary/40 hover:text-primary"
+                        :class="isActive('/panel/favoritos') ? 'border-primary bg-accent text-primary' : ''"
+                    >
+                        <Heart class="h-4 w-4" />
+                        <span
+                            v-if="favorites.count > 0"
+                            class="absolute -right-1 -top-1 grid min-h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[9px] font-black text-primary-foreground"
+                        >
+                            {{ favorites.count > 99 ? '99+' : favorites.count }}
+                        </span>
+                    </Link>
                     <NotificationBell />
+                </template>
+
+                <Button
+                    as="a"
+                    href="/comprar"
+                    variant="secondary"
+                    size="pill"
+                    class="gap-1.5 whitespace-nowrap text-[13.2px]"
+                    :class="isActive('/comprar') ? 'ring-2 ring-primary/30' : ''"
+                >
+                    Comprar
+                </Button>
+                <Button
+                    as="a"
+                    href="/credito"
+                    variant="secondary"
+                    size="pill"
+                    class="gap-1.5 whitespace-nowrap text-[13.2px]"
+                    :class="isActive('/credito') ? 'ring-2 ring-primary/30' : ''"
+                >
+                    <Landmark class="h-3.5 w-3.5" /> Crédito
+                </Button>
+
+                <template v-if="page.props.auth.user">
                     <Button as="a" href="/vende" variant="secondary" size="pill" class="gap-1.5 whitespace-nowrap text-[13.2px]">
                         <Plus class="h-3.5 w-3.5" /> Publicar
                     </Button>
@@ -70,6 +82,20 @@ const isActive = (href: string) => !href.startsWith('http') && page.url.startsWi
             </div>
 
             <div class="flex shrink-0 items-center gap-1 lg:hidden">
+                <Link
+                    v-if="page.props.auth.user"
+                    href="/panel/favoritos"
+                    aria-label="Favoritos"
+                    class="relative grid h-10 w-10 place-items-center rounded-full text-secondary transition hover:bg-accent hover:text-primary"
+                >
+                    <Heart class="h-5 w-5" />
+                    <span
+                        v-if="favorites.count > 0"
+                        class="absolute right-1 top-1 grid min-h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[9px] font-black text-primary-foreground"
+                    >
+                        {{ favorites.count > 99 ? '99+' : favorites.count }}
+                    </span>
+                </Link>
                 <NotificationBell v-if="page.props.auth.user" />
                 <button
                     type="button"
@@ -88,23 +114,13 @@ const isActive = (href: string) => !href.startsWith('http') && page.url.startsWi
         <div v-if="open" class="border-t border-border/60 bg-background lg:hidden">
             <div class="mx-auto flex max-w-7xl flex-col gap-1 px-6 py-4">
                 <template v-for="link in links" :key="link.href">
-                    <a
-                        v-if="link.external"
-                        :href="link.href"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="rounded-xl px-3 py-2.5 text-[15.4px] font-semibold text-muted-foreground hover:bg-accent/60"
-                        @click="open = false"
-                    >
-                        {{ link.label }}
-                    </a>
                     <Link
-                        v-else
                         :href="link.href"
-                        class="rounded-xl px-3 py-2.5 text-[15.4px] font-semibold"
+                        class="inline-flex items-center gap-2 rounded-xl px-3 py-2.5 text-[15.4px] font-semibold"
                         :class="isActive(link.href) ? 'bg-accent text-primary' : 'text-muted-foreground hover:bg-accent/60'"
                         @click="open = false"
                     >
+                        <Landmark v-if="link.href === '/credito'" class="h-4 w-4" />
                         {{ link.label }}
                     </Link>
                 </template>

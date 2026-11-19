@@ -9,6 +9,9 @@ import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
 import PhoneInput from '@/components/ui/PhoneInput.vue';
+import FormErrorSummary from '@/components/ui/FormErrorSummary.vue';
+import FormFieldError from '@/components/ui/FormFieldError.vue';
+import { useRequiredValidation } from '@/composables/useRequiredValidation';
 
 defineOptions({ layout: PublicLayout });
 
@@ -27,6 +30,14 @@ const form = useForm({
 
 const showPassword = ref(false);
 const acceptedTerms = ref(false);
+const validation = useRequiredValidation(form, () => ({
+    name: 'nombre',
+    ...(form.account_type === 'agency' ? { agency_name: 'nombre de la agencia', agency_phone: 'teléfono de la agencia' } : {}),
+    email: 'correo electrónico',
+    password: 'contraseña',
+    password_confirmation: 'confirmación de contraseña',
+    terms: 'aceptación de términos',
+}));
 
 const setAccountType = (type: AccountType) => {
     form.account_type = type;
@@ -38,6 +49,9 @@ const setAccountType = (type: AccountType) => {
 
 const submit = () => {
     form.terms = acceptedTerms.value;
+
+    if (!validation.validate()) return;
+
     form.post('/register', {
         onFinish: () => form.reset('password', 'password_confirmation'),
     });
@@ -75,6 +89,7 @@ const submit = () => {
             </div>
 
             <form no-validate class="grid gap-4" @submit.prevent="submit">
+                <FormErrorSummary :fields="validation.summary.value" />
                 <div class="grid grid-cols-2 gap-2 rounded-2xl bg-accent/50 p-1">
                     <button
                         type="button"
@@ -96,27 +111,27 @@ const submit = () => {
 
                 <div>
                     <Label for="name">{{ form.account_type === 'agency' ? 'Nombre del responsable' : 'Nombre completo' }}</Label>
-                    <Input id="name" v-model="form.name" class="mt-1.5" autocomplete="name" placeholder="Tu nombre" />
-                    <p v-if="form.errors.name" class="mt-1 text-xs font-medium text-destructive">{{ form.errors.name }}</p>
+                    <Input id="name" v-model="form.name" :invalid="validation.hasError('name')" class="mt-1.5" autocomplete="name" placeholder="Tu nombre" @input="validation.clearField('name')" />
+                    <FormFieldError :message="validation.fieldError('name')" />
                 </div>
 
                 <template v-if="form.account_type === 'agency'">
                     <div>
                         <Label for="agency_name">Nombre de la agencia</Label>
-                        <Input id="agency_name" v-model="form.agency_name" class="mt-1.5" placeholder="Mi agencia" />
-                        <p v-if="form.errors.agency_name" class="mt-1 text-xs font-medium text-destructive">{{ form.errors.agency_name }}</p>
+                        <Input id="agency_name" v-model="form.agency_name" :invalid="validation.hasError('agency_name')" class="mt-1.5" placeholder="Mi agencia" @input="validation.clearField('agency_name')" />
+                        <FormFieldError :message="validation.fieldError('agency_name')" />
                     </div>
                     <div>
                         <Label for="agency_phone">Teléfono de la agencia</Label>
-                        <PhoneInput id="agency_phone" v-model="form.agency_phone" class="mt-1.5" autocomplete="tel" placeholder="81 1234 5678" />
-                        <p v-if="form.errors.agency_phone" class="mt-1 text-xs font-medium text-destructive">{{ form.errors.agency_phone }}</p>
+                        <PhoneInput id="agency_phone" v-model="form.agency_phone" :invalid="validation.hasError('agency_phone')" class="mt-1.5" autocomplete="tel" placeholder="81 1234 5678" />
+                        <FormFieldError :message="validation.fieldError('agency_phone')" />
                     </div>
                 </template>
 
                 <div>
                     <Label for="email">Correo electrónico</Label>
-                    <Input id="email" v-model="form.email" type="email" class="mt-1.5 placeholder:text-muted-foreground/60" autocomplete="email" placeholder="tu@correo.com" />
-                    <p v-if="form.errors.email" class="mt-1 text-xs font-medium text-destructive">{{ form.errors.email }}</p>
+                    <Input id="email" v-model="form.email" type="email" :invalid="validation.hasError('email')" class="mt-1.5" autocomplete="email" placeholder="tu@correo.com" @input="validation.clearField('email')" />
+                    <FormFieldError :message="validation.fieldError('email')" />
                 </div>
 
                 <div>
@@ -126,8 +141,10 @@ const submit = () => {
                             id="password"
                             v-model="form.password"
                             :type="showPassword ? 'text' : 'password'"
+                            :invalid="validation.hasError('password')"
                             class="pr-11"
                             autocomplete="new-password"
+                            @input="validation.clearField('password')"
                         />
                         <button
                             type="button"
@@ -139,8 +156,8 @@ const submit = () => {
                             <Eye v-else class="h-4 w-4" />
                         </button>
                     </div>
-                    <p v-if="form.errors.password" class="mt-1 text-xs font-medium text-destructive">{{ form.errors.password }}</p>
-                    <p v-else class="mt-1 text-xs text-muted-foreground">Mínimo 8 caracteres, con letras y números.</p>
+                    <FormFieldError :message="validation.fieldError('password')" />
+                    <p v-if="!validation.hasError('password')" class="mt-1 text-xs text-muted-foreground">Mínimo 8 caracteres, con letras y números.</p>
                 </div>
 
                 <div>
@@ -149,9 +166,12 @@ const submit = () => {
                         id="password_confirmation"
                         v-model="form.password_confirmation"
                         :type="showPassword ? 'text' : 'password'"
+                        :invalid="validation.hasError('password_confirmation')"
                         class="mt-1.5"
                         autocomplete="new-password"
+                        @input="validation.clearField('password_confirmation')"
                     />
+                    <FormFieldError :message="validation.fieldError('password_confirmation')" />
                 </div>
 
                 <label class="flex cursor-pointer items-start gap-2 text-xs text-muted-foreground">
@@ -163,7 +183,7 @@ const submit = () => {
                         <Link href="/privacidad" target="_blank" class="font-semibold text-primary hover:underline">aviso de privacidad</Link>.
                     </span>
                 </label>
-                <p v-if="form.errors.terms" class="-mt-2 text-xs font-medium text-destructive">
+                <p v-if="validation.hasError('terms')" class="flex items-start gap-1 text-xs font-medium text-destructive">
                     Debes aceptar los términos y el aviso de privacidad.
                 </p>
 

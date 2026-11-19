@@ -7,9 +7,54 @@ export const vehicleYears: number[] = Array.from(
     (_, index) => MAX_VEHICLE_YEAR - index,
 );
 
-export const exteriorColors = ['Blanco', 'Negro', 'Gris', 'Plata', 'Rojo', 'Azul', 'Verde', 'Café', 'Beige', 'Amarillo', 'Naranja', 'Otro'];
+export const exteriorColors = [
+    'Blanco',
+    'Blanco perla',
+    'Negro',
+    'Negro brillante',
+    'Gris',
+    'Gris Oxford',
+    'Gris grafito',
+    'Plata',
+    'Platinado',
+    'Rojo',
+    'Vino',
+    'Guinda',
+    'Azul',
+    'Azul marino',
+    'Turquesa',
+    'Verde',
+    'Verde oliva',
+    'Café',
+    'Beige',
+    'Arena',
+    'Amarillo',
+    'Naranja',
+    'Dorado',
+    'Bronce',
+    'Morado',
+    'Rosa',
+    'Otro',
+];
 
-export const interiorColors = ['Negro', 'Gris', 'Beige', 'Café', 'Blanco', 'Rojo', 'Azul', 'Otro'];
+export const interiorColors = [
+    'Piel negra',
+    'Piel café',
+    'Piel beige',
+    'Piel gris',
+    'Piel vino',
+    'Tela negra',
+    'Tela gris',
+    'Tela beige',
+    'Tela azul',
+    'Alcántara negra',
+    'Alcántara gris',
+    'Vinipiel negra',
+    'Vinipiel beige',
+    'Combinado negro/beige',
+    'Combinado negro/gris',
+    'Otro',
+];
 
 export const invoiceTypes = [
     'Factura de agencia',
