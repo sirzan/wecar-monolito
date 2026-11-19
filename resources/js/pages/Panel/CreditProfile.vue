@@ -7,7 +7,9 @@ import PanelLayout from '@/layouts/PanelLayout.vue';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
+import MoneyInput from '@/components/ui/MoneyInput.vue';
 import PhoneInput from '@/components/ui/PhoneInput.vue';
+import FormFieldError from '@/components/ui/FormFieldError.vue';
 import ZipCodeFields from '@/components/forms/ZipCodeFields.vue';
 
 defineOptions({ layout: PanelLayout });
@@ -72,7 +74,14 @@ const completion = computed(() => {
     return Math.round((filled / fields.length) * 100);
 });
 
-const submit = () => form.post('/panel/perfil-crediticio', { preserveScroll: true });
+const submit = () => {
+    if (!form.full_name.trim()) {
+        form.setError('full_name', 'Ingresa tu nombre completo.');
+        return;
+    }
+
+    form.post('/panel/perfil-crediticio', { preserveScroll: true });
+};
 
 const tipoTrabajoOptions = computed(() => {
     const options = ['Formal', 'Independiente', 'Honorarios', 'Negocio propio', 'Eventual'];
@@ -253,7 +262,8 @@ onMounted(() => {
             <div class="mt-4 grid gap-4 sm:grid-cols-2">
                 <div>
                     <Label for="full_name">Nombre completo</Label>
-                    <Input id="full_name" v-model="form.full_name" class="mt-1.5" />
+                    <Input id="full_name" v-model="form.full_name" :invalid="Boolean(form.errors.full_name)" class="mt-1.5" />
+                    <FormFieldError :message="form.errors.full_name" />
                 </div>
                 <div>
                     <Label for="email">Correo</Label>
@@ -326,11 +336,11 @@ onMounted(() => {
                 </div>
                 <div>
                     <Label for="ingreso_mensual">Ingreso mensual (MXN)</Label>
-                    <Input id="ingreso_mensual" v-model="form.ingreso_mensual" type="number" min="0" class="mt-1.5" />
+                    <MoneyInput id="ingreso_mensual" v-model="form.ingreso_mensual" class="mt-1.5" />
                 </div>
                 <div>
                     <Label for="deuda_mensual">Deuda mensual (MXN)</Label>
-                    <Input id="deuda_mensual" v-model="form.deuda_mensual" type="number" min="0" class="mt-1.5" />
+                    <MoneyInput id="deuda_mensual" v-model="form.deuda_mensual" class="mt-1.5" />
                 </div>
             </div>
 

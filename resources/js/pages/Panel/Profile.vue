@@ -36,7 +36,14 @@ const form = useForm({
     curp: props.profile.curp ?? '',
 });
 
-const submit = () => form.post('/panel/configuracion', { preserveScroll: true });
+const submit = () => {
+    if (!form.name.trim()) {
+        form.setError('name', 'Ingresa tu nombre.');
+        return;
+    }
+
+    form.post('/panel/configuracion', { preserveScroll: true });
+};
 
 const uppercase = (field: 'rfc' | 'curp') => {
     form[field] = form[field].toUpperCase();
@@ -182,7 +189,7 @@ const disableTwoFactor = async () => {
             <div class="grid gap-4 sm:grid-cols-2">
                 <div>
                     <Label for="name">Nombre completo</Label>
-                    <Input id="name" v-model="form.name" class="mt-1.5" />
+                    <Input id="name" v-model="form.name" :invalid="Boolean(form.errors.name)" class="mt-1.5" />
                     <p v-if="form.errors.name" class="mt-1 text-xs text-destructive">{{ form.errors.name }}</p>
                 </div>
                 <div>

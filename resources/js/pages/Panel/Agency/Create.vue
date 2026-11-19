@@ -6,6 +6,9 @@ import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
 import PhoneInput from '@/components/ui/PhoneInput.vue';
+import FormErrorSummary from '@/components/ui/FormErrorSummary.vue';
+import FormFieldError from '@/components/ui/FormFieldError.vue';
+import { useRequiredValidation } from '@/composables/useRequiredValidation';
 
 defineOptions({ layout: PanelLayout });
 
@@ -18,7 +21,12 @@ const form = useForm({
     whatsapp: '',
 });
 
-const submit = () => form.post('/panel/agencia/crear');
+const submit = () => {
+    if (!validation.validate()) return;
+    form.post('/panel/agencia/crear');
+};
+
+const validation = useRequiredValidation(form, { name: 'nombre de la agencia' });
 </script>
 
 <template>
@@ -30,11 +38,12 @@ const submit = () => form.post('/panel/agencia/crear');
         </p>
 
         <form class="mt-6 rounded-3xl border border-border bg-card p-6 shadow-soft" @submit.prevent="submit">
+            <FormErrorSummary :fields="validation.summary.value" class="mb-4" />
             <div class="grid gap-4 sm:grid-cols-2">
                 <div class="sm:col-span-2">
                     <Label for="name">Nombre de la agencia</Label>
-                    <Input id="name" v-model="form.name" class="mt-1.5" placeholder="Mi agencia" />
-                    <p v-if="form.errors.name" class="mt-1 text-xs text-destructive">{{ form.errors.name }}</p>
+                    <Input id="name" v-model="form.name" :invalid="validation.hasError('name')" class="mt-1.5" placeholder="Mi agencia" @input="validation.clearField('name')" />
+                    <FormFieldError :message="validation.fieldError('name')" />
                 </div>
                 <div class="sm:col-span-2">
                     <Label for="description">Descripción</Label>

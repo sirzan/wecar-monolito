@@ -6,6 +6,9 @@ import SeoHead from '@/components/site/SeoHead.vue';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 import PhoneInput from '@/components/ui/PhoneInput.vue';
+import FormErrorSummary from '@/components/ui/FormErrorSummary.vue';
+import FormFieldError from '@/components/ui/FormFieldError.vue';
+import { useRequiredValidation } from '@/composables/useRequiredValidation';
 
 defineOptions({ layout: PublicLayout });
 
@@ -27,7 +30,16 @@ const form = useForm({
     message: '',
 });
 
+const validation = useRequiredValidation(form, {
+    name: 'nombre',
+    email: 'correo electrónico',
+    phone: 'teléfono',
+    message: 'mensaje',
+});
+
 const submit = () => {
+    if (!validation.validate()) return;
+
     form.post('/contacto', {
         preserveScroll: true,
         onSuccess: () => form.reset(),
@@ -70,26 +82,31 @@ const submit = () => {
         <form class="rounded-3xl border border-border bg-card p-6 shadow-soft sm:p-8" @submit.prevent="submit">
             <h2 class="text-xl font-black text-secondary">Envíanos un mensaje</h2>
             <div class="mt-5 space-y-4">
+                <FormErrorSummary :fields="validation.summary.value" />
                 <div>
-                    <Input v-model="form.name" placeholder="Tu nombre" autocomplete="name" />
-                    <p v-if="form.errors.name" class="mt-1 text-xs text-destructive">{{ form.errors.name }}</p>
+                    <Input id="name" v-model="form.name" :invalid="validation.hasError('name')" placeholder="Tu nombre" autocomplete="name" @input="validation.clearField('name')" />
+                    <FormFieldError :message="validation.fieldError('name')" />
                 </div>
                 <div>
-                    <Input v-model="form.email" type="email" placeholder="tu@correo.com" autocomplete="email" />
-                    <p v-if="form.errors.email" class="mt-1 text-xs text-destructive">{{ form.errors.email }}</p>
+                    <Input id="email" v-model="form.email" type="email" :invalid="validation.hasError('email')" placeholder="tu@correo.com" autocomplete="email" @input="validation.clearField('email')" />
+                    <FormFieldError :message="validation.fieldError('email')" />
                 </div>
                 <div>
-                    <PhoneInput v-model="form.phone" placeholder="81 1234 5678" autocomplete="tel" />
-                    <p v-if="form.errors.phone" class="mt-1 text-xs text-destructive">{{ form.errors.phone }}</p>
+                    <PhoneInput id="phone" v-model="form.phone" :invalid="validation.hasError('phone')" placeholder="81 1234 5678" autocomplete="tel" />
+                    <FormFieldError :message="validation.fieldError('phone')" />
                 </div>
                 <div>
                     <textarea
+                        id="message"
                         v-model="form.message"
                         rows="5"
                         placeholder="Cuéntanos en qué podemos ayudarte"
-                        class="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        :aria-invalid="validation.hasError('message') || undefined"
+                        class="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        :class="validation.hasError('message') ? 'border-destructive ring-2 ring-destructive/20' : ''"
+                        @input="validation.clearField('message')"
                     />
-                    <p v-if="form.errors.message" class="mt-1 text-xs text-destructive">{{ form.errors.message }}</p>
+                    <FormFieldError :message="validation.fieldError('message')" />
                 </div>
                 <Button type="submit" class="w-full" :disabled="form.processing">
                     {{ form.processing ? 'Enviando…' : 'Enviar mensaje' }}

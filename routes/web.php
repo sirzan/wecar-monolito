@@ -26,6 +26,7 @@ Route::get('/comprar', [PublicController::class, 'comprar'])->name('comprar');
 Route::get('/comprar/marca/{brand:slug}', [PublicController::class, 'brandLanding'])->name('comprar.brand');
 Route::get('/comprar/ciudad/{city}', [PublicController::class, 'cityLanding'])->name('comprar.city');
 Route::get('/comprar/tipo/{body}', [PublicController::class, 'bodyLanding'])->name('comprar.body');
+Route::get('/auto-externo/{slug}', [PublicController::class, 'externalDetail'])->name('external.detail');
 Route::get('/auto/externo/{id}', [PublicController::class, 'externalShow'])->name('external.show');
 Route::get('/auto/{car}', [PublicController::class, 'autoShow'])->name('autos.show');
 Route::get('/comparar', [PublicController::class, 'comparar'])->name('comparar');
@@ -73,6 +74,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('/api/favorites', [FavoriteController::class, 'ids'])->name('favorites.ids');
     Route::post('/api/favorites/sync', [FavoriteController::class, 'sync'])->name('favorites.sync');
+    Route::post('/api/favorites/external/{listing:external_id}', [FavoriteController::class, 'toggleExternal'])->name('favorites.external.toggle');
     Route::post('/api/favorites/{car:id}', [FavoriteController::class, 'toggle'])->name('favorites.toggle');
 });
 

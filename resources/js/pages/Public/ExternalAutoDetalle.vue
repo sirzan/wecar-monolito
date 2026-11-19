@@ -5,8 +5,8 @@ import PublicLayout from '@/layouts/PublicLayout.vue';
 import SeoHead from '@/components/site/SeoHead.vue';
 import Button from '@/components/ui/Button.vue';
 import ExternalSearchLimitModal from '@/components/external/ExternalSearchLimitModal.vue';
-import ExternalAdModal from '@/components/external/ExternalAdModal.vue';
 import SearchRewardAdDialog from '@/components/external/SearchRewardAdDialog.vue';
+import { formatMxn } from '@/lib/currency';
 import { useExternalSearch } from '@/composables/useExternalSearch';
 import type { ExternalCar } from '@/types/external';
 
@@ -25,9 +25,7 @@ onMounted(() => {
 });
 
 const formatPrice = (value: number | null) =>
-    value == null
-        ? 'Consultar precio'
-        : new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(value);
+    value == null ? 'Consultar precio' : formatMxn(value);
 
 const formatKm = (value: number | null) => (value == null ? 'No especificado' : `${value.toLocaleString('es-MX')} km`);
 </script>
@@ -65,9 +63,13 @@ const formatKm = (value: number | null) => (value == null ? 'No especificado' : 
                     Este auto proviene de una plataforma externa. Revisa los detalles directamente con el vendedor antes de cualquier pago.
                 </div>
 
-                <Button variant="hero" class="w-full gap-2" @click="externalSearch.openExternal(car)">
+                <Button variant="hero" class="w-full gap-2" @click="externalSearch.openOriginal(car)">
                     <ExternalLink class="h-4 w-4" /> Ver anuncio original
                 </Button>
+
+                <p v-if="externalSearch.error.value" class="rounded-xl bg-destructive/10 p-3 text-xs font-semibold text-destructive">
+                    {{ externalSearch.error.value }}
+                </p>
             </div>
         </div>
     </section>
@@ -77,13 +79,6 @@ const formatKm = (value: number | null) => (value == null ? 'No especificado' : 
         :status="externalSearch.status.value"
         @close="externalSearch.closeLimitModal"
         @reward="externalSearch.closeLimitModal(); rewardOpen = true"
-    />
-
-    <ExternalAdModal
-        :open="Boolean(externalSearch.externalAd.value)"
-        :car="externalSearch.externalAd.value?.car ?? null"
-        :source-url="externalSearch.externalAd.value?.sourceUrl ?? null"
-        @close="externalSearch.closeExternalAd"
     />
 
     <SearchRewardAdDialog :open="rewardOpen" @close="rewardOpen = false" @reward="externalSearch.refreshStatus" />

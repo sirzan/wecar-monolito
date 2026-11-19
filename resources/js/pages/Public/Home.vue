@@ -12,7 +12,6 @@ import FinancialPartnersCarousel from '@/components/site/FinancialPartnersCarous
 import ExternalCarCard from '@/components/external/ExternalCarCard.vue';
 import ExternalSearchModal from '@/components/external/ExternalSearchModal.vue';
 import ExternalSearchLimitModal from '@/components/external/ExternalSearchLimitModal.vue';
-import ExternalAdModal from '@/components/external/ExternalAdModal.vue';
 import SearchTokensCard from '@/components/external/SearchTokensCard.vue';
 import SearchRewardAdDialog from '@/components/external/SearchRewardAdDialog.vue';
 import { useExternalSearch } from '@/composables/useExternalSearch';
@@ -206,15 +205,12 @@ const jsonLd = [
 
     <ExternalSearchModal :open="externalSearch.showModal.value" :loading="externalSearch.loading.value"
         :results="externalSearch.results.value" :error="externalSearch.error.value"
-        :query="externalSearch.lastQuery.value" @close="externalSearch.closeModal" @open="externalSearch.openExternal"
+        :query="externalSearch.lastQuery.value" :platforms="externalSearch.status.value?.platforms ?? []"
+        @close="externalSearch.closeModal" @open="externalSearch.openExternal"
         @retry="retryExternalSearch" />
 
     <ExternalSearchLimitModal :open="externalSearch.showLimitModal.value" :status="externalSearch.status.value"
         @close="externalSearch.closeLimitModal" @reward="externalSearch.closeLimitModal(); rewardOpen = true" />
-
-    <ExternalAdModal :open="Boolean(externalSearch.externalAd.value)"
-        :car="externalSearch.externalAd.value?.car ?? null"
-        :source-url="externalSearch.externalAd.value?.sourceUrl ?? null" @close="externalSearch.closeExternalAd" />
 
     <SearchRewardAdDialog :open="rewardOpen" @close="rewardOpen = false" @reward="externalSearch.refreshStatus" />
 </template>

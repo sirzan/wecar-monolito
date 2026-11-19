@@ -10,10 +10,10 @@ import CarCard, { type CarCardData } from '@/components/site/CarCard.vue';
 import Pagination from '@/components/site/Pagination.vue';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
+import MoneyInput from '@/components/ui/MoneyInput.vue';
 import ExternalCarCard from '@/components/external/ExternalCarCard.vue';
 import ExternalSearchModal from '@/components/external/ExternalSearchModal.vue';
 import ExternalSearchLimitModal from '@/components/external/ExternalSearchLimitModal.vue';
-import ExternalAdModal from '@/components/external/ExternalAdModal.vue';
 import SearchTokensCard from '@/components/external/SearchTokensCard.vue';
 import SearchRewardAdDialog from '@/components/external/SearchRewardAdDialog.vue';
 import { useExternalSearch } from '@/composables/useExternalSearch';
@@ -450,9 +450,9 @@ const clear = () => {
                 </button>
                 <div v-show="openGroups.price" class="mt-2">
                     <div class="flex items-center gap-2">
-                        <Input v-model="form.min_price" type="number" placeholder="Mín" class="no-spinner h-10" />
+                        <MoneyInput v-model="form.min_price" placeholder="Mín" class="h-10" />
                         <span class="text-muted-foreground">–</span>
-                        <Input v-model="form.max_price" type="number" placeholder="Máx" class="no-spinner h-10" />
+                        <MoneyInput v-model="form.max_price" placeholder="Máx" class="h-10" />
                     </div>
                     <p class="mt-1 text-[10px] text-muted-foreground">Disponible: {{ formatMxn(options.price.min) }} – {{ formatMxn(options.price.max) }}</p>
                 </div>
@@ -464,9 +464,9 @@ const clear = () => {
                     <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="openGroups.km ? 'rotate-180' : ''" />
                 </button>
                 <div v-show="openGroups.km" class="mt-2 flex items-center gap-2">
-                    <Input v-model="form.min_km" type="number" min="0" placeholder="Mín km" class="no-spinner h-10" />
+                    <MoneyInput v-model="form.min_km" :min="0" placeholder="Mín km" class="h-10" />
                     <span class="text-muted-foreground">–</span>
-                    <Input v-model="form.max_km" type="number" min="0" placeholder="Máx km" class="no-spinner h-10" />
+                    <MoneyInput v-model="form.max_km" :min="0" placeholder="Máx km" class="h-10" />
                 </div>
             </div>
 
@@ -512,13 +512,16 @@ const clear = () => {
                         class="h-9 min-w-0 flex-1 bg-transparent text-[13px] text-secondary outline-none placeholder:text-muted-foreground sm:h-10 sm:text-sm"
                     />
                 </div>
-                <div class="flex flex-wrap items-center gap-2">
-                    <Button type="submit" variant="hero" size="pill" :disabled="aiLoading || !form.q.trim()" class="h-9 shrink-0 gap-1 px-3 text-[11px] sm:h-10 sm:gap-1.5 sm:px-4 sm:text-xs">
-                        <LoaderCircle v-if="aiLoading" class="h-4 w-4 animate-spin" />
-                        Buscar con IA <Sparkles class="h-4 w-4" />
+                <div class="flex flex-wrap items-center gap-1.5">
+                    <Button type="submit" variant="hero" size="pill" :disabled="aiLoading || !form.q.trim()" class="h-9 shrink-0 gap-1 px-2.5 text-[10px] sm:h-9 sm:gap-1 sm:px-3 sm:text-[11px]">
+                        <LoaderCircle v-if="aiLoading" class="h-3.5 w-3.5 animate-spin" />
+                        Buscar con IA <Sparkles class="h-3.5 w-3.5" />
                     </Button>
-                    <Button type="button" variant="outline" size="pill" class="h-9 shrink-0 px-3 text-[11px] sm:h-10 sm:px-4 sm:text-xs lg:hidden" @click="showFilters = !showFilters">
-                        <SlidersHorizontal class="h-4 w-4" /> Filtros
+                    <Button type="button" variant="outline" size="pill" class="h-9 shrink-0 gap-1 px-2.5 text-[10px] sm:h-9 sm:gap-1 sm:px-3 sm:text-[11px]" title="Buscar en otras plataformas" @click="searchExternal">
+                        <Globe class="h-3.5 w-3.5" /> Otras plataformas
+                    </Button>
+                    <Button type="button" variant="outline" size="pill" class="h-9 shrink-0 px-2.5 text-[10px] sm:h-9 sm:px-3 sm:text-[11px] lg:hidden" @click="showFilters = !showFilters">
+                        <SlidersHorizontal class="h-3.5 w-3.5" /> Filtros
                     </Button>
 
                     <div ref="sortRef" class="relative shrink-0">
@@ -618,6 +621,7 @@ const clear = () => {
         :results="externalSearch.results.value"
         :error="externalSearch.error.value"
         :query="externalSearch.lastQuery.value"
+        :platforms="externalSearch.status.value?.platforms ?? []"
         @close="externalSearch.closeModal"
         @open="externalSearch.openExternal"
         @retry="retryExternalSearch"
@@ -628,13 +632,6 @@ const clear = () => {
         :status="externalSearch.status.value"
         @close="externalSearch.closeLimitModal"
         @reward="externalSearch.closeLimitModal(); rewardOpen = true"
-    />
-
-    <ExternalAdModal
-        :open="Boolean(externalSearch.externalAd.value)"
-        :car="externalSearch.externalAd.value?.car ?? null"
-        :source-url="externalSearch.externalAd.value?.sourceUrl ?? null"
-        @close="externalSearch.closeExternalAd"
     />
 
     <SearchRewardAdDialog :open="rewardOpen" @close="rewardOpen = false" @reward="externalSearch.refreshStatus" />

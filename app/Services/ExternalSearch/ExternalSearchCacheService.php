@@ -2,7 +2,9 @@
 
 namespace App\Services\ExternalSearch;
 
+use App\Models\ExternalListing;
 use App\Models\ExternalSearchCache;
+use App\Support\ExternalListingSlug;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -63,6 +65,54 @@ class ExternalSearchCacheService
                 'platforms_searched' => $platformsSearched,
             ],
         );
+
+        $this->upsertListings($results);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $results
+     */
+    private function upsertListings(array $results): void
+    {
+        foreach ($results as $car) {
+            if (! is_array($car)) {
+                continue;
+            }
+
+            $sourceUrl = $this->normalizer->cleanUrl((string) ($car['sourceUrl'] ?? ''));
+
+            if (! $sourceUrl) {
+                continue;
+            }
+
+            $externalId = (string) ($car['id'] ?? $this->normalizer->externalId($sourceUrl));
+            $title = trim((string) ($car['title'] ?? 'Auto externo'));
+            $year = is_numeric($car['year'] ?? null) ? (int) $car['year'] : null;
+            $make = ExternalListingSlug::makeFromTitle($title);
+            $model = ExternalListingSlug::modelFromTitle($title, $make);
+
+            ExternalListing::query()->updateOrCreate(
+                ['external_id' => $externalId],
+                [
+                    'source' => (string) ($car['platformId'] ?? $car['platformName'] ?? 'externo'),
+                    'source_url' => $sourceUrl,
+                    'slug' => ExternalListingSlug::make($year, $title, $externalId),
+                    'title' => $title,
+                    'make' => $make,
+                    'model' => $model,
+                    'year' => $year,
+                    'price' => is_numeric($car['price'] ?? null) ? (float) $car['price'] : null,
+                    'mileage' => is_numeric($car['km'] ?? null) ? max(0, (int) $car['km']) : null,
+                    'location' => filled($car['location'] ?? null) ? (string) $car['location'] : null,
+                    'images' => array_values(array_filter([
+                        $car['imageUrl'] ?? null,
+                        ...($car['gallery'] ?? []),
+                    ])),
+                    'raw_data' => $car,
+                    'last_seen_at' => now(),
+                ],
+            );
+        }
     }
 
     /**
@@ -130,7 +180,21 @@ class ExternalSearchCacheService
             }
         }
 
-        return array_slice($this->normalizer->sortByPlatform($cars), 0, $limit);
+        $cars = array_slice($this->normalizer->sortByPlatform($cars), 0, $limit);
+
+        // Compatibilidad con cachés creadas antes de external_listings.
+        $known = ExternalListing::query()
+            ->whereIn('external_id', collect($cars)->pluck('id')->filter()->all())
+            ->pluck('external_id')
+            ->all();
+
+        $missing = array_values(array_filter($cars, fn (array $car) => ! in_array($car['id'] ?? null, $known, true)));
+
+        if ($missing !== []) {
+            $this->upsertListings($missing);
+        }
+
+        return $cars;
     }
 
     /**
