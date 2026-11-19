@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Link, router } from '@inertiajs/vue3';
 import { toast } from 'vue-sonner';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { onClickOutside } from '@vueuse/core';
 import { ArrowUpDown, Check, ChevronDown, Globe, LoaderCircle, Search, SlidersHorizontal, Sparkles, Tag, X } from '@lucide/vue';
 import PublicLayout from '@/layouts/PublicLayout.vue';
@@ -16,7 +16,9 @@ import ExternalSearchModal from '@/components/external/ExternalSearchModal.vue';
 import ExternalSearchLimitModal from '@/components/external/ExternalSearchLimitModal.vue';
 import SearchTokensCard from '@/components/external/SearchTokensCard.vue';
 import SearchRewardAdDialog from '@/components/external/SearchRewardAdDialog.vue';
+import TypingPlaceholder from '@/components/site/TypingPlaceholder.vue';
 import { useExternalSearch } from '@/composables/useExternalSearch';
+import { resolveSmartFilters } from '@/composables/useSmartSearch';
 import { vehicleYears } from '@/lib/carCatalog';
 import { formatMxn } from '@/lib/currency';
 import type { ExternalCar } from '@/types/external';
@@ -27,6 +29,7 @@ const props = defineProps<{
     filters: Record<string, string>;
     cars: { data: CarCardData[]; meta: { current_page: number; last_page: number; per_page: number; total: number } };
     externalCars: ExternalCar[];
+    smartSearch?: boolean;
     options: {
         brands: { id: string; name: string; slug: string; count: number }[];
         models: { id: string; name: string; brand_id: string }[];
@@ -67,6 +70,13 @@ const sortOptions = [
     { value: 'price-desc', label: 'Precio: mayor a menor' },
     { value: 'year-desc', label: 'Año: más nuevo' },
     { value: 'km-asc', label: 'Menos kilómetros' },
+];
+
+const searchPhrases = [
+    'Quiero una SUV familiar, automática, de menos de $350,000…',
+    'Busca un sedán 2022 con menos de 50,000 km…',
+    'Encuentra un auto híbrido en Monterrey…',
+    'Quiero una pickup automática de menos de $600,000…',
 ];
 
 const sortOpen = ref(false);
@@ -119,12 +129,26 @@ const versionOptions = computed(() =>
 const showFilters = ref(false);
 const filtering = ref(false);
 const aiLoading = ref(false);
+const suspendWatchers = ref(false);
+const smartFallback = ref(false);
 const externalSearch = useExternalSearch();
 const rewardOpen = ref(false);
 let debounce: ReturnType<typeof setTimeout> | null = null;
 
-onMounted(() => {
-    void externalSearch.refreshStatus();
+onMounted(async () => {
+    await externalSearch.refreshStatus();
+
+    if (!props.smartSearch) {
+        return;
+    }
+
+    const url = new URL(window.location.href);
+    url.searchParams.delete('smart');
+    window.history.replaceState(window.history.state, '', url);
+
+    if (props.cars.meta.total === 0 && externalSearch.enabled.value) {
+        searchExternal();
+    }
 });
 
 const activeFiltersCount = computed(
@@ -176,7 +200,7 @@ const normalizeRanges = () => {
     }
 };
 
-const apply = (immediate = false) => {
+const apply = (immediate = false, onSuccess?: (total: number) => void) => {
     if (debounce) clearTimeout(debounce);
     debounce = setTimeout(
         () => {
@@ -191,16 +215,26 @@ const apply = (immediate = false) => {
                 replace: true,
                 onStart: () => { filtering.value = true; },
                 onFinish: () => { filtering.value = false; },
+                onSuccess: (page) => {
+                    const total = (page.props as { cars?: { meta?: { total?: number } } }).cars?.meta?.total ?? 0;
+                    onSuccess?.(total);
+                },
             });
         },
         immediate ? 0 : 350,
     );
 };
 
-watch(() => form.value.q, () => apply());
+watch(() => form.value.q, () => {
+    if (suspendWatchers.value) return;
+    apply();
+});
 watch(
     () => [form.value.brand, form.value.model, form.value.version, form.value.city, form.value.body, form.value.transmission, form.value.fuel, form.value.color, form.value.min_price, form.value.max_price, form.value.min_year, form.value.max_year, form.value.min_km, form.value.max_km, form.value.sort],
-    () => apply(true),
+    () => {
+        if (suspendWatchers.value) return;
+        apply(true);
+    },
 );
 
 watch(
@@ -226,44 +260,44 @@ watch(
 );
 
 
-const applyAiFilters = async () => {
+const applySmartSearch = async () => {
     if (!form.value.q.trim() || aiLoading.value) return;
 
     aiLoading.value = true;
+    suspendWatchers.value = true;
 
     try {
-        const token = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
-        const response = await fetch('/api/ai-search', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Accept: 'application/json',
-                'X-CSRF-TOKEN': token,
-            },
-            body: JSON.stringify({ q: form.value.q }),
-        });
+        let filters: Record<string, string>;
 
-        if (!response.ok) throw new Error('No se pudo interpretar la búsqueda.');
+        try {
+            filters = await resolveSmartFilters(form.value.q);
+        } catch {
+            filters = { q: form.value.q.trim() };
+        }
 
-        const data = await response.json();
-        const filters = data.filters ?? {};
+        for (const key of ['brand', 'body', 'transmission', 'fuel', 'min_price', 'max_price', 'min_year', 'max_year']) {
+            (form.value as Record<string, string>)[key] = filters[key] ?? '';
+        }
 
-        form.value.brand = filters.brand ?? '';
-        form.value.body = filters.body ?? '';
-        form.value.transmission = filters.transmission ?? '';
-        form.value.fuel = filters.fuel ?? '';
-        form.value.min_price = filters.min_price ? String(filters.min_price) : '';
-        form.value.max_price = filters.max_price ? String(filters.max_price) : '';
-        form.value.min_year = filters.min_year ? String(filters.min_year) : '';
-        form.value.max_year = filters.max_year ? String(filters.max_year) : '';
         form.value.q = filters.q ?? form.value.q;
 
-        apply(true);
-        toast.success(data.source === 'ai' ? 'Filtros aplicados con IA.' : 'Búsqueda aplicada.');
-    } catch {
-        toast.error('No pudimos aplicar la búsqueda inteligente.');
+        await nextTick();
+        suspendWatchers.value = false;
+        smartFallback.value = true;
+
+        apply(true, (total) => {
+            if (total === 0 && smartFallback.value) {
+                smartFallback.value = false;
+                toast.info('No hay resultados en WeCar. Buscando en otras plataformas…');
+                searchExternal();
+                return;
+            }
+
+            smartFallback.value = false;
+        });
     } finally {
         aiLoading.value = false;
+        suspendWatchers.value = false;
     }
 };
 
@@ -489,9 +523,9 @@ const clear = () => {
             </div>
 
             <button
-                v-if="activeFiltersCount"
                 type="button"
-                class="mt-4 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm font-semibold text-secondary transition hover:border-primary/40 hover:text-primary"
+                :disabled="activeFiltersCount === 0"
+                class="mt-4 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm font-semibold text-secondary transition hover:border-primary/40 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border disabled:hover:text-secondary"
                 @click="clear"
             >
                 Limpiar filtros
@@ -502,23 +536,29 @@ const clear = () => {
         <div class="min-w-0 flex-1">
             <form
                 class="mb-5 flex flex-col gap-1.5 rounded-2xl border border-border bg-card p-1 shadow-soft sm:flex-row sm:items-center sm:rounded-full sm:p-1.5"
-                @submit.prevent="applyAiFilters"
+                @submit.prevent="applySmartSearch"
             >
-                <div class="flex min-w-0 flex-1 items-center gap-1.5 px-2.5">
+                <div class="relative flex min-w-0 flex-1 items-center gap-1.5 px-2.5">
                     <Search class="h-4 w-4 shrink-0 text-primary" />
-                    <input
-                        v-model="form.q"
-                        placeholder="Quiero una SUV familiar, automática, de menos de $350,000…"
-                        class="h-9 min-w-0 flex-1 bg-transparent text-[13px] text-secondary outline-none placeholder:text-muted-foreground sm:h-10 sm:text-sm"
-                    />
+                    <div class="relative min-w-0 flex-1">
+                        <input
+                            v-model="form.q"
+                            aria-label="Buscar autos"
+                            placeholder=""
+                            class="h-9 w-full min-w-0 bg-transparent text-[13px] text-secondary outline-none sm:h-10 sm:text-sm"
+                        />
+                        <TypingPlaceholder
+                            v-if="!form.q"
+                            :phrases="searchPhrases"
+                            class="text-[13px] sm:text-sm"
+                        />
+                    </div>
                 </div>
                 <div class="flex flex-wrap items-center gap-1.5">
                     <Button type="submit" variant="hero" size="pill" :disabled="aiLoading || !form.q.trim()" class="h-9 shrink-0 gap-1 px-2.5 text-[10px] sm:h-9 sm:gap-1 sm:px-3 sm:text-[11px]">
                         <LoaderCircle v-if="aiLoading" class="h-3.5 w-3.5 animate-spin" />
-                        Buscar con IA <Sparkles class="h-3.5 w-3.5" />
-                    </Button>
-                    <Button type="button" variant="outline" size="pill" class="h-9 shrink-0 gap-1 px-2.5 text-[10px] sm:h-9 sm:gap-1 sm:px-3 sm:text-[11px]" title="Buscar en otras plataformas" @click="searchExternal">
-                        <Globe class="h-3.5 w-3.5" /> Otras plataformas
+                        {{ aiLoading ? 'Buscando…' : 'Buscar' }}
+                        <Sparkles v-if="!aiLoading" class="h-3.5 w-3.5" />
                     </Button>
                     <Button type="button" variant="outline" size="pill" class="h-9 shrink-0 px-2.5 text-[10px] sm:h-9 sm:px-3 sm:text-[11px] lg:hidden" @click="showFilters = !showFilters">
                         <SlidersHorizontal class="h-3.5 w-3.5" /> Filtros
@@ -587,7 +627,7 @@ const clear = () => {
                 <p class="mt-2 max-w-md text-sm text-muted-foreground">
                     Prueba ajustando los filtros o ampliando el rango de precio y año.
                 </p>
-                <Button class="mt-5" @click="clear">Limpiar filtros</Button>
+                <Button class="mt-5 rounded-full" @click="clear">Limpiar filtros</Button>
             </div>
 
             <Pagination :current-page="cars.meta.current_page" :last-page="cars.meta.last_page" :base-query="filters" />

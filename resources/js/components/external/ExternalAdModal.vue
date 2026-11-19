@@ -43,10 +43,10 @@ const openSite = (sourceUrl: string | null) => {
                     </p>
 
                     <div class="mt-4 flex flex-col gap-2 sm:flex-row">
-                        <Button variant="hero" class="flex-1 gap-2" @click="openSite(sourceUrl)">
+                        <Button variant="hero" class="flex-1 gap-2 rounded-full" @click="openSite(sourceUrl)">
                             <ExternalLink class="h-4 w-4" /> Ver en el sitio original
                         </Button>
-                        <Button variant="outline" class="flex-1" @click="emit('close')">Seguir en WeCar</Button>
+                        <Button variant="outline" class="flex-1 rounded-full" @click="emit('close')">Seguir en WeCar</Button>
                     </div>
                     <p class="mt-2 text-[11px] text-muted-foreground">El anuncio se abrirá en una pestaña nueva.</p>
                 </div>

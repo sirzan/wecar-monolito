@@ -63,7 +63,7 @@ const formatKm = (value: number | null) => (value == null ? 'No especificado' : 
                     Este auto proviene de una plataforma externa. Revisa los detalles directamente con el vendedor antes de cualquier pago.
                 </div>
 
-                <Button variant="hero" class="w-full gap-2" @click="externalSearch.openOriginal(car)">
+                <Button variant="hero" class="w-full gap-2 rounded-full" @click="externalSearch.openOriginal(car)">
                     <ExternalLink class="h-4 w-4" /> Ver anuncio original
                 </Button>
 

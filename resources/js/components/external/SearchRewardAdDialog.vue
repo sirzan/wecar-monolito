@@ -89,7 +89,7 @@ const claim = async () => {
 
                 <p v-if="error" class="mt-3 text-center text-sm text-destructive">{{ error }}</p>
 
-                <Button variant="hero" class="mt-4 w-full gap-2" :disabled="!viewId || seconds > 0 || loading || complete || Boolean(error)" @click="claim">
+                <Button variant="hero" class="mt-4 w-full gap-2 rounded-full" :disabled="!viewId || seconds > 0 || loading || complete || Boolean(error)" @click="claim">
                     <LoaderCircle v-if="loading" class="h-4 w-4 animate-spin" />
                     {{ complete ? 'Token recibido' : seconds > 0 ? 'Espera para recibir tu token' : 'Recibir token' }}
                 </Button>

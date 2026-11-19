@@ -41,14 +41,14 @@ const emit = defineEmits<{ close: []; open: [car: ExternalCar]; retry: [] }>();
                         <SearchX class="h-10 w-10 text-destructive" />
                         <p class="mt-4 text-sm font-bold text-secondary">No se pudieron obtener resultados</p>
                         <p class="mt-1 max-w-md text-xs text-muted-foreground">{{ error }}</p>
-                        <Button variant="outline" class="mt-4" @click="emit('retry')">Reintentar</Button>
+                        <Button variant="outline" class="mt-4 rounded-full" @click="emit('retry')">Reintentar</Button>
                     </div>
 
                     <div v-else-if="results.length === 0" class="flex flex-col items-center justify-center py-16 text-center">
                         <SearchX class="h-10 w-10 text-muted-foreground" />
                         <p class="mt-4 text-sm font-bold text-secondary">No encontramos resultados</p>
                         <p class="mt-1 text-xs text-muted-foreground">Intenta con otra búsqueda, revisa el catálogo local o vuelve a buscar en vivo.</p>
-                        <Button variant="outline" class="mt-4" @click="emit('retry')">Reintentar búsqueda</Button>
+                        <Button variant="outline" class="mt-4 rounded-full" @click="emit('retry')">Reintentar búsqueda</Button>
                     </div>
 
                     <div v-else class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

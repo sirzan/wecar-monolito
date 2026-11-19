@@ -582,7 +582,7 @@ const jsonLd = computed(() => [
                                 <p class="text-[11px] font-semibold text-muted-foreground">Mensualidad estimada</p>
                                 <p class="text-xl font-black text-primary">{{ formatPrice(calculatedMonthlyPayment) }}</p>
                             </div>
-                            <Button size="sm" variant="hero" @click="financiarOpen = true">
+                            <Button size="sm" variant="hero" class="rounded-full" @click="financiarOpen = true">
                                 Solicitar
                             </Button>
                         </div>
@@ -595,7 +595,7 @@ const jsonLd = computed(() => [
                             :href="external.sourceUrl"
                             target="_blank"
                             rel="noopener nofollow"
-                            class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-secondary px-4 py-3 text-sm font-bold text-secondary-foreground shadow-soft transition hover:bg-secondary/90"
+                            class="inline-flex w-full items-center justify-center gap-2 rounded-full bg-secondary px-4 py-3 text-sm font-bold text-secondary-foreground shadow-soft transition hover:bg-secondary/90"
                         >
                             <ExternalLink class="h-4 w-4" /> Ver anuncio original
                         </a>
@@ -613,7 +613,7 @@ const jsonLd = computed(() => [
                                 as="a"
                                 href="/comparar"
                                 variant="outline"
-                                class="gap-1.5 text-xs font-bold border-border"
+                                class="gap-1.5 rounded-full border-border text-xs font-bold"
                             >
                                 <Scale class="h-4 w-4" /> Comparar
                             </Button>
@@ -622,7 +622,7 @@ const jsonLd = computed(() => [
                                 :href="whatsappUrl"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                class="inline-flex items-center justify-center gap-2 rounded-xl bg-[#25D366] px-4 py-2.5 text-xs font-bold text-white shadow-soft hover:bg-[#1ebe57] transition"
+                                class="inline-flex items-center justify-center gap-2 rounded-full bg-[#25D366] px-4 py-2.5 text-xs font-bold text-white shadow-soft hover:bg-[#1ebe57] transition"
                             >
                                 WhatsApp
                             </a>
@@ -780,7 +780,7 @@ const jsonLd = computed(() => [
                     <Button
                         size="sm"
                         variant="hero"
-                        class="font-black gap-1.5"
+                        class="rounded-full font-black gap-1.5"
                         @click="financiarOpen = true"
                     >
                         <Banknote class="h-4 w-4" /> Financiar

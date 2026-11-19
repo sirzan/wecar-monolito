@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { Link, router } from '@inertiajs/vue3';
-import { ArrowRight, Landmark, Search, Sparkles } from '@lucide/vue';
+import { ArrowRight, Landmark, LoaderCircle, Search, Sparkles } from '@lucide/vue';
 import PublicLayout from '@/layouts/PublicLayout.vue';
 import SeoHead from '@/components/site/SeoHead.vue';
 import CarCard, { type CarCardData } from '@/components/site/CarCard.vue';
@@ -14,7 +14,9 @@ import ExternalSearchModal from '@/components/external/ExternalSearchModal.vue';
 import ExternalSearchLimitModal from '@/components/external/ExternalSearchLimitModal.vue';
 import SearchTokensCard from '@/components/external/SearchTokensCard.vue';
 import SearchRewardAdDialog from '@/components/external/SearchRewardAdDialog.vue';
+import TypingPlaceholder from '@/components/site/TypingPlaceholder.vue';
 import { useExternalSearch } from '@/composables/useExternalSearch';
+import { resolveSmartFilters } from '@/composables/useSmartSearch';
 import type { ExternalCar } from '@/types/external';
 
 defineOptions({ layout: PublicLayout });
@@ -29,6 +31,13 @@ const props = defineProps<{
 }>();
 
 const localQuery = ref('');
+const searching = ref(false);
+const searchPhrases = [
+    'Buscar marca, modelo…',
+    'Busca un SUV familiar…',
+    'Encuentra un auto híbrido…',
+    'Busca un seminuevo en Monterrey…',
+];
 const financiarOpen = ref(false);
 const rewardOpen = ref(false);
 const externalSearch = useExternalSearch();
@@ -49,8 +58,27 @@ const retryExternalSearch = () => {
     void externalSearch.search(externalSearch.lastQuery.value || localQuery.value.trim() || 'autos seminuevos en México', true);
 };
 
-const submit = () => {
-    router.get('/comprar', localQuery.value ? { q: localQuery.value } : {}, { preserveScroll: true });
+const submit = async () => {
+    const query = localQuery.value.trim();
+
+    if (!query || searching.value) {
+        if (!query) {
+            router.get('/comprar', {}, { preserveScroll: true });
+        }
+
+        return;
+    }
+
+    searching.value = true;
+
+    try {
+        const filters = await resolveSmartFilters(query);
+        router.get('/comprar', { ...filters, smart: '1' }, { preserveScroll: true });
+    } catch {
+        router.get('/comprar', { q: query, smart: '1' }, { preserveScroll: true });
+    } finally {
+        searching.value = false;
+    }
 };
 
 const jsonLd = [
@@ -97,12 +125,24 @@ const jsonLd = [
                         class="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-accent text-primary sm:h-8 sm:w-8">
                         <Search class="h-2.5 w-2.5 sm:h-4 sm:w-4" />
                     </div>
-                    <input v-model="localQuery" placeholder="Buscar marca, modelo…"
-                        class="min-w-0 flex-1 bg-transparent px-0.5 text-[11px] text-secondary outline-none placeholder:text-muted-foreground sm:px-1.5 sm:text-sm" />
-                    <Button type="submit" variant="hero" size="pill"
+                    <div class="relative min-w-0 flex-1">
+                        <input
+                            v-model="localQuery"
+                            aria-label="Buscar autos"
+                            placeholder=""
+                            class="h-9 w-full min-w-0 bg-transparent px-0.5 text-[11px] text-secondary outline-none sm:h-10 sm:px-1.5 sm:text-sm"
+                        />
+                        <TypingPlaceholder
+                            v-if="!localQuery"
+                            :phrases="searchPhrases"
+                            class="px-0.5 text-[11px] sm:px-1.5 sm:text-sm"
+                        />
+                    </div>
+                    <Button type="submit" variant="hero" size="pill" :disabled="searching || !localQuery.trim()"
                         class="h-5 shrink-0 gap-1 px-2 text-[10px] sm:h-7 sm:gap-1 sm:px-3.5 sm:text-[11px]">
-                        <Sparkles class="h-3 w-3" />
-                        Buscar
+                        <LoaderCircle v-if="searching" class="h-3 w-3 animate-spin" />
+                        <Sparkles v-else class="h-3 w-3" />
+                        {{ searching ? 'Buscando…' : 'Buscar' }}
                     </Button>
                 </div>
             </form>
@@ -132,7 +172,7 @@ const jsonLd = [
                         <span class="truncate">{{ text }}</span>
                     </span>
                 </div>
-                <Button variant="hero" class="w-full shrink-0 gap-2 lg:w-auto" @click="financiarOpen = true">
+                <Button variant="hero" class="w-full shrink-0 gap-2 rounded-full lg:w-auto" @click="financiarOpen = true">
                     Simula tu crédito
                     <ArrowRight class="h-4 w-4" />
                 </Button>
@@ -158,7 +198,7 @@ const jsonLd = [
             <CarCard v-for="car in firstHalfCars" :key="car.id" :car="car" />
         </div>
         <div v-if="!secondHalfCars.length" class="mt-8 flex justify-center sm:hidden">
-            <Button as="a" href="/comprar" variant="outline" class="w-full">Ver todos los autos</Button>
+            <Button as="a" href="/comprar" variant="outline" class="w-full rounded-full">Ver todos los autos</Button>
         </div>
     </section>
 
@@ -171,7 +211,7 @@ const jsonLd = [
                     <p class="text-xs font-bold uppercase tracking-wider text-primary">Búsqueda inteligente</p>
                     <h2 class="section-title mt-2 text-secondary">También encontramos autos en otras plataformas</h2>
                 </div>
-                <Button variant="outline" class="gap-2" @click="searchExternal">
+                <Button variant="outline" class="gap-2 rounded-full" @click="searchExternal">
                     Buscar en otras plataformas
                 </Button>
             </div>
@@ -193,7 +233,7 @@ const jsonLd = [
             <CarCard v-for="car in secondHalfCars" :key="car.id" :car="car" />
         </div>
         <div class="mt-8 flex justify-center sm:hidden">
-            <Button as="a" href="/comprar" variant="outline" class="w-full">Ver todos los autos</Button>
+            <Button as="a" href="/comprar" variant="outline" class="w-full rounded-full">Ver todos los autos</Button>
         </div>
     </section>
 

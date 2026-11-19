@@ -6,7 +6,7 @@ const props = withDefaults(
     defineProps<{
         as?: string;
         href?: string;
-        variant?: 'default' | 'hero' | 'onPrimary' | 'secondary' | 'outline' | 'ghost' | 'link' | 'destructive';
+        variant?: 'default' | 'hero' | 'onPrimary' | 'secondary' | 'outline' | 'outlineOnDark' | 'white' | 'ghost' | 'link' | 'destructive';
         size?: 'sm' | 'default' | 'lg' | 'xl' | 'pill' | 'icon';
         type?: 'button' | 'submit' | 'reset';
         disabled?: boolean;
@@ -27,18 +27,20 @@ const base =
 const variants: Record<string, string> = {
     default: 'bg-primary text-primary-foreground hover:bg-primary/90',
     destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
-    outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
+    outline: 'border border-input bg-background text-secondary hover:bg-accent hover:text-accent-foreground',
+    outlineOnDark: 'border border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white',
+    white: 'bg-white text-secondary shadow-soft hover:bg-white/90 hover:text-secondary',
     secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
-    ghost: 'hover:bg-accent hover:text-accent-foreground',
+    ghost: 'text-secondary hover:bg-accent hover:text-accent-foreground',
     link: 'text-primary underline-offset-4 hover:underline',
     hero: 'bg-gradient-primary text-primary-foreground shadow-soft transition-all hover:-translate-y-0.5 hover:shadow-glow',
     onPrimary: 'bg-secondary text-secondary-foreground shadow-elegant hover:bg-secondary/90',
 };
 
 const sizes: Record<string, string> = {
-    default: 'h-10 px-4 py-2',
+    default: 'h-10 rounded-md px-4 py-2',
     sm: 'h-9 rounded-md px-3',
-    lg: 'h-11 rounded-md px-8',
+    lg: 'h-11 rounded-full px-8',
     xl: 'h-14 rounded-full px-10 text-base',
     pill: 'h-10 rounded-full px-5',
     icon: 'h-10 w-10',

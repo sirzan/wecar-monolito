@@ -94,7 +94,7 @@ const whatsappUrl = computed(() => {
 </script>
 
 <template>
-    <div class="group relative flex h-full flex-row overflow-hidden rounded-3xl border border-border bg-card shadow-soft transition-all duration-300 hover:-translate-y-1.5 hover:border-primary/40 hover:shadow-elegant sm:flex-col">
+    <div class="group relative flex h-full flex-row overflow-hidden rounded-3xl border border-primary/30 bg-card shadow-soft transition-all duration-300 hover:-translate-y-1.5 hover:border-primary/60 hover:shadow-elegant sm:flex-col">
         <CarPhotoStrip
             :slides="slides"
             :alt="car.title"
@@ -102,15 +102,6 @@ const whatsappUrl = computed(() => {
             @open="openLightbox"
         >
             <div class="pointer-events-none absolute inset-0 bg-gradient-to-t from-secondary/30 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-            <span
-                class="pointer-events-none absolute left-3 top-3 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black text-white shadow-soft"
-                :style="{ backgroundColor: car.platformColor || '#0f1729' }"
-            >
-                {{ car.platformInitials || 'EXT' }}
-            </span>
-            <span class="pointer-events-none absolute right-3 top-3 rounded-full bg-secondary/90 px-2.5 py-1 text-[10px] font-bold text-secondary-foreground">
-                {{ car.platformName || 'Otra plataforma' }}
-            </span>
         </CarPhotoStrip>
 
         <div class="flex min-w-0 flex-1 flex-col gap-1 p-2.5 sm:gap-2 sm:p-5">
@@ -120,40 +111,39 @@ const whatsappUrl = computed(() => {
                         {{ car.title }}
                     </h3>
                 </button>
-                <button
-                    type="button"
-                    :aria-label="isFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos'"
-                    class="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent/60 text-muted-foreground transition-all hover:scale-110 hover:text-primary sm:h-8 sm:w-8"
-                    :class="isFavorite ? 'text-primary' : ''"
-                    @click="favorites.toggleExternal(car.id)"
-                >
-                    <Heart class="h-3.5 w-3.5 sm:h-4 sm:w-4" :class="isFavorite ? 'fill-current' : ''" />
-                </button>
+                <div class="flex shrink-0 items-center gap-1">
+                    <button
+                        type="button"
+                        :aria-label="isFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos'"
+                        class="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent/60 text-muted-foreground transition-all hover:scale-110 hover:text-primary sm:h-8 sm:w-8"
+                        :class="isFavorite ? 'text-primary' : ''"
+                        @click="favorites.toggleExternal(car.id)"
+                    >
+                        <Heart class="h-3.5 w-3.5 sm:h-4 sm:w-4" :class="isFavorite ? 'fill-current' : ''" />
+                    </button>
+                    <button
+                        type="button"
+                        aria-label="Compartir anuncio externo"
+                        class="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent/60 text-muted-foreground transition-all hover:scale-110 hover:text-primary sm:h-8 sm:w-8"
+                        @click="share"
+                    >
+                        <Share2 class="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                    </button>
+                </div>
             </div>
 
             <p class="text-[11px] text-muted-foreground sm:text-sm">
                 {{ car.year ?? 'Año no especificado' }} · {{ formatKm(car.km) }}
             </p>
 
-            <p v-if="car.location" class="flex items-center gap-1 text-[10px] text-muted-foreground sm:text-xs">
-                <MapPin class="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" /> {{ car.location }}
-            </p>
-
             <div class="mt-1 sm:mt-3">
-                <div class="flex items-center justify-between gap-2">
-                    <p class="text-[10px] text-muted-foreground sm:text-[11px]">Precio estimado</p>
-                    <button
-                        type="button"
-                        class="inline-flex items-center gap-1 text-[10px] font-bold text-primary transition hover:text-primary/80 hover:underline sm:text-[11px]"
-                        aria-label="Compartir anuncio externo"
-                        @click="share"
-                    >
-                        <Share2 class="h-3 w-3 sm:h-3.5 sm:w-3.5" /> Compartir
-                    </button>
-                </div>
+                <p class="text-[10px] text-muted-foreground sm:text-[11px]">Precio estimado</p>
                 <p class="text-sm font-black text-primary sm:text-xl">{{ car.price == null ? 'Consultar precio' : formatMxn(car.price) }}</p>
                 <p v-if="car.price != null" class="mt-0.5 text-[9px] font-semibold text-muted-foreground sm:text-[11px]">
                     Crédito desde <span class="font-bold text-secondary">{{ formatMxn(approxMonthly(car.price)) }}</span>/mes
+                </p>
+                <p v-if="car.location" class="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground sm:text-xs">
+                    <MapPin class="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" /> {{ car.location }}
                 </p>
                 <p class="mt-0.5 text-[9px] font-semibold text-muted-foreground sm:text-[11px]">Anuncio de {{ car.platformName || 'otra plataforma' }}</p>
             </div>

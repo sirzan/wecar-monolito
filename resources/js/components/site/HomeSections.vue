@@ -210,131 +210,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <!-- ───────────────────────── 1. Garantía teaser ───────────────────────── -->
-    <section class="bg-background py-8 px-4 sm:py-12 sm:px-6 md:py-16">
-        <div class="mx-auto grid max-w-7xl items-center gap-6 sm:gap-8 md:grid-cols-2 md:gap-10">
-            <div
-                class="relative overflow-hidden rounded-[2rem] bg-gradient-dark p-6 text-white shadow-elegant sm:p-8 md:p-10">
-                <ShieldCheck class="absolute -right-6 -top-6 h-36 w-36 text-primary/15 sm:h-52 sm:w-52" />
-                <span
-                    class="inline-flex items-center gap-2 rounded-full bg-primary/20 px-3 py-1 text-xs font-bold tracking-wider text-primary-foreground">
-                    <ShieldCheck class="h-3.5 w-3.5" /> Garantía Wecar
-                </span>
-                <h3 class="mt-4 text-xl font-black leading-tight sm:text-2xl md:text-3xl">
-                    Compra con la <span class="text-primary">tranquilidad</span> que mereces
-                </h3>
-                <p class="mt-3 text-sm text-white/80 sm:text-base">
-                    Evita riesgos innecesarios, vicios ocultos y fraudes con nuestra inspección mecánica y legal
-                    certificada.
-                </p>
-                <div class="mt-6 flex flex-wrap gap-3">
-                    <div
-                        class="flex items-center gap-2 rounded-xl bg-white/10 px-3 py-1.5 text-xs font-semibold backdrop-blur">
-                        <CheckCircle2 class="h-4 w-4 text-primary" /> 162 puntos de inspección
-                    </div>
-                    <div
-                        class="flex items-center gap-2 rounded-xl bg-white/10 px-3 py-1.5 text-xs font-semibold backdrop-blur">
-                        <CheckCircle2 class="h-4 w-4 text-primary" /> Sin reporte de robo
-                    </div>
-                </div>
-                <div class="mt-6 flex">
-                    <Button as="a" href="/garantia" variant="hero" size="pill" class="w-full shadow-elegant sm:w-auto">
-                        Conoce más sobre la garantía
-                    </Button>
-                </div>
-            </div>
-
-            <div>
-                <p class="text-xs font-bold tracking-wider text-primary uppercase">
-                    ¿Cómo te protegemos?
-                </p>
-                <h2 class="section-title mt-2 text-secondary">Información de garantía</h2>
-                <ul class="mt-6 space-y-4">
-                    <li class="flex items-start gap-3.5">
-                        <span
-                            class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent text-accent-foreground">
-                            <ShieldCheck class="h-5 w-5 text-primary" />
-                        </span>
-                        <div class="min-w-0">
-                            <p class="font-bold text-secondary text-sm sm:text-base">Validación mecánica completa</p>
-                            <p class="mt-0.5 text-xs text-muted-foreground sm:text-sm">Diagnóstico de motor,
-                                transmisión, frenos y sistemas electrónicos por técnicos certificados.</p>
-                        </div>
-                    </li>
-                    <li class="flex items-start gap-3.5">
-                        <span
-                            class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent text-accent-foreground">
-                            <FileCheck2 class="h-5 w-5 text-primary" />
-                        </span>
-                        <div class="min-w-0">
-                            <p class="font-bold text-secondary text-sm sm:text-base">Revisión legal y de documentos</p>
-                            <p class="mt-0.5 text-xs text-muted-foreground sm:text-sm">Verificamos factura, tenencias,
-                                multas y que el auto esté libre de gravámenes o reportes.</p>
-                        </div>
-                    </li>
-                    <li class="flex items-start gap-3.5">
-                        <span
-                            class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent text-accent-foreground">
-                            <Handshake class="h-5 w-5 text-primary" />
-                        </span>
-                        <div class="min-w-0">
-                            <p class="font-bold text-secondary text-sm sm:text-base">Acompañamiento en todo el proceso
-                            </p>
-                            <p class="mt-0.5 text-xs text-muted-foreground sm:text-sm">Un asesor experto te guía desde
-                                la elección hasta la firma del contrato y la entrega de llaves.</p>
-                        </div>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </section>
-
-    <!-- ───────────────────────── 2. Vendes con los mejores beneficios ───────────────────────── -->
-    <section class="bg-background py-12 px-4 sm:py-16 sm:px-6">
-        <div class="mx-auto max-w-7xl">
-            <div class="mx-auto max-w-2xl text-center">
-                <span
-                    class="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-3.5 py-1 text-xs font-bold tracking-wider text-primary">
-                    <BadgeDollarSign class="h-3.5 w-3.5" /> Ventajas Wecar
-                </span>
-                <h2 class="section-title mt-4 text-secondary">
-                    Vendes con los mejores <span class="text-primary">beneficios</span>
-                </h2>
-                <p class="mt-2 text-sm text-muted-foreground sm:text-base">
-                    La plataforma diseñada para que vendas tu auto rápido, seguro y al mejor precio.
-                </p>
-            </div>
-
-            <div ref="benefitsTrack"
-                class="hide-scrollbar mt-10 flex snap-x snap-mandatory gap-6 overflow-x-auto scroll-smooth pb-2 pt-2"
-                aria-label="Beneficios de vender con Wecar" tabindex="0" @mouseenter="isBenefitsPaused = true"
-                @mouseleave="isBenefitsPaused = false" @focusin="isBenefitsPaused = true"
-                @focusout="isBenefitsPaused = false">
-                <div v-for="(b, index) in carouselBenefits" :key="`${b.title}-${index}`"
-                    class="group relative flex shrink-0 snap-start basis-full flex-col rounded-3xl border border-border bg-card p-6 shadow-soft transition-all duration-300 hover:-translate-y-1 hover:border-primary/40 hover:shadow-elegant sm:basis-[calc((100%-1.5rem)/2)] lg:basis-[calc((100%-3rem)/3)]"
-                    :aria-hidden="index >= beneficios.length ? 'true' : undefined">
-                    <div class="flex items-start gap-[0.8rem]">
-                        <div
-                            class="grid h-[2.8rem] w-[2.8rem] shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/20 transition-transform duration-300 group-hover:scale-110">
-                            <component :is="b.icon" class="h-[1.4rem] w-[1.4rem]" stroke-width="2.2" />
-                        </div>
-                        <div class="min-w-0">
-                            <h3 class="text-[0.88rem] font-bold leading-snug text-secondary">{{ b.title }}</h3>
-                            <p class="mt-1 text-[0.66rem] leading-relaxed text-muted-foreground sm:text-[0.77rem]">{{ b.desc }}</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="mt-10 flex justify-center">
-                <Button as="a" href="/vende" variant="hero" size="lg" class="shadow-elegant">
-                    Publica gratis tu auto
-                </Button>
-            </div>
-        </div>
-    </section>
-
-    <!-- ───────────────────────── 3. Publica tu auto en 2 minutos + planes ───────────────────────── -->
+    <!-- ───────────────────────── 1. Publica tu auto en 2 minutos + planes ───────────────────────── -->
     <section class="bg-background px-4 py-12 sm:px-6 sm:py-16">
         <div class="relative mx-auto max-w-7xl overflow-hidden rounded-[2rem] bg-gradient-dark p-6 text-secondary-foreground shadow-elegant sm:p-8 lg:p-10"
             @mouseenter="isStepPaused = true" @mouseleave="isStepPaused = false" @focusin="isStepPaused = true"
@@ -470,6 +346,130 @@ onUnmounted(() => {
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ───────────────────────── 2. Garantía teaser ───────────────────────── -->
+    <section class="bg-background py-8 px-4 sm:py-12 sm:px-6 md:py-16">
+        <div class="mx-auto grid max-w-7xl items-center gap-6 sm:gap-8 md:grid-cols-2 md:gap-10">
+            <div
+                class="relative overflow-hidden rounded-[2rem] bg-gradient-dark p-6 text-white shadow-elegant sm:p-8 md:p-10">
+                <ShieldCheck class="absolute -right-6 -top-6 h-36 w-36 text-primary/15 sm:h-52 sm:w-52" />
+                <span
+                    class="inline-flex items-center gap-2 rounded-full bg-primary/20 px-3 py-1 text-xs font-bold tracking-wider text-primary-foreground">
+                    <ShieldCheck class="h-3.5 w-3.5" /> Garantía Wecar
+                </span>
+                <h3 class="mt-4 text-xl font-black leading-tight sm:text-2xl md:text-3xl">
+                    Compra con la <span class="text-primary">tranquilidad</span> que mereces
+                </h3>
+                <p class="mt-3 text-sm text-white/80 sm:text-base">
+                    Evita riesgos innecesarios, vicios ocultos y fraudes con nuestra inspección mecánica y legal
+                    certificada.
+                </p>
+                <div class="mt-6 flex flex-wrap gap-3">
+                    <div
+                        class="flex items-center gap-2 rounded-xl bg-white/10 px-3 py-1.5 text-xs font-semibold backdrop-blur">
+                        <CheckCircle2 class="h-4 w-4 text-primary" /> 162 puntos de inspección
+                    </div>
+                    <div
+                        class="flex items-center gap-2 rounded-xl bg-white/10 px-3 py-1.5 text-xs font-semibold backdrop-blur">
+                        <CheckCircle2 class="h-4 w-4 text-primary" /> Sin reporte de robo
+                    </div>
+                </div>
+                <div class="mt-6 flex">
+                    <Button as="a" href="/garantia" variant="hero" size="pill" class="w-full shadow-elegant sm:w-auto">
+                        Conoce más sobre la garantía
+                    </Button>
+                </div>
+            </div>
+
+            <div>
+                <p class="text-xs font-bold tracking-wider text-primary uppercase">
+                    ¿Cómo te protegemos?
+                </p>
+                <h2 class="section-title mt-2 text-secondary">Información de garantía</h2>
+                <ul class="mt-6 space-y-4">
+                    <li class="flex items-start gap-3.5">
+                        <span
+                            class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent text-accent-foreground">
+                            <ShieldCheck class="h-5 w-5 text-primary" />
+                        </span>
+                        <div class="min-w-0">
+                            <p class="font-bold text-secondary text-sm sm:text-base">Validación mecánica completa</p>
+                            <p class="mt-0.5 text-xs text-muted-foreground sm:text-sm">Diagnóstico de motor,
+                                transmisión, frenos y sistemas electrónicos por técnicos certificados.</p>
+                        </div>
+                    </li>
+                    <li class="flex items-start gap-3.5">
+                        <span
+                            class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent text-accent-foreground">
+                            <FileCheck2 class="h-5 w-5 text-primary" />
+                        </span>
+                        <div class="min-w-0">
+                            <p class="font-bold text-secondary text-sm sm:text-base">Revisión legal y de documentos</p>
+                            <p class="mt-0.5 text-xs text-muted-foreground sm:text-sm">Verificamos factura, tenencias,
+                                multas y que el auto esté libre de gravámenes o reportes.</p>
+                        </div>
+                    </li>
+                    <li class="flex items-start gap-3.5">
+                        <span
+                            class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent text-accent-foreground">
+                            <Handshake class="h-5 w-5 text-primary" />
+                        </span>
+                        <div class="min-w-0">
+                            <p class="font-bold text-secondary text-sm sm:text-base">Acompañamiento en todo el proceso
+                            </p>
+                            <p class="mt-0.5 text-xs text-muted-foreground sm:text-sm">Un asesor experto te guía desde
+                                la elección hasta la firma del contrato y la entrega de llaves.</p>
+                        </div>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- ───────────────────────── 3. Vendes con los mejores beneficios ───────────────────────── -->
+    <section class="bg-background py-12 px-4 sm:py-16 sm:px-6">
+        <div class="mx-auto max-w-7xl">
+            <div class="mx-auto max-w-2xl text-center">
+                <span
+                    class="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-3.5 py-1 text-xs font-bold tracking-wider text-primary">
+                    <BadgeDollarSign class="h-3.5 w-3.5" /> Ventajas Wecar
+                </span>
+                <h2 class="section-title mt-4 text-secondary">
+                    Vendes con los mejores <span class="text-primary">beneficios</span>
+                </h2>
+                <p class="mt-2 text-sm text-muted-foreground sm:text-base">
+                    La plataforma diseñada para que vendas tu auto rápido, seguro y al mejor precio.
+                </p>
+            </div>
+
+            <div ref="benefitsTrack"
+                class="hide-scrollbar mt-10 flex snap-x snap-mandatory gap-6 overflow-x-auto scroll-smooth pb-2 pt-2"
+                aria-label="Beneficios de vender con Wecar" tabindex="0" @mouseenter="isBenefitsPaused = true"
+                @mouseleave="isBenefitsPaused = false" @focusin="isBenefitsPaused = true"
+                @focusout="isBenefitsPaused = false">
+                <div v-for="(b, index) in carouselBenefits" :key="`${b.title}-${index}`"
+                    class="group relative flex shrink-0 snap-start basis-full flex-col rounded-3xl border border-border bg-card p-6 shadow-soft transition-all duration-300 hover:-translate-y-1 hover:border-primary/40 hover:shadow-elegant sm:basis-[calc((100%-1.5rem)/2)] lg:basis-[calc((100%-3rem)/3)]"
+                    :aria-hidden="index >= beneficios.length ? 'true' : undefined">
+                    <div class="flex items-start gap-[0.8rem]">
+                        <div
+                            class="grid h-[2.8rem] w-[2.8rem] shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/20 transition-transform duration-300 group-hover:scale-110">
+                            <component :is="b.icon" class="h-[1.4rem] w-[1.4rem]" stroke-width="2.2" />
+                        </div>
+                        <div class="min-w-0">
+                            <h3 class="text-[0.88rem] font-bold leading-snug text-secondary">{{ b.title }}</h3>
+                            <p class="mt-1 text-[0.66rem] leading-relaxed text-muted-foreground sm:text-[0.77rem]">{{ b.desc }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-10 flex justify-center">
+                <Button as="a" href="/vende" variant="hero" size="lg" class="shadow-elegant">
+                    Publica gratis tu auto
+                </Button>
             </div>
         </div>
     </section>
