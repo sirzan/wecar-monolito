@@ -75,10 +75,10 @@ const tokenPackages = [
                 </div>
 
                 <div class="mt-4 space-y-2">
-                    <Button v-if="!unlimited" variant="outline" class="w-full gap-2" @click="emit('reward')">
+                    <Button v-if="!unlimited" variant="outline" class="w-full gap-2 rounded-full" @click="emit('reward')">
                         <PlayCircle class="h-4 w-4" /> Ver anuncio y recibir 1 token gratis
                     </Button>
-                    <Button v-if="!unlimited" as="a" href="/panel/membresia" variant="hero" class="w-full gap-2" @click="emit('close')">
+                    <Button v-if="!unlimited" as="a" href="/panel/membresia" variant="hero" class="w-full gap-2 rounded-full" @click="emit('close')">
                         <Sparkles class="h-4 w-4" /> Obtener membresía por {{ formatMxn(price) }} MXN
                     </Button>
                     <Button variant="ghost" class="w-full text-xs" @click="emit('close')">Continuar viendo el catálogo</Button>

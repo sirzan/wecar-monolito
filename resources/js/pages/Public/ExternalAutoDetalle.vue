@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { ExternalLink, MapPin, Sparkles } from '@lucide/vue';
+import { MapPin, MessageCircle, Sparkles } from '@lucide/vue';
 import PublicLayout from '@/layouts/PublicLayout.vue';
 import SeoHead from '@/components/site/SeoHead.vue';
 import Button from '@/components/ui/Button.vue';
@@ -63,8 +63,8 @@ const formatKm = (value: number | null) => (value == null ? 'No especificado' : 
                     Este auto proviene de una plataforma externa. Revisa los detalles directamente con el vendedor antes de cualquier pago.
                 </div>
 
-                <Button variant="hero" class="w-full gap-2" @click="externalSearch.openOriginal(car)">
-                    <ExternalLink class="h-4 w-4" /> Ver anuncio original
+                <Button variant="hero" class="w-full gap-2 rounded-full" @click="externalSearch.openOriginal(car)">
+                    <MessageCircle class="h-4 w-4" /> Contactar al anunciante
                 </Button>
 
                 <p v-if="externalSearch.error.value" class="rounded-xl bg-destructive/10 p-3 text-xs font-semibold text-destructive">

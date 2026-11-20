@@ -81,7 +81,7 @@ const valueFor = (car: CompareCar, key: (typeof rows)[number]['key']) => {
         </span>
         <h2 class="mt-6 text-xl font-black text-secondary">No hay autos para comparar</h2>
         <p class="mt-2 text-sm text-muted-foreground">Agrega autos desde el catálogo con el botón “Comparar”.</p>
-        <Button as="a" href="/comprar" class="mt-6">Explorar catálogo</Button>
+        <Button as="a" href="/comprar" class="mt-6 rounded-full">Explorar catálogo</Button>
     </section>
 
     <section v-else class="mx-auto max-w-7xl px-4 py-10 sm:px-6">
@@ -124,7 +124,7 @@ const valueFor = (car: CompareCar, key: (typeof rows)[number]['key']) => {
                     <tr>
                         <th class="p-4" />
                         <td v-for="car in cars" :key="car.id" class="border-l border-border p-4">
-                            <Button as="a" :href="car.url" class="w-full">Ver auto</Button>
+                            <Button as="a" :href="car.url" class="w-full rounded-full">Ver auto</Button>
                         </td>
                     </tr>
                 </tbody>

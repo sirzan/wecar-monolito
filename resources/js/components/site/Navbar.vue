@@ -1,20 +1,33 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { Link, usePage } from '@inertiajs/vue3';
-import { Heart, Landmark, LayoutDashboard, Menu, Plus, X } from '@lucide/vue';
+import { Download, Heart, Landmark, LayoutDashboard, Menu, Plus, X } from '@lucide/vue';
+import { toast } from 'vue-sonner';
 import Button from '@/components/ui/Button.vue';
 import Logo from '@/components/site/Logo.vue';
 import NotificationBell from '@/components/site/NotificationBell.vue';
 import NavbarInstallApp from '@/components/site/NavbarInstallApp.vue';
+import PushNotificationPrompt from '@/components/site/PushNotificationPrompt.vue';
+import { useInstallPrompt } from '@/composables/useInstallPrompt';
 import { useFavoritesStore } from '@/stores/favorites';
 
 const page = usePage<{ auth: { user: { id: string; name: string } | null } }>();
 const open = ref(false);
 const favorites = useFavoritesStore();
+const installPrompt = useInstallPrompt();
+
+const downloadApp = async () => {
+    if (installPrompt.canInstall.value) {
+        await installPrompt.install();
+        return;
+    }
+
+    toast('Para instalar la app, abre el menú del navegador y elige “Instalar app”.');
+};
 
 const links = [
     { href: '/comprar', label: 'Comprar' },
-    { href: '/credito', label: 'Crédito' },
+    { href: '/credito', label: 'Créditos' },
 ];
 
 const isActive = (href: string) => page.url.startsWith(href);
@@ -64,7 +77,7 @@ onMounted(() => void favorites.bootstrap());
                     class="gap-1.5 whitespace-nowrap text-[13.2px]"
                     :class="isActive('/credito') ? 'ring-2 ring-primary/30' : ''"
                 >
-                    <Landmark class="h-3.5 w-3.5" /> Crédito
+                    <Landmark class="h-3.5 w-3.5" /> Créditos
                 </Button>
 
                 <template v-if="page.props.auth.user">
@@ -79,6 +92,16 @@ onMounted(() => void favorites.bootstrap());
                     <Button as="a" href="/login" variant="ghost" size="pill" class="whitespace-nowrap text-[13.2px]">Iniciar sesión</Button>
                     <Button as="a" href="/registro" variant="hero" size="pill" class="whitespace-nowrap text-[13.2px]">Registrarse</Button>
                 </template>
+
+                <button
+                    type="button"
+                    aria-label="Descargar app"
+                    title="Descargar app"
+                    class="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-border bg-background text-secondary transition hover:border-primary/40 hover:text-primary"
+                    @click="downloadApp"
+                >
+                    <Download class="h-4 w-4" />
+                </button>
             </div>
 
             <div class="flex shrink-0 items-center gap-1 lg:hidden">
@@ -99,6 +122,15 @@ onMounted(() => void favorites.bootstrap());
                 <NotificationBell v-if="page.props.auth.user" />
                 <button
                     type="button"
+                    aria-label="Descargar app"
+                    title="Descargar app"
+                    class="grid h-10 w-10 place-items-center rounded-full text-secondary transition hover:bg-accent hover:text-primary"
+                    @click="downloadApp"
+                >
+                    <Download class="h-5 w-5" />
+                </button>
+                <button
+                    type="button"
                     aria-label="Menú"
                     class="grid h-10 w-10 place-items-center rounded-full bg-accent text-primary"
                     @click="open = !open"
@@ -110,6 +142,7 @@ onMounted(() => void favorites.bootstrap());
         </div>
 
         <NavbarInstallApp />
+        <PushNotificationPrompt />
 
         <div v-if="open" class="border-t border-border/60 bg-background lg:hidden">
             <div class="mx-auto flex max-w-7xl flex-col gap-1 px-6 py-4">

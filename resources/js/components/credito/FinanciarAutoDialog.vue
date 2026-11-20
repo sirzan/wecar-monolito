@@ -12,6 +12,7 @@ import {
     FileText,
     Loader2,
     ShieldCheck,
+    Sparkles,
     Upload,
     X,
 } from '@lucide/vue';
@@ -290,13 +291,24 @@ const documents = reactive<Record<DocSlot, { file?: File; saved?: boolean; name?
 });
 
 const offers = ref<any[]>([]);
-const pawnOffers = ref<any[]>([]);
 const evaluation = ref<any | null>(null);
 const selectedSlug = ref<string | null>(null);
 
 const selectedOffer = computed(() => offers.value.find((offer) => offer.slug === selectedSlug.value) ?? null);
+const offerInitials = (name: string): string =>
+    name
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((word) => word.charAt(0).toUpperCase())
+        .join('');
+
+const offerTone = (index: number): string =>
+    ['bg-blue-600', 'bg-rose-600', 'bg-emerald-600', 'bg-violet-600', 'bg-amber-600'][index % 5];
 const visibleOffers = computed(() => offers.value.slice(0, showAllOffers.value ? 8 : 5));
 const hiddenOffersCount = computed(() => Math.max(offers.value.length - visibleOffers.value.length, 0));
+const approvedVisibleCount = computed(() => visibleOffers.value.filter((offer) => offer.califica).length);
+const recommendedSlug = computed(() => visibleOffers.value.find((offer) => offer.califica)?.slug ?? null);
 const savedDocumentsCount = computed(() =>
     (['ine', 'domicilio', 'estado_cuenta'] as DocSlot[]).filter((slot) => documents[slot].saved).length,
 );
@@ -309,15 +321,6 @@ const monthlyEstimate = computed(() => {
     const rate = 0.125 / 12;
     if (financedAmount.value <= 0) return 0;
     return Math.round((financedAmount.value * rate) / (1 - Math.pow(1 + rate, -basics.term)));
-});
-
-const eligibleMonthly = computed(() => {
-    const values = offers.value
-        .filter((offer) => offer.califica)
-        .map((offer) => Number(offer.mensualidad))
-        .filter((value) => Number.isFinite(value) && value > 0);
-
-    return values.length ? Math.min(...values) : monthlyEstimate.value;
 });
 
 const normalizeOffer = (offer: any) => {
@@ -353,7 +356,6 @@ const reset = () => {
     submitError.value = null;
     successFolio.value = null;
     offers.value = [];
-    pawnOffers.value = [];
     evaluation.value = null;
     selectedSlug.value = null;
     showAllOffers.value = false;
@@ -399,6 +401,49 @@ const loadProfile = async () => {
         profile.debts = saved.deuda_mensual !== null && saved.deuda_mensual !== undefined
             ? Number(saved.deuda_mensual)
             : profile.debts;
+
+        if (saved.birthdate) {
+            const birthdate = new Date(saved.birthdate);
+
+            if (!Number.isNaN(birthdate.getTime())) {
+                const today = new Date();
+                let age = today.getFullYear() - birthdate.getFullYear();
+                const monthDiff = today.getMonth() - birthdate.getMonth();
+
+                if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthdate.getDate())) {
+                    age--;
+                }
+
+                if (age >= 18 && age <= 99) {
+                    profile.age = age;
+                }
+            }
+        }
+
+        const employmentMap: Record<string, string> = {
+            formal: 'fijo',
+            independiente: 'honorarios',
+            honorarios: 'honorarios',
+            'negocio propio': 'negocio',
+            eventual: 'eventual',
+        };
+        const savedEmployment = String(saved.tipo_trabajo ?? '').trim().toLowerCase();
+
+        if (savedEmployment && employmentMap[savedEmployment] && !profile.employment) {
+            profile.employment = employmentMap[savedEmployment];
+        }
+
+        const tenureMap: Record<string, number> = {
+            'menos de 1 año': 0,
+            '1 a 3 años': 2,
+            '3 a 5 años': 4,
+            'más de 5 años': 6,
+        };
+        const savedTenure = String(saved.antiguedad ?? '').trim().toLowerCase();
+
+        if (savedTenure && savedTenure in tenureMap && profile.tenure === null) {
+            profile.tenure = tenureMap[savedTenure];
+        }
     } catch {
         // El usuario puede completar sus datos manualmente.
     }
@@ -406,16 +451,22 @@ const loadProfile = async () => {
 
 watch(
     () => props.open,
-    (open) => {
-        if (open) {
-            reset();
-            syncFromInitial();
-            loginPromptOpen.value = !user.value;
-            application.full_name = user.value?.name ?? '';
-            application.email = user.value?.email ?? '';
-            application.phone = basics.phone;
-            void loadSavedDocuments();
-            void loadProfile();
+    async (open) => {
+        if (!open) {
+            return;
+        }
+
+        reset();
+        syncFromInitial();
+        loginPromptOpen.value = !user.value;
+        application.full_name = user.value?.name ?? '';
+        application.email = user.value?.email ?? '';
+        application.phone = basics.phone;
+        void loadSavedDocuments();
+
+        if (user.value) {
+            await loadProfile();
+            step.value = 2;
         }
     },
     { immediate: true },
@@ -557,7 +608,6 @@ const evaluate = async () => {
 
         evaluation.value = data;
         offers.value = (evaluation.value.opcionesRecomendadas ?? []).map(normalizeOffer);
-        pawnOffers.value = (evaluation.value.opcionesPrendarias ?? []).map(normalizeOffer);
         selectedSlug.value = offers.value.find((offer) => offer.califica)?.slug ?? null;
         showAllOffers.value = false;
         accountCompleted.value = false;
@@ -803,21 +853,21 @@ const submit = async () => {
                                         <span class="text-secondary-foreground/65">Precio del auto</span>
                                         <strong class="text-base font-black">{{ formatPrice(price) }}</strong>
                                     </div>
-                                    <input v-model.number="profile.price" type="range" min="50000" max="5000000" step="10000" :disabled="step > 2" class="mt-2 w-full accent-[hsl(var(--primary))] disabled:opacity-60" />
+                                    <input v-model.number="profile.price" type="range" min="50000" max="5000000" step="10000" :disabled="step > 2" class="range-brand mt-2 w-full disabled:opacity-60" />
                                 </div>
                                 <div>
                                     <div class="flex items-center justify-between gap-2 text-xs">
                                         <span class="text-secondary-foreground/65">Enganche</span>
                                         <strong class="text-base font-black">{{ formatPrice(downPaymentAmount) }} · {{ basics.downPayment }}%</strong>
                                     </div>
-                                    <input v-model.number="basics.downPayment" type="range" min="10" max="80" step="5" :disabled="step > 2" class="mt-2 w-full accent-[hsl(var(--primary))] disabled:opacity-60" />
+                                    <input v-model.number="basics.downPayment" type="range" min="10" max="80" step="5" :disabled="step > 2" class="range-brand mt-2 w-full disabled:opacity-60" />
                                 </div>
                                 <div>
                                     <div class="flex items-center justify-between gap-2 text-xs">
                                         <span class="text-secondary-foreground/65">Plazo</span>
                                         <strong class="text-base font-black">{{ basics.term }} meses</strong>
                                     </div>
-                                    <input v-model.number="basics.term" type="range" min="12" max="72" step="12" :disabled="step > 2" class="mt-2 w-full accent-[hsl(var(--primary))] disabled:opacity-60" />
+                                    <input v-model.number="basics.term" type="range" min="12" max="72" step="12" :disabled="step > 2" class="range-brand mt-2 w-full disabled:opacity-60" />
                                 </div>
                             </div>
                             <div class="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-white/10 pt-4 text-xs">
@@ -850,6 +900,7 @@ const submit = async () => {
                             <div class="sm:col-span-2">
                                 <Label for="income">Ingreso mensual neto *</Label>
                                 <MoneyInput id="income" v-model="profile.income" data-field="income" :invalid="fieldInvalid('income')" class="mt-1.5" placeholder="Ej. 25,000" />
+                                <p class="mt-1 text-[11px] text-muted-foreground">Ejemplo: $25,000 MXN netos al mes.</p>
                                 <FormFieldError :message="fieldMessage('income')" />
                             </div>
                             <div>
@@ -868,7 +919,7 @@ const submit = async () => {
                             </div>
                             <div>
                                 <Label for="employment">Tipo de empleo *</Label>
-                                <select id="employment" v-model="profile.employment" data-field="employment" :aria-invalid="fieldInvalid('employment') || undefined" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" :class="fieldInvalid('employment') ? 'border-destructive ring-2 ring-destructive/20' : ''">
+                                <select id="employment" v-model="profile.employment" data-field="employment" :aria-invalid="fieldInvalid('employment') || undefined" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background field-select pl-3 pr-10 text-sm" :class="fieldInvalid('employment') ? 'border-destructive ring-2 ring-destructive/20' : ''">
                                     <option value="">Selecciona una opción</option>
                                     <option value="fijo">Empleado fijo</option>
                                     <option value="honorarios">Honorarios</option>
@@ -879,7 +930,7 @@ const submit = async () => {
                             </div>
                             <div class="sm:col-span-2">
                                 <Label for="bureau">Historial en Buró / Círculo *</Label>
-                                <select id="bureau" v-model="profile.bureau" data-field="bureau" :aria-invalid="fieldInvalid('bureau') || undefined" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" :class="fieldInvalid('bureau') ? 'border-destructive ring-2 ring-destructive/20' : ''">
+                                <select id="bureau" v-model="profile.bureau" data-field="bureau" :aria-invalid="fieldInvalid('bureau') || undefined" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background field-select pl-3 pr-10 text-sm" :class="fieldInvalid('bureau') ? 'border-destructive ring-2 ring-destructive/20' : ''">
                                     <option value="">Selecciona una opción</option>
                                     <option value="excelente">Excelente — sin atrasos</option>
                                     <option value="bueno">Bueno — pagos puntuales</option>
@@ -893,21 +944,21 @@ const submit = async () => {
                             <template v-if="!props.car">
                                 <div>
                                     <Label for="brand">Marca</Label>
-                                    <select id="brand" v-model="profile.brandId" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" @change="onBrandChange">
+                                    <select id="brand" v-model="profile.brandId" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background field-select pl-3 pr-10 text-sm" @change="onBrandChange">
                                         <option value="">Selecciona</option>
                                         <option v-for="brand in brands" :key="brand.id" :value="brand.id">{{ brand.name }}</option>
                                     </select>
                                 </div>
                                 <div>
                                     <Label for="model">Modelo</Label>
-                                    <select id="model" v-model="profile.modelId" :disabled="!profile.brandId" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50" @change="onModelChange">
+                                    <select id="model" v-model="profile.modelId" :disabled="!profile.brandId" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background field-select pl-3 pr-10 text-sm disabled:opacity-50" @change="onModelChange">
                                         <option value="">{{ profile.brandId ? 'Selecciona el modelo' : 'Selecciona la marca primero' }}</option>
                                         <option v-for="model in modelOptions" :key="model.id" :value="model.id">{{ model.name }}</option>
                                     </select>
                                 </div>
                                 <div>
                                     <Label for="year">Año</Label>
-                                    <select id="year" v-model.number="profile.year" data-field="year" :aria-invalid="fieldInvalid('year') || undefined" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" :class="fieldInvalid('year') ? 'border-destructive ring-2 ring-destructive/20' : ''">
+                                    <select id="year" v-model.number="profile.year" data-field="year" :aria-invalid="fieldInvalid('year') || undefined" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background field-select pl-3 pr-10 text-sm" :class="fieldInvalid('year') ? 'border-destructive ring-2 ring-destructive/20' : ''">
                                         <option :value="null">Selecciona el año</option>
                                         <option v-for="year in vehicleYears" :key="year" :value="year">{{ year }}</option>
                                     </select>
@@ -926,7 +977,7 @@ const submit = async () => {
                                     id="version"
                                     v-model="profile.version"
                                     :disabled="versionsLoading || versionOptions.length === 0"
-                                    class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"
+                                    class="mt-1.5 h-10 w-full rounded-md border border-input bg-background field-select pl-3 pr-10 text-sm disabled:opacity-50"
                                 >
                                     <option value="">
                                         {{ versionsLoading ? 'Cargando versiones…' : versionOptions.length ? 'Selecciona la versión' : 'Sin versiones disponibles' }}
@@ -947,59 +998,99 @@ const submit = async () => {
                         </div>
 
                         <!-- Paso 3 -->
-                        <div v-else-if="step === 3" class="space-y-4">
+                        <div v-else-if="step === 3" class="space-y-5">
                             <div v-if="evaluating" class="flex items-center gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4">
                                 <Loader2 class="h-5 w-5 animate-spin text-primary" />
                                 <p class="text-sm text-secondary">Analizando tu perfil y políticas bancarias…</p>
                             </div>
 
                             <template v-else>
-                                <div class="grid gap-3 sm:grid-cols-2">
-                                    <div class="rounded-2xl bg-gradient-primary p-4 text-primary-foreground">
-                                        <p class="text-[10px] font-bold uppercase tracking-wider">Mensualidad desde</p>
-                                        <p class="mt-1 text-3xl font-black">{{ formatPrice(eligibleMonthly) }}</p>
-                                    </div>
-                                    <div class="rounded-2xl bg-gradient-dark p-4 text-white">
-                                        <p class="text-[10px] font-bold uppercase tracking-wider text-primary">Score estimado</p>
-                                        <p class="mt-1 text-3xl font-black">{{ evaluation?.scorePerfilEstimado ?? 0 }}</p>
-                                        <p class="text-xs text-white/60">Riesgo {{ evaluation?.nivelRiesgo ?? '—' }} · DTI {{ evaluation?.dtiCalculadoPct ?? 0 }}%</p>
+                                <div class="rounded-3xl border border-primary/20 bg-gradient-to-r from-accent/80 via-card to-accent/40 p-5 sm:p-6">
+                                    <p class="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-primary">
+                                        <Sparkles class="h-4 w-4" /> Precalificación con IA
+                                    </p>
+                                    <p class="mt-1 text-xs text-muted-foreground">Forma rápida para darte opciones reales.</p>
+                                    <div class="mt-5 grid gap-4 sm:grid-cols-3">
+                                        <div>
+                                            <p class="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Monto a financiar</p>
+                                            <p class="mt-1 text-lg font-black text-secondary sm:text-xl">{{ formatPrice(financedAmount) }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Plazo</p>
+                                            <p class="mt-1 text-lg font-black text-secondary sm:text-xl">{{ basics.term }} meses</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Financieras que aprueban</p>
+                                            <p class="mt-1 text-lg font-black text-secondary sm:text-xl">{{ approvedVisibleCount }} de {{ visibleOffers.length }}</p>
+                                        </div>
                                     </div>
                                 </div>
 
-                                <div v-if="evaluation?.resumenEjecutivo" class="rounded-2xl border border-border bg-muted/40 p-4 text-sm text-secondary">
-                                    {{ evaluation.resumenEjecutivo }}
-                                </div>
+                                <p class="text-sm text-muted-foreground">
+                                    Ordenadas por mejor match con tu perfil. Selecciona la financiera con la que quieres continuar.
+                                </p>
 
                                 <div class="space-y-3">
                                     <article
-                                        v-for="offer in visibleOffers"
+                                        v-for="(offer, index) in visibleOffers"
                                         :key="offer.slug"
-                                        class="rounded-2xl border p-4 transition"
-                                        :class="selectedSlug === offer.slug ? 'border-primary ring-2 ring-primary/20' : 'border-border'"
+                                        class="rounded-3xl border bg-card p-4 shadow-soft transition sm:p-5"
+                                        :class="selectedSlug === offer.slug ? 'border-primary ring-2 ring-primary/20' : 'border-border hover:border-primary/40'"
                                     >
                                         <button type="button" class="w-full text-left" :disabled="!offer.califica" @click="offer.califica && (selectedSlug = offer.slug)">
                                             <div class="flex flex-wrap items-start justify-between gap-3">
-                                                <div>
-                                                    <p class="font-black text-secondary">{{ offer.nombre }}</p>
-                                                    <p class="text-xs text-muted-foreground">{{ offer.tipo }} · {{ offer.probabilidadAprobacion }}% prob. aprobación</p>
+                                                <div class="flex min-w-0 items-center gap-3">
+                                                    <span class="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-full text-sm font-black text-white shadow-soft" :class="offerTone(index)">
+                                                        <img v-if="offer.logo" :src="offer.logo" :alt="offer.nombre" class="h-full w-full object-cover" />
+                                                        <template v-else>{{ offerInitials(offer.nombre) }}</template>
+                                                    </span>
+                                                    <div class="min-w-0">
+                                                        <p class="font-black text-secondary">{{ offer.nombre }}</p>
+                                                        <p class="mt-0.5 text-xs capitalize text-muted-foreground">{{ offer.tipo }}</p>
+                                                    </div>
                                                 </div>
-                                                <div class="text-right">
-                                                    <p class="text-lg font-black text-primary">{{ formatPrice(offer.mensualidad) }}/mes</p>
-                                                    <p class="text-[11px] text-muted-foreground">Tasa {{ offer.tasaEstimadaAnual }}% · CAT {{ offer.cat }}%</p>
-                                                    <p class="text-[11px] text-muted-foreground">Plazo {{ offer.plazoEfectivo ?? basics.term }} meses</p>
+                                                <span v-if="recommendedSlug === offer.slug" class="inline-flex items-center gap-1 rounded-full bg-primary/15 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-primary">
+                                                    <Sparkles class="h-3 w-3" /> Recomendada · Mejor match
+                                                </span>
+                                            </div>
+
+                                            <div class="mt-5 grid grid-cols-2 gap-4 border-t border-border/70 pt-4 sm:grid-cols-4">
+                                                <div>
+                                                    <p class="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Mensualidad</p>
+                                                    <p class="mt-1 text-lg font-black text-primary">{{ formatPrice(offer.mensualidad) }}<span class="text-xs font-semibold text-muted-foreground">/mes</span></p>
+                                                </div>
+                                                <div>
+                                                    <p class="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Tasa anual</p>
+                                                    <p class="mt-1 text-base font-black text-secondary">{{ offer.tasaEstimadaAnual }}%</p>
+                                                </div>
+                                                <div>
+                                                    <p class="text-[10px] font-black uppercase tracking-wider text-muted-foreground">CAT</p>
+                                                    <p class="mt-1 text-base font-black text-secondary">{{ offer.cat }}%</p>
+                                                </div>
+                                                <div>
+                                                    <p class="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Total a pagar</p>
+                                                    <p class="mt-1 text-base font-black text-secondary">{{ formatPrice(offer.total ?? 0) }}</p>
                                                 </div>
                                             </div>
-                                            <p v-if="offer.motivoDictamen" class="mt-2 text-xs text-muted-foreground">{{ offer.motivoDictamen }}</p>
-                                            <p v-if="offer.plazoAjustado" class="mt-1 text-xs font-semibold text-amber-600">
-                                                El plazo se ajustó al máximo permitido por esta financiera.
-                                            </p>
-                                            <p class="mt-1 text-xs font-semibold text-secondary">
-                                                Total estimado: {{ formatPrice(offer.total ?? 0) }} · Cargo por servicio: {{ formatPrice(offer.cargoServicio ?? 0) }}
-                                            </p>
-                                            <p v-if="offer.requisitosClave?.length" class="mt-1 text-[11px] text-muted-foreground">
-                                                Requisitos: {{ offer.requisitosClave.join(' · ') }}
-                                            </p>
-                                            <span v-if="!offer.califica" class="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-destructive">
+
+                                            <div class="mt-4 flex flex-wrap items-end justify-between gap-3">
+                                                <div class="text-xs text-muted-foreground">
+                                                    <p v-if="offer.plazoEfectivo">Plazo {{ offer.plazoEfectivo }} meses</p>
+                                                    <p v-if="offer.plazoAjustado" class="font-semibold text-amber-600">El plazo se ajustó al máximo permitido.</p>
+                                                    <p v-if="offer.motivoDictamen" class="mt-1">{{ offer.motivoDictamen }}</p>
+                                                    <p v-if="offer.requisitosClave?.length" class="mt-1 text-[11px]">{{ offer.requisitosClave.join(' · ') }}</p>
+                                                </div>
+                                                <div class="w-full max-w-[230px]">
+                                                    <span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-700">
+                                                        ↗ {{ offer.probabilidadAprobacion }}% prob. aprobación
+                                                    </span>
+                                                    <div class="mt-2 h-2 overflow-hidden rounded-full bg-muted">
+                                                        <div class="h-full rounded-full bg-gradient-to-r from-primary to-orange-500" :style="{ width: `${Math.max(0, Math.min(100, Number(offer.probabilidadAprobacion) || 0))}%` }" />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <span v-if="!offer.califica" class="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-destructive">
                                                 <AlertCircle class="h-3.5 w-3.5" /> No elegible
                                             </span>
                                         </button>
@@ -1010,21 +1101,6 @@ const submit = async () => {
                                     <Button variant="outline" size="sm" @click="showAllOffers = true">
                                         Ver {{ Math.min(3, hiddenOffersCount) }} opciones más
                                     </Button>
-                                </div>
-
-                                <div v-if="pawnOffers.length" class="mt-5">
-                                    <h3 class="text-sm font-black text-secondary">Préstamo prendario</h3>
-                                    <p class="mt-1 text-xs text-muted-foreground">Opciones para obtener liquidez usando tu auto como garantía; no forman parte del crédito de compra.</p>
-                                    <div class="mt-3 space-y-2">
-                                        <div v-for="offer in pawnOffers" :key="offer.slug" class="rounded-2xl border border-border bg-muted/20 p-3 text-xs">
-                                            <div class="flex items-center justify-between gap-2">
-                                                <span class="font-bold text-secondary">{{ offer.nombre }}</span>
-                                                <span class="font-bold text-primary">{{ formatPrice(offer.mensualidad) }}/mes</span>
-                                            </div>
-                                            <p class="mt-1 text-muted-foreground">Tasa {{ offer.tasaEstimadaAnual }}% · {{ offer.plazoEfectivo ?? basics.term }} meses</p>
-                                            <p v-if="offer.motivoDictamen" class="mt-1 text-muted-foreground">{{ offer.motivoDictamen }}</p>
-                                        </div>
-                                    </div>
                                 </div>
                             </template>
                         </div>

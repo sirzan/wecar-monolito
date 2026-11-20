@@ -190,6 +190,7 @@ class PublicController extends Controller
             ],
             'options' => $this->catalogOptions(),
             'externalCars' => $this->externalSearch->cached($request->user(), 24)['results'],
+            'smartSearch' => $request->boolean('smart'),
             'seo' => $seo,
         ]);
     }

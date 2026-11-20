@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { ChevronLeft, ChevronRight, GitCompare, Heart, Landmark, MapPin, Share2, X } from '@lucide/vue';
+import { GitCompare, Heart, Landmark, MapPin, Share2 } from '@lucide/vue';
 import Button from '@/components/ui/Button.vue';
 import CarPhotoStrip from '@/components/site/CarPhotoStrip.vue';
 import FinanciarAutoDialog from '@/components/credito/FinanciarAutoDialog.vue';
 import { useCompareStore } from '@/stores/compare';
 import { useFavoritesStore } from '@/stores/favorites';
 import { formatMxn } from '@/lib/currency';
+import { estimatedMonthlyFromPrice } from '@/lib/creditCalculator';
 import { cn } from '@/lib/utils';
 import { toast } from 'vue-sonner';
 import type { ExternalCar } from '@/types/external';
@@ -17,8 +18,6 @@ const emit = defineEmits<{ open: [car: ExternalCar] }>();
 const compare = useCompareStore();
 const favorites = useFavoritesStore();
 const financeOpen = ref(false);
-const lightbox = ref(false);
-const lightboxIndex = ref(0);
 const isFavorite = computed(() => favorites.hasExternal(props.car.id));
 
 onMounted(() => void favorites.bootstrap());
@@ -32,7 +31,7 @@ const slides = computed(() => {
 
 const compared = computed(() => compare.has(props.car.id));
 const detailUrl = computed(() => props.car.url || `/auto-externo/${props.car.slug || props.car.id}`);
-const approxMonthly = (price: number) => Math.round((price * 0.8 * 0.0268) / 100) * 100;
+const approxMonthly = (price: number) => estimatedMonthlyFromPrice(price);
 
 const financeCar = computed(() => ({
     id: props.car.id,
@@ -46,16 +45,6 @@ const financeCar = computed(() => ({
 
 const formatKm = (value: number | null) =>
     value == null ? 'Kilometraje no especificado' : `${value.toLocaleString('es-MX')} km`;
-
-const openLightbox = (index: number) => {
-    lightboxIndex.value = index;
-    lightbox.value = true;
-};
-
-const moveLightbox = (direction: number) => {
-    const total = slides.value.length;
-    lightboxIndex.value = (lightboxIndex.value + direction + total) % total;
-};
 
 const share = async () => {
     const url = new URL(detailUrl.value, window.location.origin).toString();
@@ -91,26 +80,27 @@ const whatsappUrl = computed(() => {
     const text = `Hola, vi este auto externo "${props.car.title}" publicado en ${props.car.platformName || 'otra plataforma'} y quiero más información. Anuncio: ${props.car.sourceUrl || detailUrl.value}`;
     return `https://wa.me/5218112345678?text=${encodeURIComponent(text)}`;
 });
+
+const openDetail = (event: MouseEvent) => {
+    const target = event.target as HTMLElement | null;
+
+    if (target?.closest('button, a, input, select, textarea, label')) {
+        return;
+    }
+
+    emit('open', props.car);
+};
 </script>
 
 <template>
-    <div class="group relative flex h-full flex-row overflow-hidden rounded-3xl border border-border bg-card shadow-soft transition-all duration-300 hover:-translate-y-1.5 hover:border-primary/40 hover:shadow-elegant sm:flex-col">
+    <div class="group relative flex h-full cursor-pointer flex-row overflow-hidden rounded-3xl border border-primary/30 bg-card shadow-soft transition-all duration-300 hover:-translate-y-1.5 hover:border-primary/60 hover:shadow-elegant sm:flex-col" @click="openDetail">
         <CarPhotoStrip
             :slides="slides"
             :alt="car.title"
             class="aspect-square w-[36%] shrink-0 sm:aspect-[4/3] sm:w-full"
-            @open="openLightbox"
+            @open="emit('open', car)"
         >
             <div class="pointer-events-none absolute inset-0 bg-gradient-to-t from-secondary/30 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-            <span
-                class="pointer-events-none absolute left-3 top-3 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black text-white shadow-soft"
-                :style="{ backgroundColor: car.platformColor || '#0f1729' }"
-            >
-                {{ car.platformInitials || 'EXT' }}
-            </span>
-            <span class="pointer-events-none absolute right-3 top-3 rounded-full bg-secondary/90 px-2.5 py-1 text-[10px] font-bold text-secondary-foreground">
-                {{ car.platformName || 'Otra plataforma' }}
-            </span>
         </CarPhotoStrip>
 
         <div class="flex min-w-0 flex-1 flex-col gap-1 p-2.5 sm:gap-2 sm:p-5">
@@ -120,40 +110,39 @@ const whatsappUrl = computed(() => {
                         {{ car.title }}
                     </h3>
                 </button>
-                <button
-                    type="button"
-                    :aria-label="isFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos'"
-                    class="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent/60 text-muted-foreground transition-all hover:scale-110 hover:text-primary sm:h-8 sm:w-8"
-                    :class="isFavorite ? 'text-primary' : ''"
-                    @click="favorites.toggleExternal(car.id)"
-                >
-                    <Heart class="h-3.5 w-3.5 sm:h-4 sm:w-4" :class="isFavorite ? 'fill-current' : ''" />
-                </button>
+                <div class="flex shrink-0 items-center gap-1">
+                    <button
+                        type="button"
+                        :aria-label="isFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos'"
+                        class="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent/60 text-muted-foreground transition-all hover:scale-110 hover:text-primary sm:h-8 sm:w-8"
+                        :class="isFavorite ? 'text-primary' : ''"
+                        @click="favorites.toggleExternal(car.id)"
+                    >
+                        <Heart class="h-3.5 w-3.5 sm:h-4 sm:w-4" :class="isFavorite ? 'fill-current' : ''" />
+                    </button>
+                    <button
+                        type="button"
+                        aria-label="Compartir anuncio externo"
+                        class="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent/60 text-muted-foreground transition-all hover:scale-110 hover:text-primary sm:h-8 sm:w-8"
+                        @click="share"
+                    >
+                        <Share2 class="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                    </button>
+                </div>
             </div>
 
             <p class="text-[11px] text-muted-foreground sm:text-sm">
                 {{ car.year ?? 'Año no especificado' }} · {{ formatKm(car.km) }}
             </p>
 
-            <p v-if="car.location" class="flex items-center gap-1 text-[10px] text-muted-foreground sm:text-xs">
-                <MapPin class="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" /> {{ car.location }}
-            </p>
-
             <div class="mt-1 sm:mt-3">
-                <div class="flex items-center justify-between gap-2">
-                    <p class="text-[10px] text-muted-foreground sm:text-[11px]">Precio estimado</p>
-                    <button
-                        type="button"
-                        class="inline-flex items-center gap-1 text-[10px] font-bold text-primary transition hover:text-primary/80 hover:underline sm:text-[11px]"
-                        aria-label="Compartir anuncio externo"
-                        @click="share"
-                    >
-                        <Share2 class="h-3 w-3 sm:h-3.5 sm:w-3.5" /> Compartir
-                    </button>
-                </div>
+                <p class="text-[10px] text-muted-foreground sm:text-[11px]">Precio estimado</p>
                 <p class="text-sm font-black text-primary sm:text-xl">{{ car.price == null ? 'Consultar precio' : formatMxn(car.price) }}</p>
                 <p v-if="car.price != null" class="mt-0.5 text-[9px] font-semibold text-muted-foreground sm:text-[11px]">
                     Crédito desde <span class="font-bold text-secondary">{{ formatMxn(approxMonthly(car.price)) }}</span>/mes
+                </p>
+                <p v-if="car.location" class="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground sm:text-xs">
+                    <MapPin class="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" /> {{ car.location }}
                 </p>
                 <p class="mt-0.5 text-[9px] font-semibold text-muted-foreground sm:text-[11px]">Anuncio de {{ car.platformName || 'otra plataforma' }}</p>
             </div>
@@ -172,7 +161,7 @@ const whatsappUrl = computed(() => {
                     <GitCompare class="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                     {{ compared ? 'Quitar' : 'Comparar auto' }}
                 </button>
-                <Button variant="secondary" size="icon" class="h-8 w-8 shrink-0 rounded-full sm:h-10 sm:w-10" title="Financiar" @click="financeOpen = true">
+                <Button variant="secondary" size="icon" class="h-8 w-8 shrink-0 rounded-full sm:h-10 sm:w-10" title="Solicitar financiamiento" aria-label="Solicitar financiamiento" @click="financeOpen = true">
                     <Landmark class="h-4 w-4 sm:h-5 sm:w-5" />
                 </Button>
                 <a
@@ -190,63 +179,5 @@ const whatsappUrl = computed(() => {
         </div>
 
         <FinanciarAutoDialog :open="financeOpen" :car="financeCar" @close="financeOpen = false" />
-
-        <Teleport to="body">
-            <div
-                v-if="lightbox"
-                role="dialog"
-                aria-modal="true"
-                class="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
-                @click="lightbox = false"
-            >
-                <div class="relative w-full max-w-md overflow-hidden rounded-3xl bg-card shadow-elegant" @click.stop>
-                    <div class="relative flex items-center justify-center bg-secondary">
-                        <img :src="slides[lightboxIndex]" :alt="car.title" class="max-h-[60vh] w-full object-contain" referrerpolicy="no-referrer" />
-                        <button
-                            v-if="slides.length > 1"
-                            type="button"
-                            aria-label="Foto anterior"
-                            class="absolute left-2 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-black/40 text-white hover:bg-black/60"
-                            @click="moveLightbox(-1)"
-                        >
-                            <ChevronLeft class="h-5 w-5" />
-                        </button>
-                        <button
-                            v-if="slides.length > 1"
-                            type="button"
-                            aria-label="Foto siguiente"
-                            class="absolute right-2 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-black/40 text-white hover:bg-black/60"
-                            @click="moveLightbox(1)"
-                        >
-                            <ChevronRight class="h-5 w-5" />
-                        </button>
-                        <span class="absolute left-3 top-3 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-bold text-white">
-                            {{ lightboxIndex + 1 }} / {{ slides.length }}
-                        </span>
-                        <button
-                            type="button"
-                            aria-label="Cerrar"
-                            class="absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white hover:bg-black/70"
-                            @click="lightbox = false"
-                        >
-                            <X class="h-4 w-4" />
-                        </button>
-                    </div>
-                    <div class="flex items-center justify-between gap-2 px-4 py-3">
-                        <div class="min-w-0">
-                            <p class="truncate text-xs font-extrabold text-secondary sm:text-sm">{{ car.title }}</p>
-                            <p class="text-[10px] text-muted-foreground sm:text-xs">{{ car.price == null ? 'Consultar precio' : formatMxn(car.price) }}</p>
-                        </div>
-                        <button
-                            type="button"
-                            class="shrink-0 rounded-full border border-primary/40 px-3 py-1.5 text-[10px] font-bold text-primary hover:bg-primary hover:text-primary-foreground sm:text-xs"
-                            @click="lightbox = false; emit('open', car)"
-                        >
-                            Ver ficha
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </Teleport>
     </div>
 </template>

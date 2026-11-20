@@ -24,6 +24,7 @@ import SeoHead from '@/components/site/SeoHead.vue';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
+import { faqCategories, faqs } from '@/lib/faqs';
 
 defineOptions({ layout: PublicLayout });
 
@@ -78,24 +79,12 @@ const process = [
     },
 ];
 
-const faqs = [
-    {
-        q: '¿Qué cubre exactamente la garantía y revisión de WeCar?',
-        a: 'Incluye una inspección minuciosa de más de 160 puntos mecánicos, eléctricos y estéticos, revisión exhaustiva de antecedentes legales, facturas y multas, así como acompañamiento presencial o guiado durante el cierre de la compraventa.',
-    },
-    {
-        q: '¿Puedo contratar el servicio para un auto que encontré por mi cuenta?',
-        a: '¡Sí! Puedes contratar nuestro servicio de Compra Segura para cualquier auto seminuevo en las ciudades donde operamos. Nosotros contactamos al vendedor, revisamos el auto y te entregamos el reporte.',
-    },
-    {
-        q: '¿Cómo se cotiza el costo del servicio de Compra Segura?',
-        a: 'El cargo por servicio es desde el 2.5% sobre el valor acordado del vehículo, lo cual cubre todo el diagnóstico, gestoría y acompañamiento legal.',
-    },
-    {
-        q: '¿Qué pasa si el auto no pasa la inspección mecánica o legal?',
-        a: 'Te entregamos el reporte detallado con las fallas o anomalías encontradas para que no compres un problema. Tú decides si renegociar el precio o buscar otra opción con nuestro catálogo.',
-    },
-];
+const activeFaqCategory = ref('all');
+const visibleFaqs = computed(() =>
+    activeFaqCategory.value === 'all'
+        ? faqs
+        : faqs.filter((faq) => faq.category === activeFaqCategory.value),
+);
 
 // Cotizador de garantía
 const autoPrecio = ref(250000);
@@ -110,8 +99,8 @@ const faqJsonLd = {
     '@type': 'FAQPage',
     mainEntity: faqs.map((faq) => ({
         '@type': 'Question',
-        name: faq.q,
-        acceptedAnswer: { '@type': 'Answer', text: faq.a },
+        name: faq.question,
+        acceptedAnswer: { '@type': 'Answer', text: faq.answer },
     })),
 };
 </script>
@@ -126,7 +115,7 @@ const faqJsonLd = {
             <img
                 src="/images/sentra-2026.jpg"
                 alt="Nissan Sentra 2026 protegido por garantía WeCar"
-                class="h-full w-full object-cover object-right opacity-60 sm:opacity-75"
+                class="h-full w-full scale-95 translate-x-[6%] object-cover object-right opacity-60 sm:translate-x-[10%] sm:opacity-75"
                 loading="eager"
             />
             <div class="absolute inset-0 bg-gradient-to-r from-background via-background/85 to-background/20" />
@@ -181,15 +170,15 @@ const faqJsonLd = {
             <div
                 v-for="item in includes"
                 :key="item.title"
-                class="rounded-3xl border border-border bg-card p-6 shadow-soft transition-all hover:-translate-y-1 hover:border-primary/40 hover:shadow-elegant"
+                class="rounded-3xl border border-white/10 bg-secondary p-6 text-secondary-foreground shadow-soft transition-all hover:-translate-y-1 hover:border-primary/50 hover:shadow-elegant"
             >
                 <div class="flex items-start gap-4">
-                    <span class="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary">
+                    <span class="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary/15 text-primary">
                         <component :is="item.icon" class="h-6 w-6" stroke-width="2.2" />
                     </span>
-                    <h3 class="min-w-0 text-base font-black text-secondary">{{ item.title }}</h3>
+                    <h3 class="min-w-0 text-base font-black text-white">{{ item.title }}</h3>
                 </div>
-                <p class="mt-3 text-xs leading-relaxed text-muted-foreground sm:text-sm">{{ item.description }}</p>
+                <p class="mt-3 text-xs leading-relaxed text-secondary-foreground/75 sm:text-sm">{{ item.description }}</p>
             </div>
         </div>
     </section>
@@ -282,19 +271,40 @@ const faqJsonLd = {
     </section>
 
     <!-- 5. PREGUNTAS FRECUENTES -->
-    <section class="mx-auto max-w-4xl px-4 pb-16 sm:px-6">
+    <section id="faq" class="mx-auto max-w-4xl px-4 pb-16 sm:px-6">
         <h2 class="section-title text-center text-secondary">Preguntas frecuentes</h2>
+        <p class="mx-auto mt-2 max-w-2xl text-center text-sm text-muted-foreground">
+            Encuentra respuestas sobre garantía, búsqueda, publicación, crédito, pagos y tu cuenta.
+        </p>
+
+        <div class="mx-auto mt-6 max-w-md">
+            <Label for="faq-category">Filtrar por categoría</Label>
+            <select
+                id="faq-category"
+                v-model="activeFaqCategory"
+                class="field-select mt-1.5 h-10 w-full rounded-md border border-input bg-background pl-3 pr-10 text-sm"
+            >
+                <option value="all">Todas las categorías</option>
+                <option v-for="category in faqCategories" :key="category.id" :value="category.id">
+                    {{ category.label }}
+                </option>
+            </select>
+            <p class="mt-2 text-center text-xs text-muted-foreground">
+                {{ visibleFaqs.length }} {{ visibleFaqs.length === 1 ? 'pregunta' : 'preguntas' }}
+            </p>
+        </div>
+
         <div class="mt-8 space-y-4">
             <details
-                v-for="faq in faqs"
-                :key="faq.q"
+                v-for="faq in visibleFaqs"
+                :key="faq.id"
                 class="group rounded-2xl border border-border bg-card p-5 shadow-soft transition hover:border-primary/40"
             >
                 <summary class="flex cursor-pointer items-center justify-between text-sm sm:text-base font-bold text-secondary list-none">
-                    <span>{{ faq.q }}</span>
-                    <ChevronDown class="h-4 w-4 text-muted-foreground transition group-open:rotate-180" />
+                    <span>{{ faq.question }}</span>
+                    <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition group-open:rotate-180" />
                 </summary>
-                <p class="mt-3 text-xs sm:text-sm leading-relaxed text-muted-foreground">{{ faq.a }}</p>
+                <p class="mt-3 text-xs sm:text-sm leading-relaxed text-muted-foreground">{{ faq.answer }}</p>
             </details>
         </div>
     </section>

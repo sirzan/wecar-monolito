@@ -104,7 +104,7 @@ class CatalogSeeder extends Seeder
         ]);
 
         SiteSetting::put('footer_config', [
-            'copyright' => '© '.date('Y').' Wecar. Todos los derechos reservados.',
+            'copyright' => '© '.date('Y').' Wecar Technology S.A.S. Todos los derechos reservados.',
             'legal_links_label' => 'Legal',
             'show_newsletter' => false,
         ]);

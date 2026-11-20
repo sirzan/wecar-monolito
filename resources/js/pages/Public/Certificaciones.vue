@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import {
     BadgeCheck,
     CalendarDays,
@@ -13,6 +13,7 @@ import {
 import PublicLayout from '@/layouts/PublicLayout.vue';
 import SeoHead from '@/components/site/SeoHead.vue';
 import Button from '@/components/ui/Button.vue';
+import Label from '@/components/ui/Label.vue';
 import AppointmentDialog from '@/components/certificaciones/AppointmentDialog.vue';
 
 defineOptions({ layout: PublicLayout });
@@ -62,26 +63,48 @@ const included = [
 
 const faqs = [
     {
+        category: 'inspeccion',
         question: '¿Cómo validan el auto mecánicamente?',
         answer: 'Realizamos una inspección de 160 puntos en el taller Motorevs, revisada por técnicos certificados. Al finalizar recibes un reporte con el estado del vehículo.',
     },
     {
+        category: 'inspeccion',
         question: '¿Qué incluye la revisión legal?',
         answer: 'Validamos REPUVE, ICV, factura y que el auto esté libre de gravámenes, para que compres con la tranquilidad de saber exactamente qué estás comprando.',
     },
     {
+        category: 'proceso',
         question: '¿Puedo ver los autos físicamente?',
         answer: 'La revisión se realiza en el Taller Motorevs. Al agendar tu cita coordinamos la visita para que puedas conocer el auto junto con el informe de la revisión.',
     },
     {
+        category: 'proceso',
         question: '¿Quién prepara los contratos?',
         answer: 'WeCar te acompaña durante el proceso de compra y venta. La formalización del contrato se realiza con las partes involucradas y, cuando corresponde, con la agencia o financiera.',
     },
     {
+        category: 'acompanamiento',
         question: '¿Hasta dónde llega el acompañamiento?',
         answer: 'Un asesor te guía desde la elección del auto hasta la revisión, la firma del contrato y la entrega de llaves.',
     },
 ];
+
+const faqCategories = [
+    { id: 'inspeccion', label: 'Inspección y revisión legal' },
+    { id: 'proceso', label: 'Visitas y contratos' },
+    { id: 'acompanamiento', label: 'Acompañamiento' },
+];
+
+const activeFaqCategory = ref('all');
+const visibleFaqs = computed(() =>
+    activeFaqCategory.value === 'all'
+        ? faqs
+        : faqs.filter((faq) => faq.category === activeFaqCategory.value),
+);
+
+watch(activeFaqCategory, () => {
+    openFaq.value = null;
+});
 
 const priceFormatter = computed(
     () =>
@@ -107,13 +130,13 @@ const toggleFaq = (index: number) => {
         <img
             src="/images/certificaciones-hero.jpg"
             alt="Revisión mecánica y legal de un automóvil"
-            class="absolute inset-0 -z-20 h-full w-full object-cover"
+            class="absolute inset-0 -z-20 h-full w-full scale-90 object-cover"
         />
         <div class="absolute inset-0 -z-10 bg-white/80" aria-hidden="true" />
 
         <div class="mx-auto max-w-5xl px-4 py-16 text-center sm:px-6 sm:py-20 lg:py-24">
-            <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-primary sm:text-sm">
-                Servicio gestionado por talleres certificados por wecar.mx
+            <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-700 sm:text-sm">
+                Servicio gestionado por talleres certificados
             </p>
             <h1 class="page-title mt-4 text-secondary [text-shadow:0_2px_8px_rgba(15,23,42,0.18)]">
                 <span class="text-secondary">Certificaciones</span> <span class="text-primary">WeCar</span>
@@ -147,12 +170,12 @@ const toggleFaq = (index: number) => {
     <!-- Servicio -->
     <section class="bg-muted/30 px-4 py-14 sm:px-6 lg:py-20">
         <div class="mx-auto max-w-6xl">
-            <div class="mx-auto max-w-2xl text-center">
+            <div class="mx-auto max-w-4xl text-center">
                 <p class="text-xs font-bold uppercase tracking-[0.18em] text-primary">Servicio</p>
                 <h2 class="section-title mt-3 text-secondary">
                     Revisión <span class="text-primary">mecánica y legal.</span>
                 </h2>
-                <p class="mt-3 text-sm leading-relaxed text-muted-foreground sm:text-base">
+                <p class="mt-3 text-sm leading-relaxed text-muted-foreground md:whitespace-nowrap sm:text-base">
                     Validamos cualquier auto que estés considerando, sin necesidad de contratar la garantía completa.
                 </p>
             </div>
@@ -218,9 +241,26 @@ const toggleFaq = (index: number) => {
             <h2 class="section-title mt-3 text-secondary">Resolvemos tus <span class="text-primary">dudas.</span></h2>
         </div>
 
+        <div class="mx-auto mt-6 max-w-md">
+            <Label for="faq-category">Filtrar por categoría</Label>
+            <select
+                id="faq-category"
+                v-model="activeFaqCategory"
+                class="field-select mt-1.5 h-10 w-full rounded-md border border-input bg-background pl-3 pr-10 text-sm"
+            >
+                <option value="all">Todas las categorías</option>
+                <option v-for="category in faqCategories" :key="category.id" :value="category.id">
+                    {{ category.label }}
+                </option>
+            </select>
+            <p class="mt-2 text-center text-xs text-muted-foreground">
+                {{ visibleFaqs.length }} {{ visibleFaqs.length === 1 ? 'pregunta' : 'preguntas' }}
+            </p>
+        </div>
+
         <div class="mt-8 space-y-3">
             <div
-                v-for="(faq, index) in faqs"
+                v-for="(faq, index) in visibleFaqs"
                 :key="faq.question"
                 class="overflow-hidden rounded-[22px] border border-border bg-card shadow-soft"
             >
