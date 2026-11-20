@@ -131,8 +131,6 @@ const calculatedMonthlyPayment = computed(() =>
 );
 
 const serviceFeeAmount = computed(() => serviceFee(financedAmount.value));
-const downPaymentProgress = computed(() => Math.min(100, Math.max(0, ((downPaymentPct.value - 10) / 60) * 100)));
-const termProgress = computed(() => Math.min(100, Math.max(0, ((termMonths.value - 12) / 60) * 100)));
 
 // Estimado rápido con la tasa promedio de ficha de auto.
 const teaserMonthly = computed(() => estimatedMonthlyFromPrice(Number(props.car.price)));
@@ -538,7 +536,7 @@ const jsonLd = computed(() => [
                                     max="70"
                                     step="5"
                                     class="range-brand mt-1 w-full"
-                                    :style="{ '--range-progress': `${downPaymentProgress}%` }"
+                                   
                                 />
                             </div>
 
@@ -554,7 +552,7 @@ const jsonLd = computed(() => [
                                     max="72"
                                     step="12"
                                     class="range-brand mt-1 w-full"
-                                    :style="{ '--range-progress': `${termProgress}%` }"
+                                   
                                 />
                             </div>
                         </div>

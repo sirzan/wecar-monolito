@@ -135,8 +135,8 @@ const toggleFaq = (index: number) => {
         <div class="absolute inset-0 -z-10 bg-white/80" aria-hidden="true" />
 
         <div class="mx-auto max-w-5xl px-4 py-16 text-center sm:px-6 sm:py-20 lg:py-24">
-            <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-primary sm:text-sm">
-                Servicio gestionado por talleres certificados por wecar.mx
+            <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-700 sm:text-sm">
+                Servicio gestionado por talleres certificados
             </p>
             <h1 class="page-title mt-4 text-secondary [text-shadow:0_2px_8px_rgba(15,23,42,0.18)]">
                 <span class="text-secondary">Certificaciones</span> <span class="text-primary">WeCar</span>
@@ -170,12 +170,12 @@ const toggleFaq = (index: number) => {
     <!-- Servicio -->
     <section class="bg-muted/30 px-4 py-14 sm:px-6 lg:py-20">
         <div class="mx-auto max-w-6xl">
-            <div class="mx-auto max-w-2xl text-center">
+            <div class="mx-auto max-w-4xl text-center">
                 <p class="text-xs font-bold uppercase tracking-[0.18em] text-primary">Servicio</p>
                 <h2 class="section-title mt-3 text-secondary">
                     Revisión <span class="text-primary">mecánica y legal.</span>
                 </h2>
-                <p class="mt-3 text-sm leading-relaxed text-muted-foreground sm:text-base">
+                <p class="mt-3 text-sm leading-relaxed text-muted-foreground md:whitespace-nowrap sm:text-base">
                     Validamos cualquier auto que estés considerando, sin necesidad de contratar la garantía completa.
                 </p>
             </div>

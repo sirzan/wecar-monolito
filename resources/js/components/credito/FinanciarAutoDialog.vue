@@ -338,13 +338,6 @@ const normalizeOffer = (offer: any) => {
     };
 };
 
-const rangeProgress = (value: number | null, min: number, max: number): string => {
-    const numeric = Number(value ?? min);
-    const percentage = ((numeric - min) / (max - min)) * 100;
-
-    return `${Math.min(100, Math.max(0, percentage))}%`;
-};
-
 const formatPrice = (value: number) => {
     const amount = Number(value);
 
@@ -860,21 +853,21 @@ const submit = async () => {
                                         <span class="text-secondary-foreground/65">Precio del auto</span>
                                         <strong class="text-base font-black">{{ formatPrice(price) }}</strong>
                                     </div>
-                                    <input v-model.number="profile.price" type="range" min="50000" max="5000000" step="10000" :disabled="step > 2" class="range-brand mt-2 w-full disabled:opacity-60" :style="{ '--range-progress': rangeProgress(profile.price, 50000, 5000000) }" />
+                                    <input v-model.number="profile.price" type="range" min="50000" max="5000000" step="10000" :disabled="step > 2" class="range-brand mt-2 w-full disabled:opacity-60" />
                                 </div>
                                 <div>
                                     <div class="flex items-center justify-between gap-2 text-xs">
                                         <span class="text-secondary-foreground/65">Enganche</span>
                                         <strong class="text-base font-black">{{ formatPrice(downPaymentAmount) }} · {{ basics.downPayment }}%</strong>
                                     </div>
-                                    <input v-model.number="basics.downPayment" type="range" min="10" max="80" step="5" :disabled="step > 2" class="range-brand mt-2 w-full disabled:opacity-60" :style="{ '--range-progress': rangeProgress(basics.downPayment, 10, 80) }" />
+                                    <input v-model.number="basics.downPayment" type="range" min="10" max="80" step="5" :disabled="step > 2" class="range-brand mt-2 w-full disabled:opacity-60" />
                                 </div>
                                 <div>
                                     <div class="flex items-center justify-between gap-2 text-xs">
                                         <span class="text-secondary-foreground/65">Plazo</span>
                                         <strong class="text-base font-black">{{ basics.term }} meses</strong>
                                     </div>
-                                    <input v-model.number="basics.term" type="range" min="12" max="72" step="12" :disabled="step > 2" class="range-brand mt-2 w-full disabled:opacity-60" :style="{ '--range-progress': rangeProgress(basics.term, 12, 72) }" />
+                                    <input v-model.number="basics.term" type="range" min="12" max="72" step="12" :disabled="step > 2" class="range-brand mt-2 w-full disabled:opacity-60" />
                                 </div>
                             </div>
                             <div class="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-white/10 pt-4 text-xs">
