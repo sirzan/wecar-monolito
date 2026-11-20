@@ -10,6 +10,7 @@ import Label from '@/components/ui/Label.vue';
 import FinanciarAutoDialog from '@/components/credito/FinanciarAutoDialog.vue';
 import FinancialPartnersCarousel from '@/components/site/FinancialPartnersCarousel.vue';
 import { vehicleYears } from '@/lib/carCatalog';
+import { monthlyPayment, serviceFee, SIMULATOR_ANNUAL_RATE } from '@/lib/creditCalculator';
 
 defineOptions({ layout: PublicLayout });
 
@@ -36,29 +37,23 @@ const year = ref<number | null>(yearFromQuery > 0 ? yearFromQuery : null);
 const km = ref(Number(query.get('km') ?? 0));
 const carId = ref(query.get('car_id') ?? '');
 const dialogOpen = ref(false);
+const showServiceFee = ref(false);
 const versions = ref<{ id: string; name: string }[]>([]);
 const versionsLoading = ref(false);
 const versionsError = ref('');
 let versionsTimer: ReturnType<typeof setTimeout> | null = null;
 
 const models = computed(() => props.brands.find((item) => item.name === brand.value)?.models ?? []);
-const minRate = computed(() => {
-    const rates = props.financieras
-        .map((item) => Number(item.tasa_min))
-        .filter((rate) => Number.isFinite(rate) && rate > 0);
-
-    return rates.length ? Math.min(...rates) : 12.5;
-});
 const selectedBrandId = computed(() => props.brands.find((item) => item.name === brand.value)?.id ?? '');
 const selectedModelId = computed(() => models.value.find((item) => item.name === model.value)?.id ?? '');
 const selectedVersionId = computed(() => versions.value.find((item) => item.name === version.value)?.id ?? query.get('version_id') ?? '');
 const downPayment = computed(() => Math.round((price.value * downPaymentPct.value) / 100));
 const financed = computed(() => Math.max(price.value - downPayment.value, 0));
-const monthly = computed(() => {
-    const rate = minRate.value / 100 / 12;
-    if (financed.value <= 0) return 0;
-    return Math.round((financed.value * rate) / (1 - Math.pow(1 + rate, -term.value)));
-});
+const monthly = computed(() => monthlyPayment(financed.value, SIMULATOR_ANNUAL_RATE, term.value));
+const serviceFeeAmount = computed(() => serviceFee(financed.value));
+const priceProgress = computed(() => Math.min(100, Math.max(0, ((price.value - 100000) / 1900000) * 100)));
+const downPaymentProgress = computed(() => Math.min(100, Math.max(0, ((downPaymentPct.value - 10) / 70) * 100)));
+const termProgress = computed(() => Math.min(100, Math.max(0, ((term.value - 12) / 60) * 100)));
 
 const loadVersions = async () => {
     if (!selectedModelId.value || !year.value) {
@@ -129,45 +124,45 @@ const benefits = [
         <div class="absolute inset-0 -z-10 bg-gradient-to-b from-secondary/80 via-secondary/70 to-background" />
 
         <div class="mx-auto max-w-4xl text-center text-white">
-            <p class="text-xs font-bold tracking-wider text-primary sm:text-sm">Crédito automotriz</p>
+            <p class="text-xs font-bold tracking-wider text-primary sm:text-sm">Créditos automotrices</p>
             <h1 class="page-title text-shadow-hero-soft mt-2 text-white">Tu auto, tu plan.</h1>
             <p class="page-subtitle mt-4 text-white/90">
                 Aprobación rápida, mensualidades a tu medida y el mejor financiamiento para ti.
             </p>
 
             <div class="mx-auto mt-6 max-w-md overflow-hidden rounded-2xl border border-primary/20 bg-card text-left shadow-elegant">
-                <div class="p-4 text-foreground sm:p-5">
-                    <h2 class="text-lg font-black text-secondary sm:text-xl">Simula tu crédito</h2>
-                    <p class="mt-0.5 text-xs text-muted-foreground">Ajusta los valores para estimar tu mensualidad.</p>
+                <div class="p-6 text-foreground sm:p-7">
+                    <h2 class="text-xl font-black text-secondary sm:text-2xl">Simula tu crédito</h2>
+                    <p class="mt-1 text-sm text-muted-foreground">Ajusta los valores para estimar tu mensualidad.</p>
 
-                    <div class="mt-4 grid grid-cols-2 gap-3">
+                    <div class="mt-5 grid grid-cols-2 gap-4">
                         <div>
-                            <Label>Año</Label>
-                            <select v-model.number="year" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
-                                <option :value="null">Selecciona el año</option>
+                            <Label class="text-sm font-bold">Año</Label>
+                            <select v-model.number="year" class="mt-1.5 h-12 w-full rounded-full border border-input bg-[#FAF9F7] field-select pl-5 pr-10 text-sm">
+                                <option :value="null">Año</option>
                                 <option v-for="item in vehicleYears" :key="item" :value="item">{{ item }}</option>
                             </select>
                         </div>
                         <div>
-                            <Label>Marca</Label>
-                            <select v-model="brand" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" @change="model = ''">
+                            <Label class="text-sm font-bold">Marca</Label>
+                            <select v-model="brand" class="mt-1.5 h-12 w-full rounded-full border border-input bg-[#FAF9F7] field-select pl-5 pr-10 text-sm" @change="model = ''">
                                 <option value="">Marca</option>
                                 <option v-for="item in brands" :key="item.id" :value="item.name">{{ item.name }}</option>
                             </select>
                         </div>
                         <div>
-                            <Label>Modelo</Label>
-                            <select v-model="model" :disabled="!brand" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50">
+                            <Label class="text-sm font-bold">Modelo</Label>
+                            <select v-model="model" :disabled="!brand" class="mt-1.5 h-12 w-full rounded-full border border-input bg-[#FAF9F7] field-select pl-5 pr-10 text-sm disabled:opacity-50">
                                 <option value="">Modelo</option>
                                 <option v-for="item in models" :key="item.id" :value="item.name">{{ item.name }}</option>
                             </select>
                         </div>
                         <div>
-                            <Label>Versión</Label>
+                            <Label class="text-sm font-bold">Versión</Label>
                                 <select
                                     v-model="version"
                                     :disabled="!model || versionsLoading"
-                                    class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"
+                                    class="mt-1.5 h-12 w-full rounded-full border border-input bg-[#FAF9F7] field-select pl-5 pr-10 text-sm disabled:opacity-50"
                                 >
                                 <option value="">
                                     {{ versionsLoading ? 'Cargando versiones…' : versions.length ? 'Versión (opcional)' : 'Versión no disponible (opcional)' }}
@@ -189,24 +184,36 @@ const benefits = [
                     <div class="mt-4 space-y-4">
                         <div>
                             <div class="flex items-end justify-between gap-3">
-                                <Label>Precio del auto</Label>
-                                <span class="text-sm text-gray-700">{{ formatPrice(price) }}</span>
+                                <Label class="text-sm font-bold">Precio del auto</Label>
+                                <span class="text-base font-black text-secondary sm:text-lg">{{ formatPrice(price) }}</span>
                             </div>
-                            <input v-model.number="price" type="range" min="100000" max="2000000" step="10000" class="mt-2 w-full accent-[hsl(var(--primary))]" />
+                            <input v-model.number="price" type="range" min="100000" max="2000000" step="10000" class="range-brand mt-2 w-full" :style="{ '--range-progress': `${priceProgress}%` }" />
+                            <div class="mt-1 flex justify-between text-[11px] text-muted-foreground">
+                                <span>$100 mil</span>
+                                <span>$2 millones</span>
+                            </div>
                         </div>
                         <div>
                             <div class="flex items-end justify-between gap-3">
-                                <Label>Enganche {{ downPaymentPct }}%</Label>
-                                <span class="text-sm text-gray-700">{{ formatPrice(downPayment) }}</span>
+                                <Label class="text-sm font-bold">Enganche</Label>
+                                <span class="text-base font-black text-secondary sm:text-lg">{{ formatPrice(downPayment) }} · {{ downPaymentPct }}%</span>
                             </div>
-                            <input v-model.number="downPaymentPct" type="range" min="10" max="80" step="5" class="mt-2 w-full accent-[hsl(var(--primary))]" />
+                            <input v-model.number="downPaymentPct" type="range" min="10" max="80" step="5" class="range-brand mt-2 w-full" :style="{ '--range-progress': `${downPaymentProgress}%` }" />
+                            <div class="mt-1 flex justify-between text-[11px] text-muted-foreground">
+                                <span>10%</span>
+                                <span>80%</span>
+                            </div>
                         </div>
                         <div>
                             <div class="flex items-end justify-between gap-3">
-                                <Label>Plazo</Label>
-                                <span class="text-sm text-gray-700">{{ term }} meses</span>
+                                <Label class="text-sm font-bold">Plazo</Label>
+                                <span class="text-base font-black text-secondary sm:text-lg">{{ term }} meses</span>
                             </div>
-                            <input v-model.number="term" type="range" min="12" max="72" step="12" class="mt-2 w-full accent-[hsl(var(--primary))]" />
+                            <input v-model.number="term" type="range" min="12" max="72" step="12" class="range-brand mt-2 w-full" :style="{ '--range-progress': `${termProgress}%` }" />
+                            <div class="mt-1 flex justify-between text-[11px] text-muted-foreground">
+                                <span>12 meses</span>
+                                <span>72 meses</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -220,18 +227,27 @@ const benefits = [
                     <div class="mt-4 grid grid-cols-2 gap-3 border-t border-secondary-foreground/15 pt-3">
                         <div>
                             <p class="text-[10px] text-secondary-foreground/60">Tasa desde</p>
-                            <p class="mt-0.5 text-sm font-bold">{{ minRate }}% anual</p>
+                            <p class="mt-0.5 text-sm font-bold">{{ SIMULATOR_ANNUAL_RATE }}% anual</p>
                         </div>
                         <div>
                             <p class="text-[10px] text-secondary-foreground/60">Monto a financiar</p>
                             <p class="mt-0.5 text-sm font-bold">{{ formatPrice(financed) }}</p>
                         </div>
                     </div>
-                    <Button variant="hero" size="lg" class="mt-4 w-full" :disabled="!model" @click="dialogOpen = true">
+                    <Button variant="hero" size="xl" class="mt-4 w-full" :disabled="!model" @click="dialogOpen = true">
                         Completar perfil y comparar
                     </Button>
-                    <p class="mt-2.5 text-center text-[11px] text-secondary-foreground/70">
-                        Cargo por servicio desde 2.5% · Cotización referencial sujeta a evaluación.
+                    <p class="mt-3 text-center text-[11px] text-secondary-foreground/70">
+                        Cargo por servicio desde 2.5%
+                        <button type="button" class="underline underline-offset-2 hover:text-white" @click="showServiceFee = !showServiceFee">
+                            Ver más
+                        </button>
+                    </p>
+                    <p v-if="showServiceFee" class="mt-1 text-center text-[10px] text-secondary-foreground/60">
+                        Cargo estimado: {{ formatPrice(serviceFeeAmount) }} (2.5% del monto financiado).
+                    </p>
+                    <p class="mt-2 text-center text-[11px] text-secondary-foreground/70">
+                        Cálculo referencial sujeto a evaluación crediticia.
                     </p>
                 </div>
             </div>

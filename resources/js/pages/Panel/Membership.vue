@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useForm } from '@inertiajs/vue3';
-import { CalendarClock, Coins, Crown, Sparkles } from '@lucide/vue';
+import { CalendarClock, CheckCircle2, Coins, Crown, Sparkles } from '@lucide/vue';
 import PanelLayout from '@/layouts/PanelLayout.vue';
 import Button from '@/components/ui/Button.vue';
 
@@ -41,7 +41,7 @@ const buyTokens = () => tokenForm.post('/panel/membresia/tokens');
             <p class="mt-1 text-sm text-muted-foreground">Gestiona tu acceso al buscador inteligente de autos en otras plataformas.</p>
         </div>
 
-        <section class="overflow-hidden rounded-3xl border border-primary/30 bg-card shadow-soft">
+        <section v-if="!membershipActive" class="overflow-hidden rounded-3xl border border-primary/30 bg-card shadow-soft">
             <div class="flex flex-wrap items-center justify-between gap-4 border-b border-border bg-gradient-to-r from-primary/10 via-accent/20 to-primary/5 p-6">
                 <div class="flex items-center gap-3">
                     <span class="grid h-12 w-12 place-items-center rounded-2xl bg-primary text-primary-foreground shadow">
@@ -50,32 +50,63 @@ const buyTokens = () => tokenForm.post('/panel/membresia/tokens');
                     <div>
                         <div class="flex flex-wrap items-center gap-2">
                             <h2 class="text-lg font-black text-secondary">Búsqueda Inteligente Ilimitada</h2>
-                            <span class="rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase" :class="membershipActive ? 'bg-emerald-500 text-white' : 'bg-muted text-muted-foreground'">
-                                {{ membershipActive ? 'Activa' : 'Inactiva' }}
+                            <span class="rounded-full bg-muted px-2.5 py-0.5 text-[10px] font-bold uppercase text-muted-foreground">
+                                Inactiva
                             </span>
                         </div>
-                        <p class="mt-1 text-xs text-muted-foreground">
-                            {{ membershipActive ? `Válida hasta ${formatDate(membership?.ends_at ?? null)}` : '3 búsquedas y 15 vistas gratis al día' }}
-                        </p>
+                        <p class="mt-1 text-xs text-muted-foreground">3 búsquedas y 15 vistas gratis al día</p>
                     </div>
                 </div>
 
-                <Button v-if="!membershipActive" variant="hero" class="gap-2" :disabled="membershipForm.processing" @click="subscribe">
+                <Button variant="secondary" class="gap-2" :disabled="membershipForm.processing" @click="subscribe">
                     <Sparkles class="h-4 w-4" /> Activar por {{ formatPrice(membershipPlan?.price ?? 499) }}
-                </Button>
-                <Button v-else variant="outline" class="gap-2" :disabled="membershipForm.processing" @click="subscribe">
-                    <CalendarClock class="h-4 w-4" /> Renovar 30 días
                 </Button>
             </div>
 
             <div class="grid gap-4 p-6 sm:grid-cols-2">
                 <div class="rounded-2xl border border-border bg-card p-4">
                     <p class="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Estado de consumo</p>
-                    <p class="mt-1 text-lg font-extrabold text-secondary">{{ membershipActive ? 'Búsquedas ilimitadas' : '3 búsquedas / 15 vistas gratis al día' }}</p>
+                    <p class="mt-1 text-lg font-extrabold text-secondary">3 búsquedas / 15 vistas gratis al día</p>
                 </div>
                 <div class="rounded-2xl border border-border bg-card p-4">
                     <p class="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Periodo actual</p>
-                    <p class="mt-1 text-sm font-bold text-secondary">{{ membershipActive ? `Válido hasta ${formatDate(membership?.ends_at ?? null)}` : 'Sin suscripción activa' }}</p>
+                    <p class="mt-1 text-sm font-bold text-secondary">Sin suscripción activa</p>
+                </div>
+            </div>
+        </section>
+
+        <section v-else class="overflow-hidden rounded-3xl border border-emerald-200 bg-emerald-50/60 shadow-soft">
+            <div class="flex flex-wrap items-center justify-between gap-4 p-6">
+                <div class="flex items-center gap-3">
+                    <span class="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-500 text-white shadow">
+                        <CheckCircle2 class="h-6 w-6" />
+                    </span>
+                    <div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <h2 class="text-lg font-black text-secondary">Membresía activa</h2>
+                            <span class="rounded-full bg-emerald-500 px-2.5 py-0.5 text-[10px] font-bold uppercase text-white">
+                                Activa
+                            </span>
+                        </div>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            Búsquedas y vistas ilimitadas · Válida hasta {{ formatDate(membership?.ends_at ?? null) }}
+                        </p>
+                    </div>
+                </div>
+
+                <Button variant="secondary" class="gap-2" :disabled="membershipForm.processing" @click="subscribe">
+                    <CalendarClock class="h-4 w-4" /> Renovar 30 días
+                </Button>
+            </div>
+
+            <div class="grid gap-4 px-6 pb-6 sm:grid-cols-2">
+                <div class="rounded-2xl border border-emerald-200 bg-white p-4">
+                    <p class="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Estado de consumo</p>
+                    <p class="mt-1 text-lg font-extrabold text-secondary">Búsquedas ilimitadas</p>
+                </div>
+                <div class="rounded-2xl border border-emerald-200 bg-white p-4">
+                    <p class="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Periodo actual</p>
+                    <p class="mt-1 text-sm font-bold text-secondary">Válido hasta {{ formatDate(membership?.ends_at ?? null) }}</p>
                 </div>
             </div>
         </section>

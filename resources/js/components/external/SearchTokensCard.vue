@@ -146,10 +146,6 @@ onBeforeUnmount(stopAnimation);
                         {{ subscribed ? 'Ver membresía' : 'Suscríbete' }}
                         <ArrowRight class="h-3.5 w-3.5" />
                     </Link>
-                    <Button variant="hero" class="h-10 gap-1.5 rounded-full text-xs font-black" @click="onSearch?.()">
-                        <Sparkles class="h-3.5 w-3.5" /> Buscar en otras plataformas
-                        <ArrowRight class="h-3.5 w-3.5" />
-                    </Button>
                 </div>
             </div>
         </div>

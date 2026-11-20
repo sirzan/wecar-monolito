@@ -338,6 +338,13 @@ const normalizeOffer = (offer: any) => {
     };
 };
 
+const rangeProgress = (value: number | null, min: number, max: number): string => {
+    const numeric = Number(value ?? min);
+    const percentage = ((numeric - min) / (max - min)) * 100;
+
+    return `${Math.min(100, Math.max(0, percentage))}%`;
+};
+
 const formatPrice = (value: number) => {
     const amount = Number(value);
 
@@ -401,6 +408,49 @@ const loadProfile = async () => {
         profile.debts = saved.deuda_mensual !== null && saved.deuda_mensual !== undefined
             ? Number(saved.deuda_mensual)
             : profile.debts;
+
+        if (saved.birthdate) {
+            const birthdate = new Date(saved.birthdate);
+
+            if (!Number.isNaN(birthdate.getTime())) {
+                const today = new Date();
+                let age = today.getFullYear() - birthdate.getFullYear();
+                const monthDiff = today.getMonth() - birthdate.getMonth();
+
+                if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthdate.getDate())) {
+                    age--;
+                }
+
+                if (age >= 18 && age <= 99) {
+                    profile.age = age;
+                }
+            }
+        }
+
+        const employmentMap: Record<string, string> = {
+            formal: 'fijo',
+            independiente: 'honorarios',
+            honorarios: 'honorarios',
+            'negocio propio': 'negocio',
+            eventual: 'eventual',
+        };
+        const savedEmployment = String(saved.tipo_trabajo ?? '').trim().toLowerCase();
+
+        if (savedEmployment && employmentMap[savedEmployment] && !profile.employment) {
+            profile.employment = employmentMap[savedEmployment];
+        }
+
+        const tenureMap: Record<string, number> = {
+            'menos de 1 año': 0,
+            '1 a 3 años': 2,
+            '3 a 5 años': 4,
+            'más de 5 años': 6,
+        };
+        const savedTenure = String(saved.antiguedad ?? '').trim().toLowerCase();
+
+        if (savedTenure && savedTenure in tenureMap && profile.tenure === null) {
+            profile.tenure = tenureMap[savedTenure];
+        }
     } catch {
         // El usuario puede completar sus datos manualmente.
     }
@@ -408,16 +458,22 @@ const loadProfile = async () => {
 
 watch(
     () => props.open,
-    (open) => {
-        if (open) {
-            reset();
-            syncFromInitial();
-            loginPromptOpen.value = !user.value;
-            application.full_name = user.value?.name ?? '';
-            application.email = user.value?.email ?? '';
-            application.phone = basics.phone;
-            void loadSavedDocuments();
-            void loadProfile();
+    async (open) => {
+        if (!open) {
+            return;
+        }
+
+        reset();
+        syncFromInitial();
+        loginPromptOpen.value = !user.value;
+        application.full_name = user.value?.name ?? '';
+        application.email = user.value?.email ?? '';
+        application.phone = basics.phone;
+        void loadSavedDocuments();
+
+        if (user.value) {
+            await loadProfile();
+            step.value = 2;
         }
     },
     { immediate: true },
@@ -804,21 +860,21 @@ const submit = async () => {
                                         <span class="text-secondary-foreground/65">Precio del auto</span>
                                         <strong class="text-base font-black">{{ formatPrice(price) }}</strong>
                                     </div>
-                                    <input v-model.number="profile.price" type="range" min="50000" max="5000000" step="10000" :disabled="step > 2" class="mt-2 w-full accent-[hsl(var(--primary))] disabled:opacity-60" />
+                                    <input v-model.number="profile.price" type="range" min="50000" max="5000000" step="10000" :disabled="step > 2" class="range-brand mt-2 w-full disabled:opacity-60" :style="{ '--range-progress': rangeProgress(profile.price, 50000, 5000000) }" />
                                 </div>
                                 <div>
                                     <div class="flex items-center justify-between gap-2 text-xs">
                                         <span class="text-secondary-foreground/65">Enganche</span>
                                         <strong class="text-base font-black">{{ formatPrice(downPaymentAmount) }} · {{ basics.downPayment }}%</strong>
                                     </div>
-                                    <input v-model.number="basics.downPayment" type="range" min="10" max="80" step="5" :disabled="step > 2" class="mt-2 w-full accent-[hsl(var(--primary))] disabled:opacity-60" />
+                                    <input v-model.number="basics.downPayment" type="range" min="10" max="80" step="5" :disabled="step > 2" class="range-brand mt-2 w-full disabled:opacity-60" :style="{ '--range-progress': rangeProgress(basics.downPayment, 10, 80) }" />
                                 </div>
                                 <div>
                                     <div class="flex items-center justify-between gap-2 text-xs">
                                         <span class="text-secondary-foreground/65">Plazo</span>
                                         <strong class="text-base font-black">{{ basics.term }} meses</strong>
                                     </div>
-                                    <input v-model.number="basics.term" type="range" min="12" max="72" step="12" :disabled="step > 2" class="mt-2 w-full accent-[hsl(var(--primary))] disabled:opacity-60" />
+                                    <input v-model.number="basics.term" type="range" min="12" max="72" step="12" :disabled="step > 2" class="range-brand mt-2 w-full disabled:opacity-60" :style="{ '--range-progress': rangeProgress(basics.term, 12, 72) }" />
                                 </div>
                             </div>
                             <div class="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-white/10 pt-4 text-xs">
@@ -851,6 +907,7 @@ const submit = async () => {
                             <div class="sm:col-span-2">
                                 <Label for="income">Ingreso mensual neto *</Label>
                                 <MoneyInput id="income" v-model="profile.income" data-field="income" :invalid="fieldInvalid('income')" class="mt-1.5" placeholder="Ej. 25,000" />
+                                <p class="mt-1 text-[11px] text-muted-foreground">Ejemplo: $25,000 MXN netos al mes.</p>
                                 <FormFieldError :message="fieldMessage('income')" />
                             </div>
                             <div>
@@ -869,7 +926,7 @@ const submit = async () => {
                             </div>
                             <div>
                                 <Label for="employment">Tipo de empleo *</Label>
-                                <select id="employment" v-model="profile.employment" data-field="employment" :aria-invalid="fieldInvalid('employment') || undefined" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" :class="fieldInvalid('employment') ? 'border-destructive ring-2 ring-destructive/20' : ''">
+                                <select id="employment" v-model="profile.employment" data-field="employment" :aria-invalid="fieldInvalid('employment') || undefined" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background field-select pl-3 pr-10 text-sm" :class="fieldInvalid('employment') ? 'border-destructive ring-2 ring-destructive/20' : ''">
                                     <option value="">Selecciona una opción</option>
                                     <option value="fijo">Empleado fijo</option>
                                     <option value="honorarios">Honorarios</option>
@@ -880,7 +937,7 @@ const submit = async () => {
                             </div>
                             <div class="sm:col-span-2">
                                 <Label for="bureau">Historial en Buró / Círculo *</Label>
-                                <select id="bureau" v-model="profile.bureau" data-field="bureau" :aria-invalid="fieldInvalid('bureau') || undefined" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" :class="fieldInvalid('bureau') ? 'border-destructive ring-2 ring-destructive/20' : ''">
+                                <select id="bureau" v-model="profile.bureau" data-field="bureau" :aria-invalid="fieldInvalid('bureau') || undefined" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background field-select pl-3 pr-10 text-sm" :class="fieldInvalid('bureau') ? 'border-destructive ring-2 ring-destructive/20' : ''">
                                     <option value="">Selecciona una opción</option>
                                     <option value="excelente">Excelente — sin atrasos</option>
                                     <option value="bueno">Bueno — pagos puntuales</option>
@@ -894,21 +951,21 @@ const submit = async () => {
                             <template v-if="!props.car">
                                 <div>
                                     <Label for="brand">Marca</Label>
-                                    <select id="brand" v-model="profile.brandId" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" @change="onBrandChange">
+                                    <select id="brand" v-model="profile.brandId" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background field-select pl-3 pr-10 text-sm" @change="onBrandChange">
                                         <option value="">Selecciona</option>
                                         <option v-for="brand in brands" :key="brand.id" :value="brand.id">{{ brand.name }}</option>
                                     </select>
                                 </div>
                                 <div>
                                     <Label for="model">Modelo</Label>
-                                    <select id="model" v-model="profile.modelId" :disabled="!profile.brandId" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50" @change="onModelChange">
+                                    <select id="model" v-model="profile.modelId" :disabled="!profile.brandId" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background field-select pl-3 pr-10 text-sm disabled:opacity-50" @change="onModelChange">
                                         <option value="">{{ profile.brandId ? 'Selecciona el modelo' : 'Selecciona la marca primero' }}</option>
                                         <option v-for="model in modelOptions" :key="model.id" :value="model.id">{{ model.name }}</option>
                                     </select>
                                 </div>
                                 <div>
                                     <Label for="year">Año</Label>
-                                    <select id="year" v-model.number="profile.year" data-field="year" :aria-invalid="fieldInvalid('year') || undefined" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" :class="fieldInvalid('year') ? 'border-destructive ring-2 ring-destructive/20' : ''">
+                                    <select id="year" v-model.number="profile.year" data-field="year" :aria-invalid="fieldInvalid('year') || undefined" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background field-select pl-3 pr-10 text-sm" :class="fieldInvalid('year') ? 'border-destructive ring-2 ring-destructive/20' : ''">
                                         <option :value="null">Selecciona el año</option>
                                         <option v-for="year in vehicleYears" :key="year" :value="year">{{ year }}</option>
                                     </select>
@@ -927,7 +984,7 @@ const submit = async () => {
                                     id="version"
                                     v-model="profile.version"
                                     :disabled="versionsLoading || versionOptions.length === 0"
-                                    class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"
+                                    class="mt-1.5 h-10 w-full rounded-md border border-input bg-background field-select pl-3 pr-10 text-sm disabled:opacity-50"
                                 >
                                     <option value="">
                                         {{ versionsLoading ? 'Cargando versiones…' : versionOptions.length ? 'Selecciona la versión' : 'Sin versiones disponibles' }}
@@ -957,8 +1014,9 @@ const submit = async () => {
                             <template v-else>
                                 <div class="rounded-3xl border border-primary/20 bg-gradient-to-r from-accent/80 via-card to-accent/40 p-5 sm:p-6">
                                     <p class="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-primary">
-                                        <Sparkles class="h-4 w-4" /> Tu precalificación
+                                        <Sparkles class="h-4 w-4" /> Precalificación con IA
                                     </p>
+                                    <p class="mt-1 text-xs text-muted-foreground">Forma rápida para darte opciones reales.</p>
                                     <div class="mt-5 grid gap-4 sm:grid-cols-3">
                                         <div>
                                             <p class="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Monto a financiar</p>

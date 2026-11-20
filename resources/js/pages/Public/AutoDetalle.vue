@@ -48,6 +48,7 @@ import CarCard, { type CarCardData } from '@/components/site/CarCard.vue';
 import Button from '@/components/ui/Button.vue';
 import FinanciarAutoDialog from '@/components/credito/FinanciarAutoDialog.vue';
 import { useFavoritesStore } from '@/stores/favorites';
+import { CAR_DETAIL_ANNUAL_RATE, estimatedMonthlyFromPrice, monthlyPayment, serviceFee } from '@/lib/creditCalculator';
 
 defineOptions({ layout: PublicLayout });
 
@@ -119,43 +120,22 @@ const formatKm = (value: number | null) =>
 // Finance Calculator State
 const downPaymentPct = ref(20);
 const termMonths = ref(48);
-const effectiveMinRate = computed(() => {
-    const rate = Number(props.financing.min_rate);
-
-    return Number.isFinite(rate) && rate > 0 ? rate : 12.5;
-});
-const effectiveMaxTerm = computed(() => {
-    const term = Number(props.financing.max_term);
-
-    return Number.isFinite(term) && term >= 12 ? term : 72;
-});
-const annualInterestRate = ref(effectiveMinRate.value);
+const annualInterestRate = ref(CAR_DETAIL_ANNUAL_RATE);
 
 const financedAmount = computed(() => {
     return Math.max(0, props.car.price * (1 - downPaymentPct.value / 100));
 });
 
-const calculatedMonthlyPayment = computed(() => {
-    const amount = financedAmount.value;
-    const monthlyRate = annualInterestRate.value / 100 / 12;
-    if (amount <= 0 || monthlyRate === 0) return 0;
-    return Math.round((amount * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -termMonths.value)));
-});
+const calculatedMonthlyPayment = computed(() =>
+    monthlyPayment(financedAmount.value, annualInterestRate.value, termMonths.value),
+);
 
-// Fast teaser calculation using the lowest active financing rate.
-const teaserMonthly = computed(() => {
-    const price = Number(props.car.price);
-    const rate = effectiveMinRate.value / 100 / 12;
-    const term = Math.min(72, effectiveMaxTerm.value);
+const serviceFeeAmount = computed(() => serviceFee(financedAmount.value));
+const downPaymentProgress = computed(() => Math.min(100, Math.max(0, ((downPaymentPct.value - 10) / 60) * 100)));
+const termProgress = computed(() => Math.min(100, Math.max(0, ((termMonths.value - 12) / 60) * 100)));
 
-    if (!Number.isFinite(price) || price <= 0 || rate <= 0 || term <= 0) {
-        return 0;
-    }
-
-    const financed = price * 0.8;
-
-    return Math.round((financed * rate) / (1 - Math.pow(1 + rate, -term)));
-});
+// Estimado rápido con la tasa promedio de ficha de auto.
+const teaserMonthly = computed(() => estimatedMonthlyFromPrice(Number(props.car.price)));
 
 // Reference price distribution from real WeCar comparables.
 const refMin = computed(() => props.priceReference.p25 ?? Math.round(props.car.price * 0.86));
@@ -530,7 +510,7 @@ const jsonLd = computed(() => [
                             <span class="text-xs font-bold text-muted-foreground">/mes</span>
                         </p>
                         <p class="mt-0.5 text-[11px] text-muted-foreground">
-                            Calculado con 20% de enganche · Tasa desde {{ effectiveMinRate }}% anual
+                            Calculado con 20% de enganche · Tasa estimada {{ CAR_DETAIL_ANNUAL_RATE }}% anual
                         </p>
                         <button
                             type="button"
@@ -557,7 +537,8 @@ const jsonLd = computed(() => [
                                     min="10"
                                     max="70"
                                     step="5"
-                                    class="h-2 w-full accent-primary mt-1"
+                                    class="range-brand mt-1 w-full"
+                                    :style="{ '--range-progress': `${downPaymentProgress}%` }"
                                 />
                             </div>
 
@@ -572,7 +553,8 @@ const jsonLd = computed(() => [
                                     min="12"
                                     max="72"
                                     step="12"
-                                    class="h-2 w-full accent-primary mt-1"
+                                    class="range-brand mt-1 w-full"
+                                    :style="{ '--range-progress': `${termProgress}%` }"
                                 />
                             </div>
                         </div>
@@ -581,6 +563,7 @@ const jsonLd = computed(() => [
                             <div>
                                 <p class="text-[11px] font-semibold text-muted-foreground">Mensualidad estimada</p>
                                 <p class="text-xl font-black text-primary">{{ formatPrice(calculatedMonthlyPayment) }}</p>
+                                <p class="mt-0.5 text-[10px] text-muted-foreground">Cargo por servicio (2.5%): {{ formatPrice(serviceFeeAmount) }}</p>
                             </div>
                             <Button size="sm" variant="hero" class="rounded-full" @click="financiarOpen = true">
                                 Solicitar
@@ -597,7 +580,7 @@ const jsonLd = computed(() => [
                             rel="noopener nofollow"
                             class="inline-flex w-full items-center justify-center gap-2 rounded-full bg-secondary px-4 py-3 text-sm font-bold text-secondary-foreground shadow-soft transition hover:bg-secondary/90"
                         >
-                            <ExternalLink class="h-4 w-4" /> Ver anuncio original
+                            <MessageCircle class="h-4 w-4" /> Contactar al anunciante
                         </a>
                         <Button
                             variant="hero"
@@ -605,7 +588,7 @@ const jsonLd = computed(() => [
                             class="w-full gap-2 text-base font-bold shadow-elegant"
                             @click="financiarOpen = true"
                         >
-                            <Banknote class="h-5 w-5" /> Financiar este auto
+                            <Banknote class="h-5 w-5" /> Solicitar financiamiento
                         </Button>
 
                         <div class="grid grid-cols-2 gap-2.5">

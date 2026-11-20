@@ -15,7 +15,7 @@ const footer = computed(() => page.props.site?.footer ?? {});
             <div>
                 <Logo variant="light" />
                 <p class="mt-4 text-sm text-secondary-foreground/70">
-                    Encuentra tu auto ideal entre más de 500,000 opciones que buscamos para ti.
+                    Encuentra tu auto ideal de forma fácil y segura entre más de 500,000 opciones.
                 </p>
                 <div class="mt-5 flex gap-3">
                     <a href="#" aria-label="Facebook" class="grid h-9 w-9 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-primary hover:text-white">
@@ -52,7 +52,7 @@ const footer = computed(() => page.props.site?.footer ?? {});
                 <ul class="mt-4 space-y-2 text-sm text-secondary-foreground/80">
                     <li><Link href="/comprar" class="hover:text-primary">Comprar auto</Link></li>
                     <li><Link href="/vende" class="hover:text-primary">Vende tu auto</Link></li>
-                    <li><Link href="/credito" class="hover:text-primary">Solicitar crédito</Link></li>
+                    <li><Link href="/credito" class="hover:text-primary">Solicitar créditos</Link></li>
                     <li><Link href="/garantia" class="hover:text-primary">Garantía</Link></li>
                     <li><Link href="/certificaciones" class="hover:text-primary">Certificaciones</Link></li>
                     <li>
@@ -100,7 +100,7 @@ const footer = computed(() => page.props.site?.footer ?? {});
 
         <div class="border-t border-white/10">
             <div class="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 px-6 py-4 text-center text-xs text-secondary-foreground/60 sm:flex-row sm:text-left">
-                <span>{{ footer.copyright || `© ${new Date().getFullYear()} Wecar México S.A.S. Todos los derechos reservados.` }}</span>
+                <span>{{ footer.copyright || `© ${new Date().getFullYear()} Wecar Technology S.A.S. Todos los derechos reservados.` }}</span>
                 <div class="flex items-center gap-4">
                     <Link href="/terminos" class="hover:text-primary">Términos y condiciones</Link>
                     <Link href="/privacidad" class="hover:text-primary">Aviso de privacidad</Link>

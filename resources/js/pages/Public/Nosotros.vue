@@ -28,7 +28,7 @@ const values = [
     {
         icon: Heart,
         title: 'Cercanía',
-        description: 'Te tratamos como persona, no como folio. Acompañamiento real y humano.',
+        description: 'Te acompañamos antes, durante y después de tu compra para que siempre tengas un respaldo real.',
     },
     {
         icon: Sparkles,
@@ -38,7 +38,7 @@ const values = [
     {
         icon: ShieldCheck,
         title: 'Confianza',
-        description: 'Validamos cada auto y cada operación para que compres seguro.',
+        description: 'Validamos a cada usuario para que cada operación sea más segura.',
     },
 ];
 </script>
@@ -99,7 +99,7 @@ const values = [
             <div class="relative">
                 <div class="overflow-hidden rounded-[2rem] border border-border bg-card shadow-elegant">
                     <img
-                        src="/images/nosotros-team.webp"
+                        src="/images/nosotros-team-polos.jpg"
                         alt="Equipo WeCar"
                         class="aspect-[4/3] w-full object-cover"
                         loading="lazy"
@@ -149,7 +149,7 @@ const values = [
                         </span>
                         <div>
                             <p class="text-[10px] font-bold uppercase tracking-wider text-primary">Misión</p>
-                            <h3 class="text-lg font-black text-secondary">Ayudarte a comprar con seguridad y claridad</h3>
+                            <h3 class="text-lg font-black text-secondary">Ayudarte a encontrar tu auto ideal con seguridad y claridad</h3>
                         </div>
                     </div>
                     <p class="mt-5 text-sm leading-relaxed text-muted-foreground sm:text-base">
@@ -176,11 +176,15 @@ const values = [
                 :key="value.title"
                 class="rounded-3xl border border-border bg-card p-6 shadow-soft transition-all hover:-translate-y-1 hover:border-primary/40 hover:shadow-elegant"
             >
-                <span class="grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary">
-                    <component :is="value.icon" class="h-6 w-6" stroke-width="2.1" />
-                </span>
-                <h3 class="mt-5 text-lg font-black text-secondary">{{ value.title }}</h3>
-                <p class="mt-2 text-xs leading-relaxed text-muted-foreground sm:text-sm">{{ value.description }}</p>
+                <div class="flex items-start gap-3">
+                    <span class="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary">
+                        <component :is="value.icon" class="h-6 w-6" stroke-width="2.1" />
+                    </span>
+                    <div class="min-w-0">
+                        <h3 class="text-lg font-black leading-snug text-secondary">{{ value.title }}</h3>
+                        <p class="mt-2 text-xs leading-relaxed text-muted-foreground sm:text-sm">{{ value.description }}</p>
+                    </div>
+                </div>
             </article>
         </div>
     </section>

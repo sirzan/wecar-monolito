@@ -73,13 +73,13 @@ export function useExternalSearch() {
         }
     };
 
-    const search = async (query: string, refresh = false) => {
+    const search = async (query: string, refresh = false, options: { modal?: boolean } = {}) => {
         if (!query.trim() || loading.value) return;
         lastQuery.value = query.trim();
         loading.value = true;
         error.value = null;
         results.value = [];
-        showModal.value = true;
+        showModal.value = options.modal ?? true;
 
         try {
             const payload = await request<ExternalSearchResponse>('/api/external-search', {

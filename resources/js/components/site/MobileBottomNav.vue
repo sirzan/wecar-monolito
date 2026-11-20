@@ -10,7 +10,7 @@ const items = computed(() => [
     { href: '/', label: 'Inicio', icon: Home, end: true },
     { href: '/comprar', label: 'Buscar', icon: Search },
     { href: '/vende', label: 'Vender', icon: PlusCircle },
-    { href: '/credito', label: 'Crédito', icon: Landmark },
+    { href: '/credito', label: 'Créditos', icon: Landmark },
     { href: page.props.auth.user ? '/panel' : '/login', label: 'Cuenta', icon: User },
 ]);
 

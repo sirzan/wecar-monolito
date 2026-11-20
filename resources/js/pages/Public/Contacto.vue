@@ -69,7 +69,7 @@ const submit = () => {
             </h1>
 
             <p class="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-white/80 sm:text-base">
-                ¿Tienes dudas? Nuestro equipo te responde lo antes posible.
+                Consulta con nuestros agentes de IA ahora, te atienden 24/7.
             </p>
 
             <p class="mt-6 inline-flex items-center gap-2 text-xs font-semibold text-white/65">

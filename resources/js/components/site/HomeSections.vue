@@ -335,8 +335,8 @@ onUnmounted(() => {
                         </p>
 
                         <div
-                            class="mt-8 flex flex-col items-center justify-between gap-4 border-t border-white/10 pt-6 sm:flex-row lg:pr-[28%]">
-                            <p class="text-center text-xs text-white/60 sm:text-left">
+                            class="mt-8 flex flex-col items-start gap-3 border-t border-white/10 pt-6 sm:flex-row sm:items-center sm:gap-4 lg:pr-[28%]">
+                            <p class="text-left text-xs text-white/60">
                                 Publica gratis con el plan Básico y cambia cuando quieras.
                             </p>
                             <Button as="a" href="/vende" size="lg" variant="hero" class="w-full gap-2 sm:w-auto">
@@ -379,7 +379,7 @@ onUnmounted(() => {
                 </div>
                 <div class="mt-6 flex">
                     <Button as="a" href="/garantia" variant="hero" size="pill" class="w-full shadow-elegant sm:w-auto">
-                        Conoce más sobre la garantía
+                        Conoce más
                     </Button>
                 </div>
             </div>

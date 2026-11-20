@@ -6,6 +6,7 @@ import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
 import PhoneInput from '@/components/ui/PhoneInput.vue';
 import { cn } from '@/lib/utils';
+import { COVERAGE_STATE, mexicoStates } from '@/lib/mexicoStates';
 
 interface Pricing {
     base_price: number;
@@ -101,12 +102,23 @@ const form = reactive({
     full_name: '',
     email: '',
     whatsapp: '',
-    state: '',
+    state: COVERAGE_STATE,
     brand: '',
     model: '',
     year: '',
     notes: '',
 });
+
+const coverageNoticeOpen = ref(false);
+
+watch(
+    () => form.state,
+    (state) => {
+        if (state && state !== COVERAGE_STATE) {
+            coverageNoticeOpen.value = true;
+        }
+    },
+);
 
 const currentMonth = ref(todayInTimezone().slice(0, 7));
 const availability = ref<DayAvailability[]>([]);
@@ -235,7 +247,9 @@ const prefill = () => {
     form.full_name = props.profile.full_name ?? '';
     form.email = props.profile.email ?? '';
     form.whatsapp = props.profile.whatsapp ?? '';
-    form.state = props.profile.state ?? '';
+    form.state = (mexicoStates as readonly string[]).includes(props.profile.state)
+        ? props.profile.state
+        : COVERAGE_STATE;
     prefilled.value = true;
 };
 
@@ -243,7 +257,7 @@ const reset = () => {
     form.full_name = '';
     form.email = '';
     form.whatsapp = '';
-    form.state = '';
+    form.state = COVERAGE_STATE;
     form.brand = '';
     form.model = '';
     form.year = '';
@@ -490,7 +504,13 @@ const errorFor = (field: string): string | null => fieldErrors.value[field]?.[0]
 
                     <div>
                         <Label for="cert-state" class="text-xs font-bold text-secondary">Estado *</Label>
-                        <Input id="cert-state" v-model="form.state" placeholder="Ej. Nuevo León" class="mt-1.5 h-11 rounded-full bg-[#FAF9F7]" />
+                        <select
+                            id="cert-state"
+                            v-model="form.state"
+                            class="field-select mt-1.5 h-11 w-full rounded-full border border-input bg-[#FAF9F7] pl-4 pr-10 text-sm"
+                        >
+                            <option v-for="state in mexicoStates" :key="state" :value="state">{{ state }}</option>
+                        </select>
                         <p v-if="errorFor('state')" class="mt-1 text-xs font-semibold text-destructive">{{ errorFor('state') }}</p>
                     </div>
 
@@ -656,6 +676,42 @@ const errorFor = (field: string): string | null => fieldErrors.value[field]?.[0]
                         </Button>
                     </div>
                 </form>
+            </div>
+
+            <div
+                v-if="coverageNoticeOpen"
+                class="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+                role="dialog"
+                aria-modal="true"
+                @click.stop="coverageNoticeOpen = false"
+            >
+                <div class="w-full max-w-md rounded-3xl border border-border bg-card p-6 text-center shadow-elegant" @click.stop>
+                    <span class="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary">
+                        <MapPin class="h-6 w-6" />
+                    </span>
+                    <h3 class="mt-4 text-lg font-black text-secondary">Cobertura limitada</h3>
+                    <p class="mt-2 text-sm text-muted-foreground">
+                        Solo disponible en Nuevo León por ahora, muy pronto en tu ciudad.
+                    </p>
+                    <div class="mt-6 grid gap-2">
+                        <Button
+                            type="button"
+                            variant="hero"
+                            class="w-full rounded-full"
+                            @click="form.state = COVERAGE_STATE; coverageNoticeOpen = false"
+                        >
+                            Cambiar a Nuevo León
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            class="w-full rounded-full"
+                            @click="coverageNoticeOpen = false"
+                        >
+                            Entendido
+                        </Button>
+                    </div>
+                </div>
             </div>
         </div>
     </Teleport>

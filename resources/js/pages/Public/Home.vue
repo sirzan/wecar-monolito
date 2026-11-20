@@ -33,10 +33,10 @@ const props = defineProps<{
 const localQuery = ref('');
 const searching = ref(false);
 const searchPhrases = [
-    'Buscar marca, modelo…',
-    'Busca un SUV familiar…',
-    'Encuentra un auto híbrido…',
-    'Busca un seminuevo en Monterrey…',
+    'Toyota Corolla 2022, hasta $350,000, en Monterrey',
+    'SUV automática 2021, máximo $450,000, CDMX',
+    'Pickup 2020, hasta $600,000, en Guadalajara',
+    'Honda Civic 2023, menos de $400,000, Querétaro',
 ];
 const financiarOpen = ref(false);
 const rewardOpen = ref(false);
@@ -211,9 +211,6 @@ const jsonLd = [
                     <p class="text-xs font-bold uppercase tracking-wider text-primary">Búsqueda inteligente</p>
                     <h2 class="section-title mt-2 text-secondary">También encontramos autos en otras plataformas</h2>
                 </div>
-                <Button variant="outline" class="gap-2 rounded-full" @click="searchExternal">
-                    Buscar en otras plataformas
-                </Button>
             </div>
 
             <div v-if="props.externalCars.length" class="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
