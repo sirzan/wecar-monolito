@@ -43,7 +43,7 @@ const formatPrice = (value: number) =>
                     <Button as="a" href="/vende" variant="hero" class="gap-2">
                         <Plus class="h-4 w-4" /> Publicar auto
                     </Button>
-                    <Button as="a" href="/panel/tramites" variant="outline" class="border-white bg-white text-secondary hover:bg-white/90">
+                    <Button as="a" href="/panel/tramites" variant="white" class="gap-2">
                         <CreditCard class="h-4 w-4" /> Mis trámites de crédito
                     </Button>
                 </div>

@@ -50,11 +50,30 @@ const submit = () => {
 <template>
     <SeoHead :title="seo.title" :description="seo.description" :canonical="seo.canonical" />
 
-    <section class="bg-gradient-hero px-4 py-14 sm:px-6">
-        <div class="mx-auto max-w-7xl">
-            <h1 class="page-title text-secondary">Hablemos.</h1>
-            <p class="page-subtitle mt-4 max-w-xl text-muted-foreground">
-                ¿Tienes dudas? Nuestro equipo te responde lo antes posible.
+    <section class="relative isolate overflow-hidden text-white">
+        <img
+            src="/images/credito-hero.jpg"
+            alt="Equipo WeCar acompañando a clientes en México"
+            class="absolute inset-0 -z-20 h-full w-full object-cover"
+            loading="eager"
+        />
+        <div class="absolute inset-0 -z-10 bg-gradient-to-b from-secondary/85 via-secondary/75 to-secondary/95" />
+
+        <div class="mx-auto max-w-3xl px-4 py-14 text-center sm:px-6 sm:py-20">
+            <span class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.2em] text-primary backdrop-blur-md">
+                <Mail class="h-3 w-3" /> Estamos para ayudarte
+            </span>
+
+            <h1 class="mt-5 text-4xl font-black leading-tight tracking-tight text-white sm:text-5xl">
+                Hablemos.
+            </h1>
+
+            <p class="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-white/80 sm:text-base">
+                Consulta con nuestros agentes de IA ahora, te atienden 24/7.
+            </p>
+
+            <p class="mt-6 inline-flex items-center gap-2 text-xs font-semibold text-white/65">
+                <span class="h-px w-8 bg-primary" /> Respuesta en menos de 24 horas
             </p>
         </div>
     </section>
@@ -108,7 +127,7 @@ const submit = () => {
                     />
                     <FormFieldError :message="validation.fieldError('message')" />
                 </div>
-                <Button type="submit" class="w-full" :disabled="form.processing">
+                <Button type="submit" class="w-full rounded-full" :disabled="form.processing">
                     {{ form.processing ? 'Enviando…' : 'Enviar mensaje' }}
                 </Button>
             </div>

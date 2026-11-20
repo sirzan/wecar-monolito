@@ -1,9 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import { Link } from '@inertiajs/vue3';
+import { computed, onMounted } from 'vue';
+import { Link, router } from '@inertiajs/vue3';
 import {
-    ChevronLeft,
-    ChevronRight,
     GitCompare,
     Heart,
     Landmark,
@@ -12,9 +10,9 @@ import {
     Share2,
     ShieldCheck,
     Tag,
-    X,
 } from '@lucide/vue';
 import CarPhotoStrip from '@/components/site/CarPhotoStrip.vue';
+import { estimatedMonthlyFromPrice } from '@/lib/creditCalculator';
 import { useCompareStore } from '@/stores/compare';
 import { useFavoritesStore } from '@/stores/favorites';
 import { cn } from '@/lib/utils';
@@ -55,13 +53,11 @@ const favorites = useFavoritesStore();
 const isFavorite = computed(() => favorites.has(props.car.id));
 
 onMounted(() => void favorites.bootstrap());
-const lightbox = ref(false);
-const lightboxIndex = ref(0);
 
 const formatPrice = (value: number) =>
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(value);
 
-const approxMonthly = (price: number) => Math.round((price * 0.8 * 0.0268) / 100) * 100;
+const approxMonthly = (price: number) => estimatedMonthlyFromPrice(price);
 
 const slides = computed(() => {
     const all = [props.car.image, ...(props.car.gallery ?? [])].filter(Boolean) as string[];
@@ -85,16 +81,6 @@ const statusBadge = computed(() => {
     };
     return map[props.car.status_label] ?? { label: props.car.status_label.toUpperCase(), className: 'bg-blue-500' };
 });
-
-const openLightbox = (index: number) => {
-    lightboxIndex.value = index;
-    lightbox.value = true;
-};
-
-const moveLightbox = (direction: number) => {
-    const total = slides.value.length;
-    lightboxIndex.value = (lightboxIndex.value + direction + total) % total;
-};
 
 const share = async () => {
     const url = `${window.location.origin}${props.car.url}`;
@@ -120,15 +106,25 @@ const whatsappUrl = computed(() => {
     const text = `Hola, me interesa el ${props.car.brand ?? ''} ${props.car.model ?? ''} ${props.car.year}`;
     return `https://wa.me/5218112345678?text=${encodeURIComponent(text)}`;
 });
+
+const openDetail = (event: MouseEvent) => {
+    const target = event.target as HTMLElement | null;
+
+    if (target?.closest('button, a, input, select, textarea, label')) {
+        return;
+    }
+
+    router.visit(props.car.url);
+};
 </script>
 
 <template>
-    <div class="group relative flex h-full flex-row overflow-hidden rounded-3xl border border-border bg-card shadow-soft transition-all duration-300 hover:-translate-y-1.5 hover:border-primary/40 hover:shadow-elegant sm:flex-col">
+    <div class="group relative flex h-full cursor-pointer flex-row overflow-hidden rounded-3xl border border-border bg-card shadow-soft transition-all duration-300 hover:-translate-y-1.5 hover:border-primary/40 hover:shadow-elegant sm:flex-col" @click="openDetail">
         <CarPhotoStrip
             :slides="slides"
             :alt="`${car.brand ?? ''} ${car.model ?? ''} ${car.year}`"
             class="aspect-square w-[36%] shrink-0 sm:aspect-[4/3] sm:w-full"
-            @open="openLightbox"
+            @open="router.visit(car.url)"
         >
             <div class="pointer-events-none absolute inset-0 bg-gradient-to-t from-secondary/30 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
             <span
@@ -247,58 +243,4 @@ const whatsappUrl = computed(() => {
             </div>
         </div>
     </div>
-
-    <Teleport to="body">
-        <div
-            v-if="lightbox"
-            role="dialog"
-            aria-modal="true"
-            class="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
-            @click="lightbox = false"
-        >
-            <div class="relative w-full max-w-md overflow-hidden rounded-3xl bg-card shadow-elegant" @click.stop>
-                <div class="relative flex items-center justify-center bg-secondary">
-                    <img :src="slides[lightboxIndex]" :alt="car.title" class="max-h-[60vh] w-full object-contain" />
-                    <button
-                        v-if="slides.length > 1"
-                        type="button"
-                        aria-label="Foto anterior"
-                        class="absolute left-2 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-black/40 text-white hover:bg-black/60"
-                        @click="moveLightbox(-1)"
-                    >
-                        <ChevronLeft class="h-5 w-5" />
-                    </button>
-                    <button
-                        v-if="slides.length > 1"
-                        type="button"
-                        aria-label="Foto siguiente"
-                        class="absolute right-2 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-black/40 text-white hover:bg-black/60"
-                        @click="moveLightbox(1)"
-                    >
-                        <ChevronRight class="h-5 w-5" />
-                    </button>
-                    <span class="absolute left-3 top-3 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-bold text-white">
-                        {{ lightboxIndex + 1 }} / {{ slides.length }}
-                    </span>
-                    <button
-                        type="button"
-                        aria-label="Cerrar"
-                        class="absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white hover:bg-black/70"
-                        @click="lightbox = false"
-                    >
-                        <X class="h-4 w-4" />
-                    </button>
-                </div>
-                <div class="flex items-center justify-between gap-2 px-4 py-3">
-                    <div class="min-w-0">
-                        <p class="truncate text-xs font-extrabold text-secondary sm:text-sm">{{ car.title }}</p>
-                        <p class="text-[10px] text-muted-foreground sm:text-xs">{{ formatPrice(car.price) }}</p>
-                    </div>
-                    <Link :href="car.url" class="shrink-0 rounded-full border border-primary/40 px-3 py-1.5 text-[10px] font-bold text-primary hover:bg-primary hover:text-primary-foreground sm:text-xs" @click="lightbox = false">
-                        Ver ficha
-                    </Link>
-                </div>
-            </div>
-        </div>
-    </Teleport>
 </template>

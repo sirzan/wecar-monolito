@@ -15,22 +15,22 @@ const footer = computed(() => page.props.site?.footer ?? {});
             <div>
                 <Logo variant="light" />
                 <p class="mt-4 text-sm text-secondary-foreground/70">
-                    Encuentra tu auto ideal entre más de 500,000 opciones que buscamos para ti.
+                    Encuentra tu auto ideal de forma fácil y segura entre más de 500,000 opciones.
                 </p>
                 <div class="mt-5 flex gap-3">
-                    <a href="#" aria-label="Facebook" class="grid h-9 w-9 place-items-center rounded-full bg-white/10 transition-colors hover:bg-primary">
+                    <a href="#" aria-label="Facebook" class="grid h-9 w-9 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-primary hover:text-white">
                         <svg viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor" aria-hidden="true">
                             <path d="M13.5 21v-7h2.4l.4-3h-2.8V9.1c0-.9.3-1.5 1.6-1.5h1.4V4.9c-.3 0-1.2-.1-2.2-.1-2.2 0-3.7 1.3-3.7 3.8V11H8v3h2.6v7h2.9z" />
                         </svg>
                     </a>
-                    <a href="#" aria-label="Instagram" class="grid h-9 w-9 place-items-center rounded-full bg-white/10 transition-colors hover:bg-primary">
+                    <a href="#" aria-label="Instagram" class="grid h-9 w-9 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-primary hover:text-white">
                         <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                             <rect x="3" y="3" width="18" height="18" rx="5" />
                             <circle cx="12" cy="12" r="4" />
                             <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
                         </svg>
                     </a>
-                    <a href="#" aria-label="TikTok" class="grid h-9 w-9 place-items-center rounded-full bg-white/10 transition-colors hover:bg-primary">
+                    <a href="#" aria-label="TikTok" class="grid h-9 w-9 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-primary hover:text-white">
                         <Music2 class="h-4 w-4" />
                     </a>
                     <a
@@ -38,7 +38,7 @@ const footer = computed(() => page.props.site?.footer ?? {});
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label="WhatsApp"
-                        class="grid h-9 w-9 place-items-center rounded-full bg-white/10 transition-colors hover:bg-primary"
+                        class="grid h-9 w-9 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-primary hover:text-white"
                     >
                         <svg viewBox="0 0 32 32" class="h-4 w-4" fill="currentColor" aria-hidden="true">
                             <path d="M19.11 17.205c-.372 0-1.088 1.39-1.518 1.39a.63.63 0 01-.315-.1c-.802-.402-1.504-.817-2.163-1.447-.545-.516-1.146-1.29-1.46-1.963a.426.426 0 01-.073-.215c0-.33.99-.945.99-1.49 0-.143-.73-2.09-.832-2.335-.143-.372-.214-.487-.6-.487-.187 0-.36-.043-.53-.043-.302 0-.53.115-.746.315-.688.645-1.032 1.318-1.06 2.264v.114c-.015.99.472 1.977 1.017 2.78 1.23 1.82 2.506 3.41 4.554 4.34.616.287 2.035.888 2.722.888.817 0 2.15-.515 2.478-1.318.215-.515.215-.946.143-1.06-.058-.157-.244-.215-.515-.357-.272-.144-1.461-.717-1.677-.79zM16.001 28.685a12.39 12.39 0 01-6.15-1.62L5 28.366l1.32-4.778A12.366 12.366 0 013.685 16C3.685 9.21 9.213 3.685 16 3.685c3.296 0 6.394 1.282 8.72 3.611A12.31 12.31 0 0128.31 16c-.002 6.79-5.527 12.685-12.31 12.685zm0-22.95C10.34 5.735 5.735 10.34 5.735 16c0 1.94.546 3.842 1.578 5.49l.245.387-.785 2.86 2.954-.773.378.224a10.235 10.235 0 005.21 1.428c5.66 0 10.265-4.605 10.265-10.265a10.197 10.197 0 00-2.998-7.265 10.196 10.196 0 00-7.27-3.013z" />
@@ -52,7 +52,7 @@ const footer = computed(() => page.props.site?.footer ?? {});
                 <ul class="mt-4 space-y-2 text-sm text-secondary-foreground/80">
                     <li><Link href="/comprar" class="hover:text-primary">Comprar auto</Link></li>
                     <li><Link href="/vende" class="hover:text-primary">Vende tu auto</Link></li>
-                    <li><Link href="/credito" class="hover:text-primary">Solicitar crédito</Link></li>
+                    <li><Link href="/credito" class="hover:text-primary">Solicitar créditos</Link></li>
                     <li><Link href="/garantia" class="hover:text-primary">Garantía</Link></li>
                     <li><Link href="/certificaciones" class="hover:text-primary">Certificaciones</Link></li>
                     <li>
@@ -100,7 +100,7 @@ const footer = computed(() => page.props.site?.footer ?? {});
 
         <div class="border-t border-white/10">
             <div class="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 px-6 py-4 text-center text-xs text-secondary-foreground/60 sm:flex-row sm:text-left">
-                <span>{{ footer.copyright || `© ${new Date().getFullYear()} Wecar México S.A.S. Todos los derechos reservados.` }}</span>
+                <span>{{ footer.copyright || `© ${new Date().getFullYear()} Wecar Technology S.A.S. Todos los derechos reservados.` }}</span>
                 <div class="flex items-center gap-4">
                     <Link href="/terminos" class="hover:text-primary">Términos y condiciones</Link>
                     <Link href="/privacidad" class="hover:text-primary">Aviso de privacidad</Link>

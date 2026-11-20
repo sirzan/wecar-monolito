@@ -1,17 +1,31 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Download, X } from '@lucide/vue';
+import { useInstallPrompt } from '@/composables/useInstallPrompt';
 
-interface BeforeInstallPromptEvent extends Event {
-    prompt: () => Promise<void>;
-    userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
-}
+const { canInstall, install: promptInstall } = useInstallPrompt();
 
 const visible = ref(false);
-const deferred = ref<BeforeInstallPromptEvent | null>(null);
 let timeout: ReturnType<typeof setTimeout> | null = null;
 
 const KEY = 'wecar.install.dismissed';
+const ONE_HOUR = 60 * 60 * 1000;
+
+const cooldownPassed = () => {
+    const dismissedAt = Number(window.localStorage.getItem(KEY) ?? 0);
+
+    return Date.now() - dismissedAt >= ONE_HOUR;
+};
+
+const schedule = () => {
+    if (timeout) clearTimeout(timeout);
+
+    timeout = setTimeout(() => {
+        if (canInstall.value && cooldownPassed()) {
+            visible.value = true;
+        }
+    }, 12000);
+};
 
 const close = () => {
     visible.value = false;
@@ -19,46 +33,31 @@ const close = () => {
 };
 
 const install = async () => {
-    if (!deferred.value) return;
+    const accepted = await promptInstall();
 
-    await deferred.value.prompt();
-    const choice = await deferred.value.userChoice;
-
-    if (choice.outcome === 'accepted') {
+    if (accepted) {
         window.localStorage.setItem(KEY, String(Date.now()));
     }
 
     visible.value = false;
-    deferred.value = null;
 };
 
-const onPrompt = (event: Event) => {
-    event.preventDefault();
-    deferred.value = event as BeforeInstallPromptEvent;
-
-    const dismissedAt = Number(window.localStorage.getItem(KEY) ?? 0);
-    const sevenDays = 7 * 24 * 60 * 60 * 1000;
-
-    if (Date.now() - dismissedAt < sevenDays) return;
-
-    timeout = setTimeout(() => {
-        visible.value = true;
-    }, 12000);
-};
-
-onMounted(() => {
-    window.addEventListener('beforeinstallprompt', onPrompt);
+watch(canInstall, (value) => {
+    if (value) {
+        schedule();
+    }
 });
 
+onMounted(schedule);
+
 onBeforeUnmount(() => {
-    window.removeEventListener('beforeinstallprompt', onPrompt);
     if (timeout) clearTimeout(timeout);
 });
 </script>
 
 <template>
     <div
-        v-if="visible && deferred"
+        v-if="visible && canInstall"
         class="bottom-offset animate-slide-up fixed left-4 z-40 w-[min(320px,calc(100vw-2rem))] rounded-2xl border border-border bg-card p-4 shadow-elegant"
     >
         <button

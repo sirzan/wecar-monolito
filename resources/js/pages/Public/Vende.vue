@@ -1105,7 +1105,7 @@ const goBack = () => {
                         <Upload class="h-10 w-10 text-muted-foreground mx-auto" />
                         <p class="mt-3 text-sm font-bold text-secondary">Arrastra y suelta tus fotos aquí, o selecciónalas</p>
                         <p class="mt-1 text-xs text-muted-foreground">Formatos JPG, PNG o WebP. Máximo 8 MB por imagen.</p>
-                        <label class="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-soft transition hover:bg-primary/90" data-field="images" tabindex="0">
+                        <label class="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-soft transition hover:bg-primary/90" data-field="images" tabindex="0">
                             <ImagePlus class="h-4 w-4" /> Seleccionar fotos
                             <input type="file" multiple accept="image/jpeg,image/png,image/webp" class="hidden" @change="onFiles" />
                         </label>

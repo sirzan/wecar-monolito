@@ -10,6 +10,7 @@ import Label from '@/components/ui/Label.vue';
 import FinanciarAutoDialog from '@/components/credito/FinanciarAutoDialog.vue';
 import FinancialPartnersCarousel from '@/components/site/FinancialPartnersCarousel.vue';
 import { vehicleYears } from '@/lib/carCatalog';
+import { monthlyPayment, serviceFee, SIMULATOR_ANNUAL_RATE } from '@/lib/creditCalculator';
 
 defineOptions({ layout: PublicLayout });
 
@@ -42,23 +43,13 @@ const versionsError = ref('');
 let versionsTimer: ReturnType<typeof setTimeout> | null = null;
 
 const models = computed(() => props.brands.find((item) => item.name === brand.value)?.models ?? []);
-const minRate = computed(() => {
-    const rates = props.financieras
-        .map((item) => Number(item.tasa_min))
-        .filter((rate) => Number.isFinite(rate) && rate > 0);
-
-    return rates.length ? Math.min(...rates) : 12.5;
-});
 const selectedBrandId = computed(() => props.brands.find((item) => item.name === brand.value)?.id ?? '');
 const selectedModelId = computed(() => models.value.find((item) => item.name === model.value)?.id ?? '');
 const selectedVersionId = computed(() => versions.value.find((item) => item.name === version.value)?.id ?? query.get('version_id') ?? '');
 const downPayment = computed(() => Math.round((price.value * downPaymentPct.value) / 100));
 const financed = computed(() => Math.max(price.value - downPayment.value, 0));
-const monthly = computed(() => {
-    const rate = minRate.value / 100 / 12;
-    if (financed.value <= 0) return 0;
-    return Math.round((financed.value * rate) / (1 - Math.pow(1 + rate, -term.value)));
-});
+const monthly = computed(() => monthlyPayment(financed.value, SIMULATOR_ANNUAL_RATE, term.value));
+const serviceFeeAmount = computed(() => serviceFee(financed.value));
 
 const loadVersions = async () => {
     if (!selectedModelId.value || !year.value) {
@@ -129,7 +120,7 @@ const benefits = [
         <div class="absolute inset-0 -z-10 bg-gradient-to-b from-secondary/80 via-secondary/70 to-background" />
 
         <div class="mx-auto max-w-4xl text-center text-white">
-            <p class="text-xs font-bold tracking-wider text-primary sm:text-sm">Crédito automotriz</p>
+            <p class="text-xs font-bold tracking-wider text-primary sm:text-sm">Créditos automotrices</p>
             <h1 class="page-title text-shadow-hero-soft mt-2 text-white">Tu auto, tu plan.</h1>
             <p class="page-subtitle mt-4 text-white/90">
                 Aprobación rápida, mensualidades a tu medida y el mejor financiamiento para ti.
@@ -142,32 +133,32 @@ const benefits = [
 
                     <div class="mt-4 grid grid-cols-2 gap-3">
                         <div>
-                            <Label>Año</Label>
-                            <select v-model.number="year" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                            <Label class="font-normal">Año</Label>
+                            <select v-model.number="year" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background field-select pl-3 pr-10 text-sm">
                                 <option :value="null">Selecciona el año</option>
                                 <option v-for="item in vehicleYears" :key="item" :value="item">{{ item }}</option>
                             </select>
                         </div>
                         <div>
-                            <Label>Marca</Label>
-                            <select v-model="brand" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" @change="model = ''">
+                            <Label class="font-normal">Marca</Label>
+                            <select v-model="brand" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background field-select pl-3 pr-10 text-sm" @change="model = ''">
                                 <option value="">Marca</option>
                                 <option v-for="item in brands" :key="item.id" :value="item.name">{{ item.name }}</option>
                             </select>
                         </div>
                         <div>
-                            <Label>Modelo</Label>
-                            <select v-model="model" :disabled="!brand" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50">
+                            <Label class="font-normal">Modelo</Label>
+                            <select v-model="model" :disabled="!brand" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background field-select pl-3 pr-10 text-sm disabled:opacity-50">
                                 <option value="">Modelo</option>
                                 <option v-for="item in models" :key="item.id" :value="item.name">{{ item.name }}</option>
                             </select>
                         </div>
                         <div>
-                            <Label>Versión</Label>
+                            <Label class="font-normal">Versión</Label>
                                 <select
                                     v-model="version"
                                     :disabled="!model || versionsLoading"
-                                    class="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"
+                                    class="mt-1.5 h-10 w-full rounded-md border border-input bg-background field-select pl-3 pr-10 text-sm disabled:opacity-50"
                                 >
                                 <option value="">
                                     {{ versionsLoading ? 'Cargando versiones…' : versions.length ? 'Versión (opcional)' : 'Versión no disponible (opcional)' }}
@@ -189,24 +180,24 @@ const benefits = [
                     <div class="mt-4 space-y-4">
                         <div>
                             <div class="flex items-end justify-between gap-3">
-                                <Label>Precio del auto</Label>
+                                <Label class="font-normal">Precio del auto</Label>
                                 <span class="text-sm text-gray-700">{{ formatPrice(price) }}</span>
                             </div>
-                            <input v-model.number="price" type="range" min="100000" max="2000000" step="10000" class="mt-2 w-full accent-[hsl(var(--primary))]" />
+                            <input v-model.number="price" type="range" min="100000" max="2000000" step="10000" class="range-brand mt-2 w-full" />
                         </div>
                         <div>
                             <div class="flex items-end justify-between gap-3">
-                                <Label>Enganche {{ downPaymentPct }}%</Label>
+                                <Label class="font-normal">Enganche {{ downPaymentPct }}%</Label>
                                 <span class="text-sm text-gray-700">{{ formatPrice(downPayment) }}</span>
                             </div>
-                            <input v-model.number="downPaymentPct" type="range" min="10" max="80" step="5" class="mt-2 w-full accent-[hsl(var(--primary))]" />
+                            <input v-model.number="downPaymentPct" type="range" min="10" max="80" step="5" class="range-brand mt-2 w-full" />
                         </div>
                         <div>
                             <div class="flex items-end justify-between gap-3">
-                                <Label>Plazo</Label>
+                                <Label class="font-normal">Plazo</Label>
                                 <span class="text-sm text-gray-700">{{ term }} meses</span>
                             </div>
-                            <input v-model.number="term" type="range" min="12" max="72" step="12" class="mt-2 w-full accent-[hsl(var(--primary))]" />
+                            <input v-model.number="term" type="range" min="12" max="72" step="12" class="range-brand mt-2 w-full" />
                         </div>
                     </div>
                 </div>
@@ -214,18 +205,22 @@ const benefits = [
                 <div class="bg-secondary p-4 text-secondary-foreground sm:p-5">
                     <p class="text-[11px] font-bold text-primary">Mensualidad estimada</p>
                     <div class="mt-1 flex items-end gap-2">
-                        <strong class="text-3xl font-black sm:text-4xl">{{ formatPrice(monthly) }}</strong>
+                        <strong class="text-3xl font-medium sm:text-4xl">{{ formatPrice(monthly) }}</strong>
                         <span class="pb-1 text-xs text-secondary-foreground/70">/ mes</span>
                     </div>
                     <div class="mt-4 grid grid-cols-2 gap-3 border-t border-secondary-foreground/15 pt-3">
                         <div>
-                            <p class="text-[10px] text-secondary-foreground/60">Tasa desde</p>
-                            <p class="mt-0.5 text-sm font-bold">{{ minRate }}% anual</p>
+                            <p class="text-[10px] text-secondary-foreground/60">Tasa aplicada</p>
+                            <p class="mt-0.5 text-sm font-normal">{{ SIMULATOR_ANNUAL_RATE }}% anual</p>
                         </div>
                         <div>
                             <p class="text-[10px] text-secondary-foreground/60">Monto a financiar</p>
-                            <p class="mt-0.5 text-sm font-bold">{{ formatPrice(financed) }}</p>
+                            <p class="mt-0.5 text-sm font-normal">{{ formatPrice(financed) }}</p>
                         </div>
+                    </div>
+                    <div class="mt-3 flex items-center justify-between border-t border-secondary-foreground/15 pt-3">
+                        <p class="text-[10px] text-secondary-foreground/60">Cargo por servicio (2.5%)</p>
+                        <p class="text-sm font-normal">{{ formatPrice(serviceFeeAmount) }}</p>
                     </div>
                     <Button variant="hero" size="lg" class="mt-4 w-full" :disabled="!model" @click="dialogOpen = true">
                         Completar perfil y comparar
