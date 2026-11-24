@@ -110,7 +110,7 @@ class ExternalSearchService
             if (is_array($cached) && isset($cached['results'])) {
                 $filtered = $this->filterRelevantResults($cached['results'], $query);
 
-                if (count($filtered) >= 3) {
+                if (count($filtered) >= 1) {
                     return $this->searchResponse([
                         ...$cached,
                         'results' => $filtered,
@@ -126,7 +126,7 @@ class ExternalSearchService
                     $query,
                 );
 
-                if (count($results) >= 3) {
+                if (count($results) >= 1) {
                     $payload = [
                         'results' => $results,
                         'platformsSearched' => $databaseCache['platforms_searched'] ?? [],
@@ -169,7 +169,27 @@ class ExternalSearchService
         }
 
         $candidates = $this->normalizer->balanceByPlatform(array_values($this->normalizer->withIds($cars)), 36);
-        $verified = $this->normalizer->verifyLiveCars($candidates);
+        $verified = (bool) config('external_search.verify_live_cars', true)
+            ? $this->normalizer->verifyLiveCars($candidates)
+            : $candidates;
+
+        // Red de seguridad: si la verificación descartó todo, mostramos los candidatos básicamente válidos.
+        if ($verified === [] && $candidates !== []) {
+            $verified = array_values(array_filter(
+                $candidates,
+                function (array $car): bool {
+                    $sourceUrl = (string) ($car['sourceUrl'] ?? '');
+                    $imageUrl = (string) ($car['imageUrl'] ?? '');
+                    $platformId = (string) ($car['platformId'] ?? '');
+
+                    return $sourceUrl !== ''
+                        && $imageUrl !== ''
+                        && $this->normalizer->isDetailUrl($sourceUrl, $platformId)
+                        && $this->normalizer->isValidImage($imageUrl, $platformId);
+                },
+            ));
+        }
+
         $cars = $this->normalizer->balanceByPlatform(array_values($this->normalizer->withIds($verified)), 24);
         $payload = [
             'results' => $cars,
@@ -182,8 +202,8 @@ class ExternalSearchService
 
         Cache::put($memoryKey, $payload, $memoryTtl);
 
-        // Solo persistimos en caché de larga duración (7 días) cuando la búsqueda obtuvo resultados suficientes.
-        if (count($cars) >= 3) {
+        // Persistimos desde un resultado para que esté disponible en /comprar y en external_listings.
+        if (count($cars) >= 1) {
             $this->cache->put(
                 $cacheKey,
                 $query,

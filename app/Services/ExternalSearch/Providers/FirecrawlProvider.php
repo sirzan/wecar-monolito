@@ -8,6 +8,7 @@ use App\Services\ExternalSearch\OpenAiStructurer;
 use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class FirecrawlProvider
@@ -54,27 +55,40 @@ class FirecrawlProvider
         }
 
         $connectTimeout = (int) config('external_search.connect_timeout', 5);
-        $timeout = max(10, (int) config('external_search.timeout', 35));
+        $timeout = max(10, (int) config('external_search.timeout', 25));
 
-        try {
-            $responses = Http::pool(function (Pool $pool) use ($platforms, $query, $apiKey, $connectTimeout, $timeout): array {
-                $requests = [];
+        $responses = [];
+        $pending = [];
 
-                foreach ($platforms as $platform) {
-                    $platformId = (string) $platform['id'];
-                    $requests[] = $pool->as($platformId)
-                        ->withToken($apiKey)
-                        ->connectTimeout($connectTimeout)
-                        ->timeout($timeout)
-                        ->post('https://api.firecrawl.dev/v2/search', $this->buildPayload($query, $platform));
-                }
+        foreach ($platforms as $platform) {
+            $platformId = (string) $platform['id'];
 
-                return $requests;
-            });
-        } catch (\Throwable $exception) {
-            report($exception);
+            try {
+                $pending[$platformId] = Http::withToken($apiKey)
+                    ->connectTimeout($connectTimeout)
+                    ->timeout($timeout)
+                    ->async()
+                    ->post('https://api.firecrawl.dev/v2/search', $this->buildPayload($query, $platform));
+            } catch (\Throwable $exception) {
+                report($exception);
+                $pending[$platformId] = null;
+            }
+        }
 
-            return [];
+        // Cada promesa se espera por separado para que un timeout/502 no descarte las demás plataformas.
+        foreach ($pending as $platformId => $promise) {
+            if ($promise === null) {
+                $responses[$platformId] = null;
+
+                continue;
+            }
+
+            try {
+                $responses[$platformId] = $promise->wait();
+            } catch (\Throwable $exception) {
+                report($exception);
+                $responses[$platformId] = null;
+            }
         }
 
         $carsByPlatform = [];
@@ -90,16 +104,30 @@ class FirecrawlProvider
 
             $response = $responses[$platformId] ?? null;
 
+            if (! $response instanceof Response || ! $response->successful()) {
+                $response = $this->retryPlatformSearch($apiKey, $query, $platform, $connectTimeout);
+            }
+
             if (! $response instanceof Response) {
-                report($response instanceof \Throwable
-                    ? $response
-                    : new \RuntimeException('Firecrawl sin respuesta válida para '.$platform['name']));
+                report(new \RuntimeException('Firecrawl sin respuesta válida para '.$platform['name']));
+
+                Log::warning('Firecrawl platform failed', [
+                    'platform' => $platformId,
+                    'query' => $query,
+                    'reason' => 'no_response',
+                ]);
 
                 continue;
             }
 
             if (! $response->successful()) {
                 report(new \RuntimeException('Firecrawl '.$response->status().' para '.$platform['name']));
+
+                Log::warning('Firecrawl platform failed', [
+                    'platform' => $platformId,
+                    'query' => $query,
+                    'status' => $response->status(),
+                ]);
 
                 continue;
             }
@@ -164,6 +192,12 @@ class FirecrawlProvider
                 0,
                 self::MAX_PER_PLATFORM,
             );
+
+            Log::info('Firecrawl platform completed', [
+                'platform' => $platformId,
+                'query' => $query,
+                'results' => count($carsByPlatform[$platformId]),
+            ]);
         }
 
         $totalFound = array_sum(array_map('count', $carsByPlatform));
@@ -186,7 +220,7 @@ class FirecrawlProvider
      * @param  array<string, mixed>  $platform
      * @return array<string, mixed>
      */
-    private function buildPayload(string $query, array $platform): array
+    private function buildPayload(string $query, array $platform, bool $light = false): array
     {
         $domains = is_array($platform['domains'] ?? null) && $platform['domains'] !== []
             ? array_values(array_filter(array_map('strval', $platform['domains'])))
@@ -195,19 +229,35 @@ class FirecrawlProvider
 
         return [
             'query' => $this->buildSearchQuery($query, $platformId),
-            'limit' => 12,
+            'limit' => $light ? 5 : 8,
             'country' => 'MX',
             'location' => 'Mexico',
             'ignoreInvalidURLs' => true,
-            'timeout' => 30000,
+            'timeout' => $light ? 12000 : 20000,
             'includeDomains' => $domains,
             'scrapeOptions' => [
                 'onlyMainContent' => true,
                 'excludeTags' => ['nav', 'footer', 'header', 'aside'],
-                'waitFor' => 2000,
-                'formats' => ['markdown', 'links', 'images'],
+                'waitFor' => $light ? 800 : 1000,
+                'formats' => $light ? ['markdown'] : ['markdown', 'links'],
             ],
         ];
+    }
+
+    private function retryPlatformSearch(string $apiKey, string $query, array $platform, int $connectTimeout): ?Response
+    {
+        try {
+            $response = Http::withToken($apiKey)
+                ->connectTimeout($connectTimeout)
+                ->timeout(15)
+                ->post('https://api.firecrawl.dev/v2/search', $this->buildPayload($query, $platform, true));
+
+            return $response->successful() ? $response : null;
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return null;
+        }
     }
 
     private function buildSearchQuery(string $query, string $platformId = ''): string

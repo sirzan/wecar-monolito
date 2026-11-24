@@ -48,6 +48,14 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('ai-search', function (Request $request): Limit {
             return $this->limitByRole($request, adminPerMinute: 60, userPerMinute: 30, guestPerMinute: 20);
         });
+
+        RateLimiter::for('warranty-quote', function (Request $request): Limit {
+            return $this->limitByRole($request, adminPerMinute: 30, userPerMinute: 10, guestPerMinute: 5);
+        });
+
+        RateLimiter::for('warranty-quote-read', function (Request $request): Limit {
+            return $this->limitByRole($request, adminPerMinute: 60, userPerMinute: 30, guestPerMinute: 10);
+        });
     }
 
     private function limitByRole(

@@ -86,6 +86,7 @@ const warranty = reactive({
     title: String(props.settings.warranty_config?.title ?? ''),
     description: String(props.settings.warranty_config?.description ?? ''),
     contact_email: String(props.settings.warranty_config?.contact_email ?? ''),
+    service_fee_rate: Number(props.settings.warranty_config?.service_fee_rate ?? 2.5),
 });
 
 type BusinessHour = { enabled: boolean; start: string; end: string };
@@ -113,6 +114,11 @@ const certification = reactive({
     slot_interval_minutes: Number(certificationSource.slot_interval_minutes ?? 60),
     capacity_per_slot: Number(certificationSource.capacity_per_slot ?? 1),
     min_notice_hours: Number(certificationSource.min_notice_hours ?? 24),
+    whatsapp: String(certificationSource.whatsapp ?? ''),
+    whatsapp_auto_open: certificationSource.whatsapp_auto_open === undefined
+        ? true
+        : Boolean(certificationSource.whatsapp_auto_open),
+    whatsapp_message: String(certificationSource.whatsapp_message ?? ''),
     closed_dates_text: Array.isArray(certificationSource.closed_dates)
         ? certificationSource.closed_dates
               .map((entry) => (typeof entry === 'string' ? entry : (entry as { date?: string })?.date))
@@ -128,6 +134,9 @@ const saveCertification = () => {
         slot_interval_minutes: certification.slot_interval_minutes,
         capacity_per_slot: certification.capacity_per_slot,
         min_notice_hours: certification.min_notice_hours,
+        whatsapp: certification.whatsapp,
+        whatsapp_auto_open: certification.whatsapp_auto_open,
+        whatsapp_message: certification.whatsapp_message,
         closed_dates: certification.closed_dates_text
             .split(/\r?\n/)
             .map((date) => date.trim())
@@ -267,6 +276,11 @@ const save = (key: string, value: Record<string, any>) => {
                     <div><Label>Título</Label><Input v-model="warranty.title" class="mt-1.5" /></div>
                     <div><Label>Descripción</Label><textarea v-model="warranty.description" rows="3" class="mt-1.5 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm" /></div>
                     <div><Label>Email de contacto</Label><Input v-model="warranty.contact_email" class="mt-1.5" /></div>
+                    <div>
+                        <Label>Tasa de servicio (%)</Label>
+                        <Input v-model.number="warranty.service_fee_rate" type="number" min="0" max="50" step="0.1" class="mt-1.5" />
+                        <p class="mt-1 text-xs text-muted-foreground">Porcentaje sobre el precio del auto usado en el cotizador y en el PDF.</p>
+                    </div>
                 </div>
                 <Button class="mt-5" @click="save('warranty_config', { ...warranty })">Guardar garantía</Button>
             </template>
@@ -322,6 +336,39 @@ const save = (key: string, value: Record<string, any>) => {
                         class="mt-1.5 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
                     />
                     <p class="mt-1 text-xs text-muted-foreground">Se usarán para bloquear días festivos o cierres del taller.</p>
+                </div>
+
+                <div class="mt-6 border-t border-border pt-5">
+                    <h3 class="font-semibold">Confirmación por WhatsApp</h3>
+                    <p class="mt-1 text-sm text-muted-foreground">
+                        Al registrar una cita, el usuario será llevado a WhatsApp con los datos precargados para confirmarla.
+                    </p>
+
+                    <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                        <div>
+                            <Label>WhatsApp de confirmación</Label>
+                            <PhoneInput v-model="certification.whatsapp" class="mt-1.5" placeholder="81 1234 5678" />
+                            <p class="mt-1 text-xs text-muted-foreground">Si se deja vacío se usa el WhatsApp de contacto.</p>
+                        </div>
+                        <label class="flex items-center gap-2 self-end pb-2 text-sm">
+                            <input v-model="certification.whatsapp_auto_open" type="checkbox" class="h-4 w-4" />
+                            Abrir WhatsApp automáticamente al registrar la cita
+                        </label>
+                    </div>
+
+                    <div class="mt-4">
+                        <Label>Mensaje de confirmación</Label>
+                        <textarea
+                            v-model="certification.whatsapp_message"
+                            rows="8"
+                            class="mt-1.5 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                            placeholder="Hola WeCar, quiero confirmar mi cita..."
+                        />
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            Placeholders: {folio}, {nombre}, {servicio}, {vehiculo}, {fecha}, {hora}, {zona}, {taller}, {direccion}, {total}, {notas}.
+                            Si se deja vacío se usa el mensaje por defecto.
+                        </p>
+                    </div>
                 </div>
 
                 <Button class="mt-5" @click="saveCertification">Guardar certificaciones</Button>

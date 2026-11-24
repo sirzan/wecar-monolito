@@ -81,6 +81,8 @@ class CertificationController extends Controller
             'status' => $appointment->status,
             'status_label' => $appointment->statusLabel(),
             'workshop' => $this->config->workshop(),
+            'whatsapp_url' => $this->config->confirmationWhatsAppUrl($appointment),
+            'whatsapp_auto_open' => $this->config->whatsappAutoOpen(),
         ];
     }
 }

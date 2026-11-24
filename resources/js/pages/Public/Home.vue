@@ -50,15 +50,11 @@ onMounted(() => {
 });
 
 const searchExternal = () => {
-    const query = localQuery.value.trim();
-
-    router.get('/comprar', { q: query || 'autos seminuevos', smart: '1' }, { preserveScroll: true });
+    router.get('/comprar', { external: '1' }, { preserveScroll: true });
 };
 
 const retryExternalSearch = () => {
-    const query = externalSearch.lastQuery.value || localQuery.value.trim() || 'autos seminuevos';
-
-    router.get('/comprar', { q: query, smart: '1' }, { preserveScroll: true });
+    router.get('/comprar', { external: '1' }, { preserveScroll: true });
 };
 
 const submit = async () => {

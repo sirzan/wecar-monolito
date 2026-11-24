@@ -62,6 +62,25 @@ class SettingController extends Controller
             }
         }
 
+        if ($validated['key'] === 'certification_config') {
+            $certifications = $validated['value'];
+
+            if (filled($certifications['whatsapp'] ?? null)
+                && preg_match('/^[0-9+()\-\s]{10,20}$/', (string) $certifications['whatsapp']) !== 1) {
+                throw ValidationException::withMessages([
+                    'value.whatsapp' => 'Ingresa un WhatsApp válido de 10 a 15 dígitos.',
+                ]);
+            }
+
+            $message = $certifications['whatsapp_message'] ?? null;
+
+            if (is_string($message) && mb_strlen($message) > 1000) {
+                throw ValidationException::withMessages([
+                    'value.whatsapp_message' => 'El mensaje de confirmación no puede exceder 1000 caracteres.',
+                ]);
+            }
+        }
+
         SiteSetting::put($validated['key'], $validated['value'], $request->user()->getKey());
 
         return back()->with('success', 'Configuración guardada.');

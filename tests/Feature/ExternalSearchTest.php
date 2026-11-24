@@ -3,6 +3,7 @@
 use App\Models\CarBrand;
 use App\Models\CarModel;
 use App\Models\CouponRecipient;
+use App\Models\ExternalListing;
 use App\Models\ExternalSearchCache;
 use App\Models\Plan;
 use App\Models\SearchTokenTransaction;
@@ -17,6 +18,7 @@ use App\Services\PaymentService;
 use App\Services\SearchCouponService;
 use App\Services\SearchTokenService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -439,7 +441,7 @@ it('filters irrelevant brands or years and aggregates modern platform urls acros
         && ($request['location'] ?? null) === 'Mexico');
 });
 
-it('does not persist sparse results for 7 days and supports refresh', function () {
+it('persists sparse results so they appear in comprar and supports refresh', function () {
     Cache::flush();
     config()->set('services.firecrawl.key', 'test-firecrawl');
     config()->set('services.openai.key', null);
@@ -523,7 +525,7 @@ it('does not persist sparse results for 7 days and supports refresh', function (
 
     $first = $this->postJson('/api/external-search', externalCriteria('Toyota', 'Corolla', 2025))->assertOk();
     expect($first->json('results'))->toHaveCount(1)
-        ->and(ExternalSearchCache::query()->count())->toBe(0);
+        ->and(ExternalSearchCache::query()->count())->toBe(1);
 
     $second = $this->postJson('/api/external-search', array_merge(externalCriteria('Toyota', 'Corolla', 2025), ['refresh' => true]))->assertOk();
     expect($second->json('results'))->toHaveCount(3)
@@ -1075,4 +1077,186 @@ it('hydrates individual detail links via firecrawl scrape when listing pages lac
         ->and($results->pluck('sourceUrl')->all())->toEqualCanonicalizing([
             'https://www.seminuevos.com/vehicle/autos-ford-mustang-cdmx-2024/4845901',
         ]);
+});
+
+it('sanitizes markdown titles and falls back to the url slug', function () {
+    $normalizer = app(ExternalCarNormalizer::class);
+
+    expect($normalizer->sanitizeListingTitle('![Acura MDX 2022](https://www.seminuevos.com/vehicle/autos-acura-mdx-2022/1)'))
+        ->toBe('Acura MDX 2022')
+        ->and($normalizer->sanitizeListingTitle('![Acura MDX 2022\\'))
+        ->toBe('Acura MDX 2022')
+        ->and($normalizer->sanitizeListingTitle('2025\\', 'https://www.seminuevos.com/vehicle/autos-toyota-camry-2025/1'))
+        ->toBe('Toyota Camry 2025')
+        ->and($normalizer->sanitizeListingTitle('https://example.com/auto', 'https://www.kavak.com/mx/seminuevos/ford-territory-2024-id-1'))
+        ->toBe('Ford Territory 2024');
+});
+
+it('keeps other platforms when one firecrawl request fails', function () {
+    Cache::flush();
+    config()->set('services.firecrawl.key', 'test-key');
+    config()->set('external_search.verify_live_cars', false);
+
+    Http::fake(function (Request $request) {
+        if (str_contains($request->url(), 'api.firecrawl.dev')) {
+            $domains = $request['includeDomains'] ?? [];
+
+            if (in_array('kavak.com', $domains, true)) {
+                throw new ConnectionException('cURL error 28: timed out');
+            }
+
+            if (in_array('seminuevos.com', $domains, true)) {
+                return Http::response([
+                    'data' => [[
+                        'url' => 'https://www.seminuevos.com/vehicle/autos-toyota-corolla-2025/991234',
+                        'json' => [
+                            'autos' => [[
+                                'title' => 'Toyota Corolla 2025',
+                                'price' => 450000,
+                                'year' => 2025,
+                                'imageUrl' => 'https://images.latamautos.com/thumbs/corolla.jpg',
+                                'sourceUrl' => 'https://www.seminuevos.com/vehicle/autos-toyota-corolla-2025/991234',
+                            ]],
+                        ],
+                    ]],
+                ]);
+            }
+
+            return Http::response(['data' => []]);
+        }
+
+        return Http::response('jpeg-bytes', 200, ['Content-Type' => 'image/jpeg']);
+    });
+
+    $response = $this->postJson('/api/external-search', externalCriteria('Toyota', 'Corolla', 2025))
+        ->assertOk();
+
+    expect($response->json('results'))->toHaveCount(1)
+        ->and($response->json('results.0.title'))->toBe('Toyota Corolla 2025')
+        ->and(ExternalSearchCache::query()->count())->toBe(1);
+});
+
+it('shows basic candidates when live verification rejects every result', function () {
+    Cache::flush();
+    config()->set('services.firecrawl.key', 'test-key');
+    config()->set('external_search.verify_live_cars', true);
+
+    Http::fake(function (Request $request) {
+        if (str_contains($request->url(), 'api.firecrawl.dev')) {
+            $domains = $request['includeDomains'] ?? [];
+
+            if (in_array('seminuevos.com', $domains, true)) {
+                return Http::response([
+                    'data' => [[
+                        'url' => 'https://www.seminuevos.com/vehicle/autos-toyota-corolla-2025/991235',
+                        'json' => [
+                            'autos' => [[
+                                'title' => 'Toyota Corolla 2025',
+                                'price' => 450000,
+                                'year' => 2025,
+                                'imageUrl' => 'https://images.latamautos.com/thumbs/corolla-2.jpg',
+                                'sourceUrl' => 'https://www.seminuevos.com/vehicle/autos-toyota-corolla-2025/991235',
+                            ]],
+                        ],
+                    ]],
+                ]);
+            }
+
+            return Http::response(['data' => []]);
+        }
+
+        return Http::response('Not found', 404);
+    });
+
+    $response = $this->postJson('/api/external-search', externalCriteria('Toyota', 'Corolla', 2025))
+        ->assertOk();
+
+    expect($response->json('results'))->toHaveCount(1);
+});
+
+it('stores clean external listings and exposes them on comprar', function () {
+    Cache::flush();
+    config()->set('services.firecrawl.key', 'test-key');
+    config()->set('external_search.verify_live_cars', false);
+
+    Http::fake(function (Request $request) {
+        if (str_contains($request->url(), 'api.firecrawl.dev')) {
+            $domains = $request['includeDomains'] ?? [];
+
+            if (in_array('seminuevos.com', $domains, true)) {
+                return Http::response([
+                    'data' => [[
+                        'url' => 'https://www.seminuevos.com/vehicle/autos-acura-mdx-2022/4850785',
+                        'json' => [
+                            'autos' => [[
+                                'title' => '![Acura MDX 2022](https://www.seminuevos.com/vehicle/autos-acura-mdx-2022/4850785)',
+                                'price' => 711000,
+                                'year' => 2022,
+                                'imageUrl' => 'https://images.latamautos.com/thumbs/mdx.jpg',
+                                'sourceUrl' => 'https://www.seminuevos.com/vehicle/autos-acura-mdx-2022/4850785',
+                            ]],
+                        ],
+                    ]],
+                ]);
+            }
+
+            return Http::response(['data' => []]);
+        }
+
+        return Http::response('jpeg-bytes', 200, ['Content-Type' => 'image/jpeg']);
+    });
+
+    $this->postJson('/api/external-search', externalCriteria('Acura', 'MDX', 2022))->assertOk();
+
+    expect(ExternalListing::query()->count())->toBe(1)
+        ->and(ExternalListing::query()->firstOrFail()->title)->toBe('Acura MDX 2022');
+
+    $this->get('/comprar')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Public/Comprar')
+            ->has('externalCars', 1)
+            ->where('externalCars.0.title', 'Acura MDX 2022')
+        );
+});
+
+it('repairs corrupted external listing titles and cache rows', function () {
+    $listing = ExternalListing::query()->create([
+        'external_id' => app(ExternalCarNormalizer::class)->externalId('https://www.seminuevos.com/vehicle/autos-acura-mdx-2022/4850785'),
+        'source' => 'seminuevos',
+        'source_url' => 'https://www.seminuevos.com/vehicle/autos-acura-mdx-2022/4850785',
+        'slug' => 'sin-anio-acura-md-corrupto-1',
+        'title' => '![Acura MDX 2022](https://www.seminuevos.com/vehicle/autos-acura-mdx-2022/4850785)',
+        'year' => 2022,
+        'last_seen_at' => now(),
+    ]);
+
+    ExternalSearchCache::query()->create([
+        'query_key' => 'ext|acura mdx|seminuevos',
+        'query_text' => 'Acura MDX 2022',
+        'platforms' => [],
+        'results' => [[
+            'id' => 'corrupto',
+            'title' => '![Acura MDX 2022\\',
+            'price' => 711000,
+            'year' => 2022,
+            'imageUrl' => 'https://images.latamautos.com/thumbs/mdx.jpg',
+            'sourceUrl' => 'https://www.seminuevos.com/vehicle/autos-acura-mdx-2022/4850785',
+            'platformId' => 'seminuevos',
+        ]],
+        'platforms_searched' => ['Seminuevos.com'],
+    ]);
+
+    $this->artisan('external:repair-listings')->assertExitCode(0);
+
+    $listing->refresh();
+
+    expect($listing->title)->toBe('Acura MDX 2022')
+        ->and($listing->make)->toBe('acura')
+        ->and($listing->model)->toBe('mdx');
+
+    $cache = ExternalSearchCache::query()->firstOrFail();
+
+    expect($cache->results)->toHaveCount(1)
+        ->and($cache->results[0]['title'])->toBe('Acura MDX 2022');
 });

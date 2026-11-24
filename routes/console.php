@@ -57,6 +57,16 @@ Artisan::command('didit:sync-pending', function () {
     ));
 })->purpose('Reconcilia verificaciones de identidad pendientes o en revisión con Didit');
 
+Artisan::command('external:repair-listings', function () {
+    $result = app(ExternalSearchCacheService::class)->repairListings();
+
+    $this->info(sprintf(
+        'Listings reparados: %d. Cachés saneadas: %d.',
+        $result['listings'],
+        $result['caches'],
+    ));
+})->purpose('Limpia títulos y slugs corruptos de autos externos y su caché');
+
 Schedule::call(fn () => app(ExternalSearchCacheService::class)->prune())
     ->daily()
     ->name('external-search-cache-prune')

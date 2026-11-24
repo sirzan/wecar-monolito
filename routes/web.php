@@ -17,6 +17,7 @@ use App\Http\Controllers\PublicController;
 use App\Http\Controllers\PushController;
 use App\Http\Controllers\SitemapController;
 use App\Http\Controllers\VendeController;
+use App\Http\Controllers\WarrantyQuoteController;
 use App\Http\Controllers\ZipCodeController;
 use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Http\Controllers\RegisteredUserController;
@@ -43,6 +44,14 @@ Route::put('/email/verification-email', [EmailVerificationController::class, 'up
     ->name('verification.email.update');
 Route::get('/credito', [PublicController::class, 'credito'])->name('credito');
 Route::get('/garantia', [PublicController::class, 'garantia'])->name('garantia');
+Route::middleware('auth')->group(function () {
+    Route::post('/garantia/cotizaciones', [WarrantyQuoteController::class, 'store'])
+        ->middleware('throttle:warranty-quote')
+        ->name('garantia.cotizaciones.store');
+    Route::get('/garantia/cotizaciones/{quote}/pdf', [WarrantyQuoteController::class, 'pdf'])
+        ->middleware('throttle:warranty-quote-read')
+        ->name('garantia.cotizaciones.pdf');
+});
 Route::get('/certificaciones', [PublicController::class, 'certificaciones'])->name('certificaciones');
 Route::get('/nosotros', [PublicController::class, 'nosotros'])->name('nosotros');
 Route::get('/contacto', [PublicController::class, 'contacto'])->name('contacto');

@@ -8,6 +8,7 @@ use App\Support\ExternalListingSlug;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 
 class ExternalSearchCacheService
 {
@@ -56,17 +57,60 @@ class ExternalSearchCacheService
             return;
         }
 
+        $clean = $this->cleanResults($results);
+
+        if ($clean === []) {
+            return;
+        }
+
         ExternalSearchCache::query()->updateOrCreate(
             ['query_key' => $queryKey],
             [
                 'query_text' => $queryText,
                 'platforms' => $platforms,
-                'results' => $results,
+                'results' => $clean,
                 'platforms_searched' => $platformsSearched,
             ],
         );
 
-        $this->upsertListings($results);
+        $this->upsertListings($clean);
+    }
+
+    /**
+     * Sanea títulos y deduplica por URL antes de persistir.
+     *
+     * @param  array<int, mixed>  $results
+     * @return array<int, array<string, mixed>>
+     */
+    private function cleanResults(array $results): array
+    {
+        $clean = [];
+
+        foreach ($results as $car) {
+            if (! is_array($car)) {
+                continue;
+            }
+
+            $sourceUrl = $this->normalizer->cleanUrl((string) ($car['sourceUrl'] ?? ''));
+
+            if (! $sourceUrl) {
+                continue;
+            }
+
+            $title = $this->normalizer->sanitizeListingTitle((string) ($car['title'] ?? ''), $sourceUrl);
+
+            if ($title === '') {
+                continue;
+            }
+
+            $car['sourceUrl'] = $sourceUrl;
+            $car['title'] = $title;
+            $car['id'] = $this->normalizer->externalId($sourceUrl);
+
+            $clean[$sourceUrl] = $car;
+        }
+
+        return array_values($clean);
     }
 
     /**
@@ -85,17 +129,22 @@ class ExternalSearchCacheService
                 continue;
             }
 
-            $externalId = (string) ($car['id'] ?? $this->normalizer->externalId($sourceUrl));
-            $title = trim((string) ($car['title'] ?? 'Auto externo'));
+            $externalId = $this->normalizer->externalId($sourceUrl);
+            $title = $this->normalizer->sanitizeListingTitle((string) ($car['title'] ?? ''), $sourceUrl);
+
+            if ($title === '') {
+                continue;
+            }
+
             $year = is_numeric($car['year'] ?? null) ? (int) $car['year'] : null;
             $make = ExternalListingSlug::makeFromTitle($title);
             $model = ExternalListingSlug::modelFromTitle($title, $make);
 
             ExternalListing::query()->updateOrCreate(
-                ['external_id' => $externalId],
+                ['source_url' => $sourceUrl],
                 [
+                    'external_id' => $externalId,
                     'source' => (string) ($car['platformId'] ?? $car['platformName'] ?? 'externo'),
-                    'source_url' => $sourceUrl,
                     'slug' => ExternalListingSlug::make($year, $title, $externalId),
                     'title' => $title,
                     'make' => $make,
@@ -181,6 +230,10 @@ class ExternalSearchCacheService
         }
 
         $cars = array_slice($this->normalizer->sortByPlatform($cars), 0, $limit);
+
+        if ($cars === []) {
+            return $this->listingsFallback($limit);
+        }
 
         // Compatibilidad con cachés creadas antes de external_listings.
         $known = ExternalListing::query()
@@ -287,7 +340,7 @@ class ExternalSearchCacheService
 
         return [
             'id' => $this->normalizer->externalId($sourceUrl),
-            'title' => trim((string) ($rawCar['title'] ?? 'Auto externo')),
+            'title' => $this->normalizer->sanitizeListingTitle((string) ($rawCar['title'] ?? ''), $sourceUrl),
             'price' => is_numeric($rawCar['price'] ?? null) ? (int) round((float) $rawCar['price']) : null,
             'year' => is_numeric($rawCar['year'] ?? null) ? (int) $rawCar['year'] : null,
             'km' => is_numeric($rawCar['km'] ?? null) ? max(0, (int) $rawCar['km']) : null,
@@ -297,6 +350,103 @@ class ExternalSearchCacheService
             'platformId' => (string) ($rawCar['platformId'] ?? ''),
             'platformName' => (string) ($rawCar['platformName'] ?? $rawCar['platformId'] ?? 'Externo'),
         ];
+    }
+
+    /**
+     * Respaldo de visibilidad: usa los listings persistidos cuando no hay caché vigente.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function listingsFallback(int $limit): array
+    {
+        $rows = ExternalListing::query()
+            ->where('last_seen_at', '>=', now()->subDays($this->days()))
+            ->latest('last_seen_at')
+            ->limit(max($limit * 3, 60))
+            ->get();
+
+        $cars = [];
+        $seen = [];
+        $platforms = collect(config('external_search.platforms', []))->keyBy('id');
+
+        foreach ($rows as $row) {
+            $sourceUrl = (string) $row->source_url;
+            $title = $this->normalizer->sanitizeListingTitle((string) $row->title, $sourceUrl);
+
+            if ($title === '' || isset($seen[$row->external_id])) {
+                continue;
+            }
+
+            $platform = $platforms->get((string) $row->source);
+            $images = is_array($row->images) ? array_values(array_filter($row->images, 'is_string')) : [];
+
+            $seen[$row->external_id] = true;
+            $cars[] = [
+                'id' => (string) $row->external_id,
+                'title' => $title,
+                'price' => $row->price !== null ? (int) round((float) $row->price) : null,
+                'year' => $row->year,
+                'km' => $row->mileage,
+                'location' => $row->location,
+                'imageUrl' => $images[0] ?? null,
+                'gallery' => array_slice($images, 1),
+                'sourceUrl' => $sourceUrl,
+                'platformId' => (string) $row->source,
+                'platformName' => (string) ($platform['name'] ?? Str::headline((string) $row->source)),
+                'platformColor' => (string) ($platform['color'] ?? ''),
+                'platformInitials' => (string) ($platform['initials'] ?? Str::upper(Str::substr((string) $row->source, 0, 2))),
+            ];
+        }
+
+        return array_slice($this->normalizer->sortByPlatform($cars), 0, $limit);
+    }
+
+    /**
+     * Repara títulos, make/model/slug de listings y títulos dentro de la caché.
+     *
+     * @return array{listings:int, caches:int}
+     */
+    public function repairListings(): array
+    {
+        $listingsFixed = 0;
+
+        ExternalListing::query()->chunkById(200, function ($listings) use (&$listingsFixed): void {
+            foreach ($listings as $listing) {
+                $sourceUrl = (string) $listing->source_url;
+                $externalId = $this->normalizer->externalId($sourceUrl);
+                $title = $this->normalizer->sanitizeListingTitle((string) $listing->title, $sourceUrl);
+
+                if ($title === '') {
+                    continue;
+                }
+
+                $make = ExternalListingSlug::makeFromTitle($title);
+                $model = ExternalListingSlug::modelFromTitle($title, $make);
+
+                $listing->update([
+                    'external_id' => $externalId,
+                    'title' => $title,
+                    'make' => $make,
+                    'model' => $model,
+                    'slug' => ExternalListingSlug::make($listing->year, $title, $externalId),
+                ]);
+
+                $listingsFixed++;
+            }
+        });
+
+        $cachesFixed = 0;
+
+        ExternalSearchCache::query()->chunkById(50, function ($rows) use (&$cachesFixed): void {
+            foreach ($rows as $row) {
+                $clean = $this->cleanResults($row->results ?? []);
+                $row->update(['results' => $clean]);
+                $this->forgetMemoryCache($row);
+                $cachesFixed++;
+            }
+        });
+
+        return ['listings' => $listingsFixed, 'caches' => $cachesFixed];
     }
 
     /**
