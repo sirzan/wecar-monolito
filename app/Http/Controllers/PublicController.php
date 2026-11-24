@@ -16,6 +16,7 @@ use App\Services\Certifications\CertificationConfig;
 use App\Services\ExternalSearch\ExternalSearchService;
 use App\Services\Pricing\CarPriceSuggestionService;
 use App\Services\PublicationPlanService;
+use App\Services\WarrantyQuoteService;
 use App\Support\AgencyContext;
 use App\Support\ExternalListingPresenter;
 use Illuminate\Database\Eloquent\Builder;
@@ -474,10 +475,24 @@ class PublicController extends Controller
         ]);
     }
 
-    public function garantia(): Response
+    public function garantia(Request $request, WarrantyQuoteService $warrantyQuotes): Response
     {
+        $user = $request->user();
+
         return Inertia::render('Public/Garantia', [
             'settings' => SiteSetting::get('warranty_config', []),
+            'quote' => [
+                'service_fee_rate' => $warrantyQuotes->rate(),
+                'valid_days' => $warrantyQuotes->validDays(),
+                'price_min' => $warrantyQuotes->priceMin(),
+                'price_max' => $warrantyQuotes->priceMax(),
+                'contact_email' => $warrantyQuotes->contactEmail(),
+            ],
+            'profile' => $user ? [
+                'name' => $user->name,
+                'email' => $user->email,
+                'phone' => $user->phone ?? $user->profile?->phone,
+            ] : null,
             'seo' => [
                 'title' => 'Garantía Wecar',
                 'description' => 'Validación mecánica y legal, acompañamiento y garantía extendida en cada compra.',
@@ -628,14 +643,13 @@ class PublicController extends Controller
             ->pluck('total', 'brand_id');
 
         $brands = CarBrand::query()
-            ->whereIn('id', $brandCounts->keys())
             ->orderBy('name')
             ->get(['id', 'name', 'slug'])
             ->map(fn (CarBrand $brand) => [
                 'id' => $brand->getKey(),
                 'name' => $brand->name,
                 'slug' => $brand->slug,
-                'count' => (int) $brandCounts[$brand->getKey()],
+                'count' => (int) ($brandCounts[$brand->getKey()] ?? 0),
             ]);
 
         $cities = (clone $publishedCars)
@@ -672,7 +686,6 @@ class PublicController extends Controller
             ->map(fn ($row) => ['value' => $row->fuel, 'count' => (int) $row->total]);
 
         $models = CarModel::query()
-            ->whereIn('id', (clone $publishedCars)->select('model_id')->whereNotNull('model_id'))
             ->orderBy('name')
             ->get(['id', 'name', 'brand_id'])
             ->map(fn (CarModel $model) => [
@@ -682,7 +695,6 @@ class PublicController extends Controller
             ]);
 
         $versions = CarVersion::query()
-            ->whereIn('id', (clone $publishedCars)->select('version_id')->whereNotNull('version_id'))
             ->orderBy('name')
             ->get(['id', 'name', 'model_id'])
             ->map(fn (CarVersion $version) => [

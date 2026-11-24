@@ -9,7 +9,6 @@ import Button from '@/components/ui/Button.vue';
 import HomeSections, { type PublicationPlan } from '@/components/site/HomeSections.vue';
 import FinanciarAutoDialog from '@/components/credito/FinanciarAutoDialog.vue';
 import FinancialPartnersCarousel from '@/components/site/FinancialPartnersCarousel.vue';
-import ExternalCarCard from '@/components/external/ExternalCarCard.vue';
 import ExternalSearchModal from '@/components/external/ExternalSearchModal.vue';
 import ExternalSearchLimitModal from '@/components/external/ExternalSearchLimitModal.vue';
 import SearchTokensCard from '@/components/external/SearchTokensCard.vue';
@@ -51,11 +50,11 @@ onMounted(() => {
 });
 
 const searchExternal = () => {
-    void externalSearch.search(localQuery.value.trim() || 'autos seminuevos en México');
+    router.get('/comprar', { external: '1' }, { preserveScroll: true });
 };
 
 const retryExternalSearch = () => {
-    void externalSearch.search(externalSearch.lastQuery.value || localQuery.value.trim() || 'autos seminuevos en México', true);
+    router.get('/comprar', { external: '1' }, { preserveScroll: true });
 };
 
 const submit = async () => {
@@ -213,10 +212,9 @@ const jsonLd = [
                 </div>
             </div>
 
-            <div v-if="props.externalCars.length" class="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-                <ExternalCarCard v-for="car in props.externalCars" :key="car.id" :car="car"
-                    @open="externalSearch.openExternal" />
-            </div>
+            <p class="mt-8 max-w-2xl text-sm text-muted-foreground">
+                Escribe <strong>marca, modelo y año</strong> en el buscador; si no hay resultados en WeCar, te mostraremos los anuncios guardados de Mercado Libre, Kavak, Seminuevos y más.
+            </p>
 
             <div class="mt-8">
                 <SearchTokensCard :status="externalSearch.status.value" :on-search="searchExternal" />

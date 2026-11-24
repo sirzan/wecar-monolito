@@ -17,6 +17,20 @@ return [
 
     'admin_email' => 'hola@wecar.mx',
 
+    'whatsapp' => env('CERTIFICATIONS_WHATSAPP', '5218112345678'),
+    'whatsapp_auto_open' => (bool) env('CERTIFICATIONS_WHATSAPP_AUTO_OPEN', true),
+    'whatsapp_message' => implode("\n", [
+        'Hola WeCar, quiero confirmar mi cita de certificación:',
+        'Folio: {folio}',
+        'Nombre: {nombre}',
+        'Servicio: {servicio}',
+        'Vehículo: {vehiculo}',
+        'Fecha y hora: {fecha} {hora} ({zona})',
+        'Taller: {taller} — {direccion}',
+        'Total: {total}',
+        '{notas}',
+    ]),
+
     'workshop' => [
         'name' => 'Taller Motorevs',
         'address' => 'Dr. José Ma. Coss 548, Centro, 64000 Monterrey, N.L.',

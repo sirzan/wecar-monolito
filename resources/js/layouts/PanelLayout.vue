@@ -71,7 +71,8 @@ const avatarInput = ref<HTMLInputElement | null>(null);
 const displayName = computed(() => user.value?.name || user.value?.email?.split('@')[0] || 'Mi cuenta');
 const initial = computed(() => displayName.value.charAt(0).toUpperCase());
 const diditStatus = computed(() => user.value?.didit_status || 'unverified');
-const diditPending = computed(() => ['pending', 'in_review'].includes(diditStatus.value));
+const diditPending = computed(() => diditStatus.value === 'pending');
+const diditInReview = computed(() => diditStatus.value === 'in_review');
 const diditFailed = computed(() => ['declined', 'expired'].includes(diditStatus.value));
 
 const personalItems = [
@@ -230,7 +231,7 @@ watch(
                             <ShieldCheck class="h-3 w-3" /> Verificado
                         </Badge>
                         <Badge
-                            v-else-if="diditPending"
+                            v-else-if="diditInReview"
                             variant="outline"
                             size="sm"
                             class="gap-1 border-amber-300 bg-amber-50 text-amber-700"
@@ -245,7 +246,7 @@ watch(
                             :disabled="isVerifying"
                             @click="handleVerifyIdentity"
                         >
-                            <ShieldCheck class="h-3 w-3" /> {{ diditFailed ? 'Reintentar' : 'Verificar' }}
+                            <ShieldCheck class="h-3 w-3" /> {{ diditPending ? 'Continuar' : diditFailed ? 'Reintentar' : 'Verificar' }}
                         </Button>
                     </div>
                 </div>
@@ -307,12 +308,12 @@ watch(
                             <div v-if="diditStatus === 'approved'" class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
                                 <CheckCircle2 class="h-4 w-4 text-emerald-600" /> Identidad verificada
                             </div>
-                            <div v-else-if="diditPending" class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700">
-                                {{ diditStatus === 'in_review' ? 'En revisión' : 'Verificación pendiente' }}
-                            </div>
-                            <div v-else class="space-y-2">
-                                <p class="text-xs" :class="diditFailed ? 'font-semibold text-destructive' : 'text-muted-foreground'">
-                                    {{ diditFailed ? 'No pudimos verificar tu identidad. Puedes intentarlo de nuevo.' : 'Verifica tu cuenta para generar más confianza.' }}
+                            <div v-else-if="diditInReview" class="space-y-2">
+                                <div class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700">
+                                    En revisión
+                                </div>
+                                <p class="text-xs text-muted-foreground">
+                                    Didit está revisando tu verificación. Si ya terminaste, actualiza el estado.
                                 </p>
                                 <Button
                                     variant="outline"
@@ -323,7 +324,27 @@ watch(
                                 >
                                     <Loader2 v-if="isVerifying" class="h-4 w-4 animate-spin" />
                                     <ShieldCheck v-else class="h-4 w-4" />
-                                    {{ diditFailed ? 'Reintentar verificación' : 'Verificar Identidad' }}
+                                    Actualizar estado
+                                </Button>
+                            </div>
+                            <div v-else class="space-y-2">
+                                <p class="text-xs" :class="diditFailed ? 'font-semibold text-destructive' : 'text-muted-foreground'">
+                                    {{ diditPending
+                                        ? 'Tu verificación quedó pendiente. Puedes continuarla o reiniciarla.'
+                                        : diditFailed
+                                            ? 'No pudimos verificar tu identidad. Puedes intentarlo de nuevo.'
+                                            : 'Verifica tu cuenta para generar más confianza.' }}
+                                </p>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    class="w-full border-primary/40 text-primary hover:bg-primary/10"
+                                    :disabled="isVerifying"
+                                    @click="handleVerifyIdentity"
+                                >
+                                    <Loader2 v-if="isVerifying" class="h-4 w-4 animate-spin" />
+                                    <ShieldCheck v-else class="h-4 w-4" />
+                                    {{ diditPending ? 'Continuar verificación' : diditFailed ? 'Reintentar verificación' : 'Verificar Identidad' }}
                                 </Button>
                             </div>
                         </div>
@@ -479,12 +500,11 @@ watch(
                 </div>
 
                 <div class="flex-1 overflow-y-auto p-3">
-                    <div v-if="diditStatus !== 'approved'" class="mb-3 px-1">
-                        <div v-if="diditStatus === 'in_review'" class="rounded-xl bg-amber-50 px-3 py-2 text-center text-xs font-bold text-amber-700">
+                    <div v-if="diditStatus !== 'approved'" class="mb-3 space-y-2 px-1">
+                        <div v-if="diditInReview" class="rounded-xl bg-amber-50 px-3 py-2 text-center text-xs font-bold text-amber-700">
                             Verificación en revisión
                         </div>
                         <Button
-                            v-else
                             variant="outline"
                             size="sm"
                             class="w-full border-primary/40 text-primary hover:bg-primary/10"
@@ -492,7 +512,13 @@ watch(
                             @click="handleVerifyIdentity"
                         >
                             <ShieldCheck class="h-4 w-4" />
-                            {{ diditPending ? 'Continuar verificación' : diditFailed ? 'Reintentar verificación' : 'Verificar Identidad' }}
+                            {{ diditInReview
+                                ? 'Actualizar estado'
+                                : diditPending
+                                    ? 'Continuar verificación'
+                                    : diditFailed
+                                        ? 'Reintentar verificación'
+                                        : 'Verificar Identidad' }}
                         </Button>
                     </div>
 

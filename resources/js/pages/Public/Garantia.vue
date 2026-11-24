@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
+import { router, usePage } from '@inertiajs/vue3';
 import {
     AlertCircle,
     Calendar,
@@ -7,11 +8,13 @@ import {
     CheckCircle2,
     ChevronDown,
     ClipboardCheck,
+    Download,
     FileCheck2,
     Handshake,
     Headphones,
     HelpCircle,
     Info,
+    LoaderCircle,
     Percent,
     Search,
     ShieldCheck,
@@ -28,10 +31,21 @@ import { faqCategories, faqs } from '@/lib/faqs';
 
 defineOptions({ layout: PublicLayout });
 
-defineProps<{
+const props = defineProps<{
     settings?: { title?: string; description?: string; enabled?: boolean; contact_email?: string };
+    quote?: {
+        service_fee_rate: number;
+        valid_days: number;
+        price_min: number;
+        price_max: number;
+        contact_email: string;
+    };
+    profile?: { name: string; email: string; phone: string | null } | null;
     seo: { title: string; description: string; canonical: string };
 }>();
+
+const page = usePage<{ auth: { user: { name: string; email: string } | null } }>();
+const isAuthenticated = computed(() => Boolean(page.props.auth.user));
 
 const includes = [
     {
@@ -87,12 +101,114 @@ const visibleFaqs = computed(() =>
 );
 
 // Cotizador de garantía
-const autoPrecio = ref(250000);
-const cargoServicio = computed(() => Math.round(autoPrecio.value * 0.025));
-const totalConServicio = computed(() => autoPrecio.value + cargoServicio.value);
+const priceMin = computed(() => props.quote?.price_min ?? 50000);
+const priceMax = computed(() => props.quote?.price_max ?? 1500000);
+const priceMid = computed(() => Math.round((priceMin.value + priceMax.value) / 2));
+const serviceFeeRate = computed(() => props.quote?.service_fee_rate ?? 0.025);
+const validDays = computed(() => props.quote?.valid_days ?? 15);
+const contactEmail = computed(
+    () => props.quote?.contact_email ?? props.settings?.contact_email ?? 'garantia@wecar.mx',
+);
+
+const form = reactive({
+    full_name: props.profile?.name ?? '',
+    email: props.profile?.email ?? '',
+    phone: props.profile?.phone ?? '',
+    car_brand: '',
+    car_model: '',
+    car_version: '',
+    car_year: new Date().getFullYear() - 2,
+    car_km: '' as number | string,
+    car_price: Math.min(Math.max(250000, priceMin.value), priceMax.value),
+});
+
+const cargoServicio = computed(() => Math.round(Number(form.car_price) * serviceFeeRate.value));
+const totalConServicio = computed(() => Number(form.car_price) + cargoServicio.value);
+
+const submitting = ref(false);
+const errorMessage = ref('');
+const fieldErrors = ref<Record<string, string>>({});
+const lastQuote = ref<{ folio: string; pdf_url: string; total: number; service_fee: number; valid_until: string | null } | null>(null);
 
 const formatPrice = (val: number) =>
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(val);
+
+const csrf = () =>
+    document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
+
+const submitQuote = async () => {
+    if (!isAuthenticated.value) {
+        router.visit('/login');
+        return;
+    }
+
+    if (submitting.value) return;
+
+    errorMessage.value = '';
+    fieldErrors.value = {};
+
+    const win = window.open('', '_blank');
+    submitting.value = true;
+
+    try {
+        const response = await fetch('/garantia/cotizaciones', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': csrf(),
+            },
+            body: JSON.stringify({
+                ...form,
+                car_km: form.car_km === '' ? null : Number(form.car_km),
+                car_price: Number(form.car_price),
+                car_year: Number(form.car_year),
+            }),
+        });
+
+        const data = await response.json().catch(() => null);
+
+        if (!response.ok) {
+            win?.close();
+
+            if (response.status === 401) {
+                router.visit('/login');
+                return;
+            }
+
+            if (response.status === 422) {
+                fieldErrors.value = Object.fromEntries(
+                    Object.entries(data?.errors ?? {}).map(([key, value]) => [
+                        key,
+                        Array.isArray(value) ? String(value[0]) : String(value),
+                    ]),
+                );
+                errorMessage.value = 'Revisa los datos de la cotización.';
+                return;
+            }
+
+            if (response.status === 429) {
+                errorMessage.value = 'Demasiadas solicitudes. Intenta de nuevo en un minuto.';
+                return;
+            }
+
+            errorMessage.value = data?.message || 'No pudimos generar la cotización.';
+            return;
+        }
+
+        lastQuote.value = data;
+
+        if (win) {
+            win.location.href = data.pdf_url;
+        }
+    } catch {
+        win?.close();
+        errorMessage.value = 'Error de conexión. Intenta de nuevo.';
+    } finally {
+        submitting.value = false;
+    }
+};
 
 const faqJsonLd = {
     '@context': 'https://schema.org',
@@ -213,40 +329,98 @@ const faqJsonLd = {
     </section>
 
     <!-- 4. COTIZADOR INTERACTIVO DE SERVICIO -->
-    <section id="cotizador" class="mx-auto max-w-3xl px-4 py-16 sm:px-6">
+    <section id="cotizador" class="mx-auto max-w-4xl px-4 py-16 sm:px-6">
         <div class="rounded-3xl border border-border bg-card p-6 sm:p-10 shadow-soft">
             <div class="text-center max-w-lg mx-auto">
                 <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary uppercase">
                     <Sparkles class="h-3.5 w-3.5" /> Cotizador transparente
                 </span>
                 <h2 class="text-2xl font-black text-secondary mt-3">Cotiza el costo de tu Compra Segura</h2>
-                <p class="text-xs text-muted-foreground mt-1">Conoce el cargo exacto de inspección y acompañamiento legal según el precio del auto.</p>
+                <p class="text-xs text-muted-foreground mt-1">
+                    Completa los datos del vehículo y genera tu cotización en PDF con folio y vigencia de {{ validDays }} días.
+                </p>
             </div>
 
-            <div class="mt-8 space-y-5">
+            <div class="mt-8 space-y-6">
+                <!-- Datos del vehículo -->
+                <div>
+                    <h3 class="text-sm font-black text-secondary">Datos del vehículo</h3>
+                    <div class="mt-3 grid gap-4 sm:grid-cols-2">
+                        <div>
+                            <Label for="car-brand">Marca *</Label>
+                            <Input id="car-brand" v-model="form.car_brand" class="mt-1.5" placeholder="Ej. Toyota" />
+                            <p v-if="fieldErrors.car_brand" class="mt-1 text-xs text-destructive">{{ fieldErrors.car_brand }}</p>
+                        </div>
+                        <div>
+                            <Label for="car-model">Modelo *</Label>
+                            <Input id="car-model" v-model="form.car_model" class="mt-1.5" placeholder="Ej. Corolla" />
+                            <p v-if="fieldErrors.car_model" class="mt-1 text-xs text-destructive">{{ fieldErrors.car_model }}</p>
+                        </div>
+                        <div>
+                            <Label for="car-version">Versión</Label>
+                            <Input id="car-version" v-model="form.car_version" class="mt-1.5" placeholder="Ej. LE CVT" />
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <Label for="car-year">Año *</Label>
+                                <Input id="car-year" v-model.number="form.car_year" type="number" min="1990" :max="new Date().getFullYear() + 1" class="mt-1.5" />
+                                <p v-if="fieldErrors.car_year" class="mt-1 text-xs text-destructive">{{ fieldErrors.car_year }}</p>
+                            </div>
+                            <div>
+                                <Label for="car-km">Kilometraje</Label>
+                                <Input id="car-km" v-model="form.car_km" type="number" min="0" placeholder="Opcional" class="mt-1.5" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Datos de contacto -->
+                <div>
+                    <h3 class="text-sm font-black text-secondary">Tus datos</h3>
+                    <div class="mt-3 grid gap-4 sm:grid-cols-2">
+                        <div>
+                            <Label for="full-name">Nombre completo *</Label>
+                            <Input id="full-name" v-model="form.full_name" class="mt-1.5" autocomplete="name" />
+                            <p v-if="fieldErrors.full_name" class="mt-1 text-xs text-destructive">{{ fieldErrors.full_name }}</p>
+                        </div>
+                        <div>
+                            <Label for="email">Correo *</Label>
+                            <Input id="email" v-model="form.email" type="email" autocomplete="email" class="mt-1.5" />
+                            <p v-if="fieldErrors.email" class="mt-1 text-xs text-destructive">{{ fieldErrors.email }}</p>
+                        </div>
+                        <div>
+                            <Label for="phone">Teléfono</Label>
+                            <Input id="phone" v-model="form.phone" type="tel" autocomplete="tel" class="mt-1.5" placeholder="Opcional" />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Precio -->
                 <div>
                     <div class="flex justify-between items-center text-sm font-bold">
-                        <Label>Precio del auto:</Label>
-                        <span class="text-lg font-black text-secondary">{{ formatPrice(autoPrecio) }}</span>
+                        <Label for="car-price">Precio del auto:</Label>
+                        <span class="text-lg font-black text-secondary">{{ formatPrice(Number(form.car_price) || 0) }}</span>
                     </div>
                     <input
-                        v-model.number="autoPrecio"
+                        id="car-price"
+                        v-model.number="form.car_price"
                         type="range"
-                        min="50000"
-                        max="1500000"
+                        :min="priceMin"
+                        :max="priceMax"
                         step="10000"
                         class="h-2 w-full accent-primary mt-2"
                     />
                     <div class="flex justify-between text-[11px] text-muted-foreground mt-1">
-                        <span>$50,000</span>
-                        <span>$750,000</span>
-                        <span>$1,500,000</span>
+                        <span>{{ formatPrice(priceMin) }}</span>
+                        <span>{{ formatPrice(priceMid) }}</span>
+                        <span>{{ formatPrice(priceMax) }}</span>
                     </div>
+                    <p v-if="fieldErrors.car_price" class="mt-1 text-xs text-destructive">{{ fieldErrors.car_price }}</p>
                 </div>
 
                 <div class="rounded-2xl border border-primary/30 bg-accent/50 p-5 space-y-3">
                     <div class="flex justify-between text-sm">
-                        <span class="text-muted-foreground">Cargo por servicio desde 2.5%:</span>
+                        <span class="text-muted-foreground">Cargo por servicio ({{ (serviceFeeRate * 100).toFixed(2).replace(/\.?0+$/, '') }}%):</span>
                         <span class="font-bold text-secondary">{{ formatPrice(cargoServicio) }}</span>
                     </div>
                     <div class="flex justify-between text-sm">
@@ -263,9 +437,48 @@ const faqJsonLd = {
                     </div>
                 </div>
 
-                <Button as="a" href="/contacto" variant="hero" size="lg" class="w-full shadow-elegant font-bold">
-                    Solicitar revisión para mi auto
-                </Button>
+                <div v-if="errorMessage" class="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm font-semibold text-destructive">
+                    {{ errorMessage }}
+                </div>
+
+                <div v-if="lastQuote" class="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4 text-sm">
+                    <p class="font-bold text-emerald-700">Cotización {{ lastQuote.folio }} generada.</p>
+                    <p class="mt-1 text-muted-foreground">
+                        Total {{ formatPrice(lastQuote.total) }} · Vigencia hasta
+                        {{ lastQuote.valid_until ? new Date(lastQuote.valid_until).toLocaleDateString('es-MX') : `${validDays} días` }}.
+                    </p>
+                    <a :href="lastQuote.pdf_url" target="_blank" rel="noopener noreferrer" class="mt-2 inline-flex items-center gap-1.5 font-bold text-primary hover:underline">
+                        <Download class="h-4 w-4" /> Descargar PDF
+                    </a>
+                </div>
+
+                <div class="grid gap-3 sm:grid-cols-2">
+                    <Button
+                        variant="hero"
+                        size="lg"
+                        class="w-full shadow-elegant font-bold"
+                        :disabled="submitting"
+                        @click="submitQuote"
+                    >
+                        <LoaderCircle v-if="submitting" class="h-4 w-4 animate-spin" />
+                        <Download v-else class="h-4 w-4" />
+                        {{ submitting ? 'Generando…' : 'Cotizar y generar PDF' }}
+                    </Button>
+                    <Button as="a" href="/contacto" variant="outline" size="lg" class="w-full font-bold">
+                        Solicitar revisión para mi auto
+                    </Button>
+                </div>
+
+                <p v-if="!isAuthenticated" class="text-center text-xs text-muted-foreground">
+                    Para generar tu cotización necesitas
+                    <a href="/login" class="font-bold text-primary hover:underline">iniciar sesión</a>
+                    o
+                    <a href="/registro" class="font-bold text-primary hover:underline">crear una cuenta</a>.
+                </p>
+
+                <p class="text-center text-[11px] text-muted-foreground">
+                    Cotización informativa con vigencia de {{ validDays }} días. Dudas: {{ contactEmail }}.
+                </p>
             </div>
         </div>
     </section>

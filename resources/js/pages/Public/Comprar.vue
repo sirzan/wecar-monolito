@@ -3,7 +3,7 @@ import { Link, router } from '@inertiajs/vue3';
 import { toast } from 'vue-sonner';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { onClickOutside } from '@vueuse/core';
-import { ArrowUpDown, Check, ChevronDown, LoaderCircle, Search, SlidersHorizontal, Sparkles, Tag, X } from '@lucide/vue';
+import { ArrowUpDown, Check, ChevronDown, Globe, LoaderCircle, Search, SlidersHorizontal, Sparkles, Tag, X } from '@lucide/vue';
 import PublicLayout from '@/layouts/PublicLayout.vue';
 import SeoHead from '@/components/site/SeoHead.vue';
 import CarCard, { type CarCardData } from '@/components/site/CarCard.vue';
@@ -12,7 +12,7 @@ import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 import MoneyInput from '@/components/ui/MoneyInput.vue';
 import ExternalCarCard from '@/components/external/ExternalCarCard.vue';
-import ExternalSearchModal from '@/components/external/ExternalSearchModal.vue';
+import ExternalSearchDialog from '@/components/external/ExternalSearchDialog.vue';
 import ExternalSearchLimitModal from '@/components/external/ExternalSearchLimitModal.vue';
 import SearchTokensCard from '@/components/external/SearchTokensCard.vue';
 import SearchRewardAdDialog from '@/components/external/SearchRewardAdDialog.vue';
@@ -21,7 +21,7 @@ import { useExternalSearch } from '@/composables/useExternalSearch';
 import { resolveSmartFilters } from '@/composables/useSmartSearch';
 import { vehicleYears } from '@/lib/carCatalog';
 import { formatMxn } from '@/lib/currency';
-import type { ExternalCar } from '@/types/external';
+import type { ExternalCar, ExternalSearchCriteria } from '@/types/external';
 
 defineOptions({ layout: PublicLayout });
 
@@ -135,25 +135,75 @@ const externalSearch = useExternalSearch();
 const rewardOpen = ref(false);
 let debounce: ReturnType<typeof setTimeout> | null = null;
 
-const externalAsMain = computed(
-    () =>
-        props.cars.meta.total === 0 &&
-        (externalSearch.loading.value || externalSearch.results.value.length > 0),
+const externalDialogOpen = ref(false);
+const externalDialogInitial = ref<Partial<ExternalSearchCriteria> | null>(null);
+const lastExternalRequest = ref<{ criteria: ExternalSearchCriteria; query: string } | null>(null);
+
+const externalBrandId = computed(
+    () => props.options.brands.find((brand) => brand.slug === form.value.brand)?.id ?? '',
 );
+
+const externalExactYear = computed(() => {
+    const min = form.value.min_year;
+    const max = form.value.max_year;
+
+    return min && max && min === max ? Number(min) : null;
+});
+
+const openExternalSearch = (prefill = false) => {
+    externalDialogInitial.value = prefill
+        ? {
+              ...(externalBrandId.value ? { brand_id: externalBrandId.value } : {}),
+              ...(externalExactYear.value !== null ? { year: externalExactYear.value } : {}),
+          }
+        : null;
+
+    externalDialogOpen.value = true;
+};
+
+const submitExternalSearch = ({ criteria, query }: { criteria: ExternalSearchCriteria; query: string }) => {
+    lastExternalRequest.value = { criteria, query };
+
+    void externalSearch.search(query, false, { modal: false, criteria });
+};
+
+const retryExternalSearch = () => {
+    if (!lastExternalRequest.value) return;
+
+    void externalSearch.search(lastExternalRequest.value.query, true, {
+        modal: false,
+        criteria: lastExternalRequest.value.criteria,
+    });
+};
+
+const openExternalCar = (car: ExternalCar) => externalSearch.openExternal(car);
+
+const cachedExternalCars = computed<ExternalCar[]>(() => {
+    const seen = new Set<string>();
+
+    return props.externalCars.filter((car) => {
+        if (!car.id || seen.has(car.id)) return false;
+
+        seen.add(car.id);
+
+        return true;
+    });
+});
 
 onMounted(async () => {
     await externalSearch.refreshStatus();
 
-    if (!props.smartSearch) {
-        return;
+    const url = new URL(window.location.href);
+
+    if (url.searchParams.get('external') === '1') {
+        url.searchParams.delete('external');
+        window.history.replaceState(window.history.state, '', url);
+        openExternalSearch(true);
     }
 
-    const url = new URL(window.location.href);
-    url.searchParams.delete('smart');
-    window.history.replaceState(window.history.state, '', url);
-
-    if (props.cars.meta.total === 0 && externalSearch.enabled.value) {
-        searchExternalFallback();
+    if (props.smartSearch) {
+        url.searchParams.delete('smart');
+        window.history.replaceState(window.history.state, '', url);
     }
 });
 
@@ -172,7 +222,7 @@ const filterLabel = (key: string, value: string): string => {
     if (key === 'min_km') return `Km desde ${Number(value).toLocaleString('es-MX')}`;
     if (key === 'max_km') return `Km hasta ${Number(value).toLocaleString('es-MX')}`;
     if (key === 'q') return `“${value}”`;
-    if (key === 'city') return `Ciudad: ${value}`;
+    if (key === 'city') return `Ubicación: ${value}`;
     if (key === 'body') return `Carrocería: ${value}`;
     if (key === 'transmission') return `Transmisión: ${value}`;
     if (key === 'fuel') return `Combustible: ${value}`;
@@ -294,8 +344,9 @@ const applySmartSearch = async () => {
         apply(true, (total) => {
             if (total === 0 && smartFallback.value) {
                 smartFallback.value = false;
-                toast.info('No hay resultados en WeCar. Buscando en otras plataformas…');
-                searchExternalFallback();
+                toast.info('No hay resultados en WeCar. Completa la búsqueda externa.');
+                openExternalSearch(true);
+
                 return;
             }
 
@@ -307,37 +358,6 @@ const applySmartSearch = async () => {
     }
 };
 
-
-const buildExternalQuery = () => {
-    const text = form.value.q.trim();
-    if (text) return text;
-
-    const brandName = props.options.brands.find((brand) => brand.slug === form.value.brand)?.name ?? '';
-    const modelName = props.options.models.find((model) => model.id === form.value.model)?.name ?? '';
-    const versionName = props.options.versions.find((version) => version.id === form.value.version)?.name ?? '';
-    const yearValue =
-        form.value.min_year && form.value.max_year && form.value.min_year === form.value.max_year
-            ? form.value.min_year
-            : (form.value.min_year || form.value.max_year || '');
-
-    const parts = [brandName, modelName, versionName, yearValue, form.value.body, form.value.city]
-        .map((part) => part.trim())
-        .filter(Boolean);
-
-    return parts.join(' ') || 'autos seminuevos en México';
-};
-
-const searchExternal = () => {
-    void externalSearch.search(buildExternalQuery());
-};
-
-const searchExternalFallback = () => {
-    void externalSearch.search(buildExternalQuery(), false, { modal: false });
-};
-
-const retryExternalSearch = () => {
-    void externalSearch.search(externalSearch.lastQuery.value || buildExternalQuery(), true);
-};
 
 const clear = () => {
     form.value = { q: '', brand: '', model: '', version: '', city: '', body: '', transmission: '', fuel: '', color: '', min_price: '', max_price: '', min_year: '', max_year: '', min_km: '', max_km: '', sort: 'recent' };
@@ -380,7 +400,8 @@ const clear = () => {
                 </button>
             </div>
 
-            <div class="border-t border-border/60 py-3 first:border-t-0 first:pt-0">
+            <div class="flex flex-col">
+            <div class="order-1 border-t border-border/60 py-3 first:border-t-0 first:pt-0">
                 <button type="button" class="flex w-full items-center justify-between gap-2 text-left" :aria-expanded="openGroups.brand" @click="toggleGroup('brand')">
                     <span class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Marca</span>
                     <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="openGroups.brand ? 'rotate-180' : ''" />
@@ -388,12 +409,14 @@ const clear = () => {
                 <div v-show="openGroups.brand" class="mt-2">
                     <select v-model="form.brand" class="h-10 w-full rounded-lg border border-input bg-background px-2 text-sm">
                         <option value="">Todas</option>
-                        <option v-for="brand in options.brands" :key="brand.id" :value="brand.slug">{{ brand.name }} ({{ brand.count }})</option>
+                        <option v-for="brand in options.brands" :key="brand.id" :value="brand.slug">
+                            {{ brand.name }}{{ brand.count > 0 ? ` (${brand.count})` : '' }}
+                        </option>
                     </select>
                 </div>
             </div>
 
-            <div class="border-t border-border/60 py-3">
+            <div class="order-2 border-t border-border/60 py-3">
                 <button type="button" class="flex w-full items-center justify-between gap-2 text-left" :aria-expanded="openGroups.model" @click="toggleGroup('model')">
                     <span class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Modelo</span>
                     <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="openGroups.model ? 'rotate-180' : ''" />
@@ -406,7 +429,7 @@ const clear = () => {
                 </div>
             </div>
 
-            <div class="border-t border-border/60 py-3">
+            <div class="order-3 border-t border-border/60 py-3">
                 <button type="button" class="flex w-full items-center justify-between gap-2 text-left" :aria-expanded="openGroups.version" @click="toggleGroup('version')">
                     <span class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Versión</span>
                     <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="openGroups.version ? 'rotate-180' : ''" />
@@ -419,9 +442,9 @@ const clear = () => {
                 </div>
             </div>
 
-            <div class="border-t border-border/60 py-3">
+            <div class="order-5 border-t border-border/60 py-3">
                 <button type="button" class="flex w-full items-center justify-between gap-2 text-left" :aria-expanded="openGroups.city" @click="toggleGroup('city')">
-                    <span class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Ciudad</span>
+                    <span class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Ubicación</span>
                     <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="openGroups.city ? 'rotate-180' : ''" />
                 </button>
                 <div v-show="openGroups.city" class="mt-2">
@@ -432,7 +455,7 @@ const clear = () => {
                 </div>
             </div>
 
-            <div class="border-t border-border/60 py-3">
+            <div class="order-8 border-t border-border/60 py-3">
                 <button type="button" class="flex w-full items-center justify-between gap-2 text-left" :aria-expanded="openGroups.body" @click="toggleGroup('body')">
                     <span class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Carrocería</span>
                     <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="openGroups.body ? 'rotate-180' : ''" />
@@ -448,7 +471,7 @@ const clear = () => {
                 </div>
             </div>
 
-            <div class="border-t border-border/60 py-3">
+            <div class="order-9 border-t border-border/60 py-3">
                 <button type="button" class="flex w-full items-center justify-between gap-2 text-left" :aria-expanded="openGroups.transmission" @click="toggleGroup('transmission')">
                     <span class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Transmisión</span>
                     <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="openGroups.transmission ? 'rotate-180' : ''" />
@@ -461,7 +484,7 @@ const clear = () => {
                 </div>
             </div>
 
-            <div class="border-t border-border/60 py-3">
+            <div class="order-10 border-t border-border/60 py-3">
                 <button type="button" class="flex w-full items-center justify-between gap-2 text-left" :aria-expanded="openGroups.fuel" @click="toggleGroup('fuel')">
                     <span class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Combustible</span>
                     <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="openGroups.fuel ? 'rotate-180' : ''" />
@@ -474,7 +497,7 @@ const clear = () => {
                 </div>
             </div>
 
-            <div class="border-t border-border/60 py-3">
+            <div class="order-11 border-t border-border/60 py-3">
                 <button type="button" class="flex w-full items-center justify-between gap-2 text-left" :aria-expanded="openGroups.color" @click="toggleGroup('color')">
                     <span class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Color</span>
                     <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="openGroups.color ? 'rotate-180' : ''" />
@@ -487,7 +510,7 @@ const clear = () => {
                 </div>
             </div>
 
-            <div class="border-t border-border/60 py-3">
+            <div class="order-6 border-t border-border/60 py-3">
                 <button type="button" class="flex w-full items-center justify-between gap-2 text-left" :aria-expanded="openGroups.price" @click="toggleGroup('price')">
                     <span class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Precio (MXN)</span>
                     <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="openGroups.price ? 'rotate-180' : ''" />
@@ -502,7 +525,7 @@ const clear = () => {
                 </div>
             </div>
 
-            <div class="border-t border-border/60 py-3">
+            <div class="order-7 border-t border-border/60 py-3">
                 <button type="button" class="flex w-full items-center justify-between gap-2 text-left" :aria-expanded="openGroups.km" @click="toggleGroup('km')">
                     <span class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Kilometraje</span>
                     <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="openGroups.km ? 'rotate-180' : ''" />
@@ -514,7 +537,7 @@ const clear = () => {
                 </div>
             </div>
 
-            <div class="border-t border-border/60 py-3">
+            <div class="order-4 border-t border-border/60 py-3">
                 <button type="button" class="flex w-full items-center justify-between gap-2 text-left" :aria-expanded="openGroups.year" @click="toggleGroup('year')">
                     <span class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Año</span>
                     <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="openGroups.year ? 'rotate-180' : ''" />
@@ -535,11 +558,12 @@ const clear = () => {
             <button
                 type="button"
                 :disabled="activeFiltersCount === 0"
-                class="mt-4 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm font-semibold text-secondary transition hover:border-primary/40 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border disabled:hover:text-secondary"
+                class="order-12 mt-4 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm font-semibold text-secondary transition hover:border-primary/40 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border disabled:hover:text-secondary"
                 @click="clear"
             >
                 Limpiar filtros
             </button>
+            </div>
             </div>
         </aside>
 
@@ -610,16 +634,18 @@ const clear = () => {
                     <template v-if="cars.meta.total > 0">
                         {{ cars.meta.total.toLocaleString('es-MX') }} {{ cars.meta.total === 1 ? 'auto encontrado' : 'autos encontrados' }}
                     </template>
-                    <template v-else-if="externalAsMain">
-                        Resultados de plataformas aliadas
-                    </template>
                     <template v-else>
                         Sin resultados en el catálogo
                     </template>
                 </p>
-                <span v-if="filtering" class="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-                    <LoaderCircle class="h-3.5 w-3.5 animate-spin" /> Actualizando…
-                </span>
+                <div class="flex items-center gap-2">
+                    <Button variant="outline" size="sm" class="gap-1.5 rounded-full" @click="openExternalSearch(true)">
+                        <Globe class="h-4 w-4" /> Buscar en otras plataformas
+                    </Button>
+                    <span v-if="filtering" class="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                        <LoaderCircle class="h-3.5 w-3.5 animate-spin" /> Actualizando…
+                    </span>
+                </div>
             </div>
 
             <div v-if="activeChips.length" class="mb-4 flex flex-wrap gap-2">
@@ -639,23 +665,17 @@ const clear = () => {
                 <CarCard v-for="car in cars.data" :key="car.id" :car="car" />
             </div>
 
-            <div v-else-if="externalSearch.loading.value" class="grid place-items-center rounded-3xl border border-dashed border-border bg-card py-20 text-center">
-                <LoaderCircle class="h-10 w-10 animate-spin text-primary" />
-                <h2 class="mt-4 text-lg font-bold text-secondary">Buscando en otras plataformas…</h2>
-                <p class="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-                    No encontramos autos en nuestro catálogo. Estamos revisando Mercado Libre, Seminuevos y más.
-                </p>
-            </div>
-
-            <div v-else-if="externalSearch.results.value.length" class="space-y-5">
+            <div v-else-if="cachedExternalCars.length" class="space-y-5">
                 <div class="rounded-2xl border border-primary/20 bg-accent/40 px-4 py-3">
-                    <p class="text-xs font-bold uppercase tracking-wider text-primary">Resultados en otras plataformas</p>
+                    <p class="text-xs font-bold uppercase tracking-wider text-primary">
+                        {{ cachedExternalCars.length }} autos encontrados en otras plataformas
+                    </p>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        No encontramos autos en el catálogo WeCar. Estos anuncios provienen de plataformas aliadas.
+                        No encontramos autos en el catálogo WeCar. Te mostramos resultados guardados de búsquedas recientes.
                     </p>
                 </div>
                 <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                    <ExternalCarCard v-for="car in externalSearch.results.value" :key="car.id" :car="car" @open="externalSearch.openExternal" />
+                    <ExternalCarCard v-for="car in cachedExternalCars" :key="car.id" :car="car" @open="openExternalCar" />
                 </div>
             </div>
 
@@ -663,15 +683,19 @@ const clear = () => {
                 <X class="h-10 w-10 text-muted-foreground" />
                 <h2 class="mt-4 text-lg font-bold text-secondary">Sin resultados</h2>
                 <p class="mt-2 max-w-md text-sm text-muted-foreground">
-                    Prueba ajustando los filtros o ampliando el rango de precio y año.
+                    Prueba ajustando los filtros o busca en otras plataformas con marca, modelo y año exacto.
                 </p>
-                <Button class="mt-5 rounded-full" @click="clear">Limpiar filtros</Button>
-                <p v-if="externalSearch.error.value" class="mt-4 text-xs font-semibold text-destructive">{{ externalSearch.error.value }}</p>
+                <div class="mt-5 flex flex-wrap items-center justify-center gap-2">
+                    <Button class="gap-1.5 rounded-full" @click="openExternalSearch(true)">
+                        <Globe class="h-4 w-4" /> Buscar en otras plataformas
+                    </Button>
+                    <Button variant="outline" class="rounded-full" @click="clear">Limpiar filtros</Button>
+                </div>
             </div>
 
             <Pagination :current-page="cars.meta.current_page" :last-page="cars.meta.last_page" :base-query="filters" />
 
-            <section v-if="(props.externalCars.length || externalSearch.enabled.value) && !externalAsMain" class="mt-12 border-t border-border pt-8">
+            <section v-if="cachedExternalCars.length || externalSearch.enabled.value" class="mt-12 border-t border-border pt-8">
                 <div class="flex flex-wrap items-end justify-between gap-3">
                     <div>
                         <p class="text-xs font-bold uppercase tracking-wider text-primary">Búsqueda inteligente</p>
@@ -679,27 +703,34 @@ const clear = () => {
                     </div>
                 </div>
 
-                <div v-if="props.externalCars.length" class="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                    <ExternalCarCard v-for="car in props.externalCars" :key="car.id" :car="car" @open="externalSearch.openExternal" />
+                <div v-if="cachedExternalCars.length" class="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                    <ExternalCarCard v-for="car in cachedExternalCars" :key="car.id" :car="car" @open="openExternalCar" />
                 </div>
-                <p v-else class="mt-4 text-sm text-muted-foreground">Aún no hay autos externos en caché. Realiza una búsqueda para encontrarlos.</p>
+                <p v-else class="mt-4 text-sm text-muted-foreground">Aún no hay autos externos guardados. Realiza una búsqueda para encontrarlos.</p>
 
                 <div class="mt-6">
-                    <SearchTokensCard :status="externalSearch.status.value" :on-search="searchExternal" />
+                    <SearchTokensCard :status="externalSearch.status.value" :on-search="() => openExternalSearch(true)" />
                 </div>
             </section>
         </div>
     </section>
 
-    <ExternalSearchModal
-        :open="externalSearch.showModal.value"
+    <ExternalSearchDialog
+        :open="externalDialogOpen"
         :loading="externalSearch.loading.value"
         :results="externalSearch.results.value"
         :error="externalSearch.error.value"
-        :query="externalSearch.lastQuery.value"
-        :platforms="externalSearch.status.value?.platforms ?? []"
-        @close="externalSearch.closeModal"
-        @open="externalSearch.openExternal"
+        :status="externalSearch.status.value"
+        :brands="options.brands"
+        :models="options.models"
+        :versions="options.versions"
+        :cities="options.cities"
+        :initial-criteria="externalDialogInitial"
+        :year-min="options.year.min"
+        :year-max="options.year.max"
+        @close="externalDialogOpen = false"
+        @search="submitExternalSearch"
+        @open-car="openExternalCar"
         @retry="retryExternalSearch"
     />
 

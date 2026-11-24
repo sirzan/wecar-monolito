@@ -171,7 +171,8 @@ it('lets administrators confirm and cancel appointments', function () {
 it('forbids viewers from changing appointment status', function () {
     $this->seed();
 
-    $viewer = User::factory()->create();    $viewer->assignRole('viewer');
+    $viewer = User::factory()->create();
+    $viewer->assignRole('viewer');
 
     $appointment = CertificationAppointment::query()->create([
         ...appointmentPayload(),
@@ -266,4 +267,65 @@ it('reschedules an appointment only into an available slot', function () {
             'scheduled_time' => '12:00',
         ])
         ->assertSessionHasErrors('scheduled_time');
+});
+
+it('returns a whatsapp confirmation url with the appointment summary', function () {
+    Mail::fake();
+    configureCertifications();
+
+    $response = $this->postJson('/api/certificaciones/citas', appointmentPayload())
+        ->assertCreated();
+
+    $url = $response->json('appointment.whatsapp_url');
+
+    expect($url)->toBeString()
+        ->and($url)->toStartWith('https://wa.me/52')
+        ->and($response->json('appointment.whatsapp_auto_open'))->toBeTrue();
+
+    $query = [];
+    parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+    $text = (string) ($query['text'] ?? '');
+
+    $folio = $response->json('appointment.folio');
+
+    expect($text)->toContain($folio)
+        ->and($text)->toContain('María López')
+        ->and($text)->toContain('Toyota Corolla 2022')
+        ->and($text)->toContain('Taller Motorevs')
+        ->and($text)->toContain('$1,612.40 MXN')
+        ->and($text)->toContain('Prueba automatizada.');
+});
+
+it('uses the whatsapp number and message configured by the admin', function () {
+    Mail::fake();
+    configureCertifications([
+        'whatsapp' => '+52 (81) 1234-5678',
+        'whatsapp_auto_open' => false,
+        'whatsapp_message' => 'Confirmo la cita {folio} de {nombre} para el {vehiculo}.',
+    ]);
+
+    $response = $this->postJson('/api/certificaciones/citas', appointmentPayload())
+        ->assertCreated();
+
+    $url = $response->json('appointment.whatsapp_url');
+
+    expect($url)->toStartWith('https://wa.me/528112345678')
+        ->and($response->json('appointment.whatsapp_auto_open'))->toBeFalse();
+
+    $query = [];
+    parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+    $text = (string) ($query['text'] ?? '');
+
+    expect($text)->toBe('Confirmo la cita '.$response->json('appointment.folio').' de María López para el Toyota Corolla 2022.');
+});
+
+it('returns no whatsapp url when no confirmation number is configured', function () {
+    Mail::fake();
+    configureCertifications();
+    config()->set('certifications.whatsapp', '');
+
+    $response = $this->postJson('/api/certificaciones/citas', appointmentPayload())
+        ->assertCreated();
+
+    expect($response->json('appointment.whatsapp_url'))->toBeNull();
 });

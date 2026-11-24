@@ -114,6 +114,7 @@ class CatalogSeeder extends Seeder
             'title' => 'Garantía Wecar',
             'description' => 'Protección integral para tu compra.',
             'contact_email' => 'garantia@wecar.mx',
+            'service_fee_rate' => 2.5,
         ]);
     }
 }

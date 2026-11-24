@@ -632,14 +632,20 @@ class ExternalCarNormalizer
             return null;
         }
 
+        $title = $this->sanitizeListingTitle((string) ($car['title'] ?? ''), (string) $sourceUrl);
+
+        if ($title === '') {
+            return null;
+        }
+
         return [
             'id' => $this->externalId($sourceUrl),
             'slug' => ExternalListingSlug::make(
                 is_numeric($car['year'] ?? null) ? (int) $car['year'] : null,
-                trim((string) $car['title']),
+                $title,
                 $this->externalId($sourceUrl),
             ),
-            'title' => trim((string) $car['title']),
+            'title' => $title,
             'price' => is_numeric($car['price'] ?? null) ? (int) round((float) $car['price']) : null,
             'year' => is_numeric($car['year'] ?? null) ? (int) $car['year'] : null,
             'km' => is_numeric($car['km'] ?? null) ? max(0, (int) round((float) $car['km'])) : null,
@@ -825,7 +831,7 @@ class ExternalCarNormalizer
 
             // 2. Extraer enlaces Markdown de fichas individuales junto con su tarjeta cercana.
             foreach ($lines as $index => $line) {
-                if (! preg_match_all('/\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/', $line, $matches, PREG_SET_ORDER)) {
+                if (! preg_match_all('/(?<!!)\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/', $line, $matches, PREG_SET_ORDER)) {
                     continue;
                 }
 
@@ -838,7 +844,7 @@ class ExternalCarNormalizer
                         continue;
                     }
 
-                    $rawTitle = trim(preg_replace('/!\[[^\]]*\]\([^)]+\)/', '', $match[1]) ?? $match[1]);
+                    $rawTitle = $this->sanitizeListingTitle((string) $match[1], (string) $url);
                     $candidate = $this->buildListingCandidateFromWindow(
                         $url,
                         $rawTitle !== '' ? $rawTitle : $this->extractTitleFromWindow($windowText, $url),
@@ -1127,11 +1133,11 @@ class ExternalCarNormalizer
             }
 
             if ($this->extractYears($plain) !== [] && strlen($plain) <= 95) {
-                return $plain;
+                return $this->sanitizeListingTitle($plain, $url);
             }
         }
 
-        return $this->titleFromUrlSlug($url);
+        return $this->sanitizeListingTitle('', $url);
     }
 
     private function cleanListingTitle(string $title, string $url): string
@@ -1139,6 +1145,38 @@ class ExternalCarNormalizer
         $cleaned = trim(preg_replace('/\s*\|\s*(?:Seminuevos\.com|Kavak.*|Autocosmos.*|Mercado\s*Libre.*)$/iu', '', $title) ?? $title);
 
         return $cleaned !== '' ? $cleaned : $this->titleFromUrlSlug($url);
+    }
+
+    /**
+     * Limpia títulos provenientes de Markdown o scrapeo y evita títulos vacíos, URLs o años sueltos.
+     */
+    public function sanitizeListingTitle(string $title, string $fallbackUrl = ''): string
+    {
+        $value = trim($title);
+
+        if ($value === '') {
+            return trim($this->titleFromUrlSlug($fallbackUrl));
+        }
+
+        $value = (string) preg_replace('/!\[([^\]]*)\]\([^)]*\)/u', '$1', $value);
+        $value = (string) preg_replace('/\[([^\]]*)\]\([^)]*\)/u', '$1', $value);
+        $value = strip_tags($value);
+        $value = (string) preg_replace('/\s*\|\s*(?:Seminuevos\.com|Kavak.*|Autocosmos.*|Mercado\s*Libre.*)$/iu', ' ', $value);
+        $value = str_replace(['\\', '!', '[', ']', "\u{00A0}"], ' ', $value);
+        $value = (string) preg_replace('/\s+/u', ' ', $value);
+        $value = trim($value, " \t\n\r\0\x0B-|");
+
+        $isUnusable = $value === ''
+            || mb_strlen($value) < 5
+            || preg_match('~^https?://~i', $value) === 1
+            || preg_match('/^\d{4}$/', $value) === 1
+            || preg_match('/^[\d\s.,-]+$/u', $value) === 1;
+
+        if ($isUnusable) {
+            $value = trim($this->titleFromUrlSlug($fallbackUrl));
+        }
+
+        return $value;
     }
 
     private function titleFromUrlSlug(string $url): string
@@ -1210,11 +1248,12 @@ class ExternalCarNormalizer
         }
 
         if ($response instanceof \Throwable) {
-            return false;
+            // Ante timeouts o fallos de red no descartamos la foto: priorizamos mostrar el auto.
+            return true;
         }
 
         if (! $response instanceof Response) {
-            return false;
+            return true;
         }
 
         // Algunos CDN responden 405 a HEAD o 403 a bots de nube: reintentamos un GET mínimo de rango antes de descartar.
@@ -1244,8 +1283,13 @@ class ExternalCarNormalizer
             }
         }
 
-        if ($response->status() >= 400) {
+        if (in_array($response->status(), [404, 410], true)) {
             return false;
+        }
+
+        // 403, 429 o 5xx suelen ser bloqueos temporales de CDN: conservamos la foto.
+        if ($response->status() >= 400) {
+            return true;
         }
 
         $contentType = strtolower((string) $response->header('Content-Type'));
@@ -1298,14 +1342,15 @@ class ExternalCarNormalizer
                 return false;
             }
 
+            // Timeouts o errores de red temporales: conservamos el anuncio.
             return true;
         }
 
         if (! $response instanceof Response) {
-            return false;
+            return true;
         }
 
-        if (in_array($response->status(), [404, 410], true) || $response->serverError()) {
+        if (in_array($response->status(), [404, 410], true)) {
             return false;
         }
 

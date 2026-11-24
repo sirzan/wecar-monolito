@@ -20,13 +20,14 @@ class DiditController extends Controller
             return response()->json(['error' => 'Didit no está configurado.'], 422);
         }
 
-        $status = $request->user()->profile?->didit_status;
+        $profile = $request->user()->profile;
+        $blocking = $profile ? $this->didit->blockingStatus($profile) : null;
 
-        if ($status === 'approved') {
+        if ($blocking === 'approved') {
             return response()->json(['error' => 'Tu identidad ya está verificada.'], 409);
         }
 
-        if ($status === 'in_review') {
+        if ($blocking === 'in_review') {
             return response()->json(['error' => 'Tu verificación está en revisión.'], 409);
         }
 

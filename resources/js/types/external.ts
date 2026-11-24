@@ -36,6 +36,14 @@ export interface ExternalSearchStatus {
     platforms: ExternalPlatform[];
 }
 
+export interface ExternalSearchCriteria {
+    brand_id: string;
+    model_id: string;
+    year: number;
+    version_id?: string;
+    city?: string;
+}
+
 export interface ExternalSearchResponse {
     results: ExternalCar[];
     platformsSearched: string[];

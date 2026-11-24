@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Loader2, MapPin, X } from '@lucide/vue';
+import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Loader2, MapPin, MessageCircle, X } from '@lucide/vue';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
@@ -77,6 +77,8 @@ interface Appointment {
     status: string;
     status_label: string;
     workshop: Workshop;
+    whatsapp_url: string | null;
+    whatsapp_auto_open: boolean;
 }
 
 const props = defineProps<{
@@ -323,6 +325,9 @@ const submit = async () => {
     submitError.value = '';
     fieldErrors.value = {};
 
+    // Se abre la pestaña antes del fetch para evitar el bloqueo de popups del navegador.
+    const whatsappWindow = window.open('', '_blank');
+
     try {
         const token = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
         const response = await fetch('/api/certificaciones/citas', {
@@ -349,6 +354,8 @@ const submit = async () => {
         const payload = await response.json().catch(() => ({}));
 
         if (!response.ok) {
+            whatsappWindow?.close();
+
             if (payload.errors) {
                 fieldErrors.value = payload.errors;
             }
@@ -356,8 +363,20 @@ const submit = async () => {
             throw new Error(payload.message || 'No pudimos registrar tu cita. Intenta de nuevo.');
         }
 
-        success.value = payload.appointment as Appointment;
+        const appointment = payload.appointment as Appointment;
+        success.value = appointment;
+
+        if (appointment.whatsapp_url && appointment.whatsapp_auto_open) {
+            if (whatsappWindow) {
+                whatsappWindow.location.href = appointment.whatsapp_url;
+            } else {
+                window.location.href = appointment.whatsapp_url;
+            }
+        } else {
+            whatsappWindow?.close();
+        }
     } catch (error) {
+        whatsappWindow?.close();
         submitError.value = error instanceof Error ? error.message : 'No pudimos registrar tu cita. Intenta de nuevo.';
         await loadAvailability();
     } finally {
@@ -430,8 +449,7 @@ const errorFor = (field: string): string | null => fieldErrors.value[field]?.[0]
                         <div>
                             <p class="font-bold text-emerald-800">Tu solicitud quedó registrada.</p>
                             <p class="mt-1 text-sm text-emerald-900/80">
-                                La cita queda pendiente de confirmación por el taller. Te contactaremos por correo o
-                                WhatsApp.
+                                La cita queda pendiente hasta que la confirmes por WhatsApp con el taller.
                             </p>
                         </div>
                     </div>
@@ -478,7 +496,27 @@ const errorFor = (field: string): string | null => fieldErrors.value[field]?.[0]
                         </div>
                     </dl>
 
-                    <Button class="w-full rounded-full" @click="emit('close')">Cerrar</Button>
+                    <div class="grid gap-2 sm:grid-cols-2">
+                        <Button
+                            v-if="success.whatsapp_url"
+                            as="a"
+                            :href="success.whatsapp_url"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            variant="hero"
+                            class="w-full rounded-full"
+                        >
+                            <MessageCircle class="h-4 w-4" /> Confirmar por WhatsApp
+                        </Button>
+                        <Button
+                            variant="outline"
+                            class="w-full rounded-full"
+                            :class="success.whatsapp_url ? '' : 'sm:col-span-2'"
+                            @click="emit('close')"
+                        >
+                            Cerrar
+                        </Button>
+                    </div>
                 </div>
 
                 <!-- Formulario -->

@@ -65,6 +65,43 @@ it('filters the catalog by brand', function () {
         );
 });
 
+it('exposes catalog brands models and versions without published cars for external search filters', function () {
+    $brand = CarBrand::query()->create(['slug' => 'mazda-prueba', 'name' => 'Mazda Prueba']);
+    $model = CarModel::query()->create([
+        'brand_id' => $brand->getKey(),
+        'slug' => 'cx-5-prueba',
+        'name' => 'CX-5 Prueba',
+    ]);
+    $modelWithoutVersions = CarModel::query()->create([
+        'brand_id' => $brand->getKey(),
+        'slug' => 'mazda-2-prueba',
+        'name' => 'Mazda 2 Prueba',
+    ]);
+    CarVersion::query()->create([
+        'model_id' => $model->getKey(),
+        'name' => 'Signature Prueba',
+        'year' => '2024',
+    ]);
+
+    $this->get('/comprar')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Public/Comprar')
+            ->where('cars.meta.total', 0)
+            ->where('options.brands', fn ($brands) => collect($brands)->contains(
+                fn ($item) => $item['slug'] === 'mazda-prueba' && (int) $item['count'] === 0,
+            ))
+            ->where('options.models', fn ($models) => collect($models)->contains(
+                fn ($item) => $item['id'] === $model->getKey(),
+            ) && collect($models)->contains(
+                fn ($item) => $item['id'] === $modelWithoutVersions->getKey(),
+            ))
+            ->where('options.versions', fn ($versions) => collect($versions)->contains(
+                fn ($item) => $item['name'] === 'Signature Prueba',
+            ))
+        );
+});
+
 it('renders a car detail page with slug and seo', function () {
     $this->seed();
     $car = makeCar();

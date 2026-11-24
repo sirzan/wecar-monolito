@@ -63,6 +63,7 @@ const mainItems = [
     { label: 'Cupones', href: '/admin/cupones', icon: TicketPercent },
     { label: 'Publicidad', href: '/admin/publicidad', icon: Megaphone },
     { label: 'Pagos', href: '/admin/pagos', icon: Receipt },
+    { label: 'Cotizaciones', href: '/admin/cotizaciones-garantia', icon: FileText },
     { label: 'Reportes', href: '/admin/reportes', icon: FileWarning },
     { label: 'Leads', href: '/admin/leads', icon: Inbox },
 ];

@@ -31,6 +31,14 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
     return response.json() as Promise<T>;
 }
 
+export interface ExternalSearchCriteria {
+    brand_id: string;
+    model_id: string;
+    year: number;
+    version_id?: string;
+    city?: string;
+}
+
 export function useExternalSearch() {
     const status = ref<ExternalSearchStatus | null>(null);
     const results = ref<ExternalCar[]>([]);
@@ -73,8 +81,14 @@ export function useExternalSearch() {
         }
     };
 
-    const search = async (query: string, refresh = false, options: { modal?: boolean } = {}) => {
+    const search = async (
+        query: string,
+        refresh = false,
+        options: { modal?: boolean; criteria?: ExternalSearchCriteria } = {},
+    ) => {
         if (!query.trim() || loading.value) return;
+        if (!options.criteria) return;
+
         lastQuery.value = query.trim();
         loading.value = true;
         error.value = null;
@@ -86,6 +100,7 @@ export function useExternalSearch() {
                 method: 'POST',
                 body: JSON.stringify({
                     q: query.trim(),
+                    ...options.criteria,
                     ...(refresh ? { refresh: true } : {}),
                 }),
             });
