@@ -1,5 +1,6 @@
 <?php
 
+use App\Services\DiditService;
 use App\Services\ExternalSearch\ExternalSearchCacheService;
 use App\Services\PlanExpirationService;
 use App\Services\PlanReminderService;
@@ -45,6 +46,17 @@ Artisan::command('seo:generate-sitemap', function () {
     ));
 })->purpose('Genera el sitemap XML del portal y de los autos publicados');
 
+Artisan::command('didit:sync-pending', function () {
+    $result = app(DiditService::class)->syncPending();
+
+    $this->info(sprintf(
+        'Didit: %d sesiones revisadas, %d actualizadas, %d expiradas.',
+        $result['checked'],
+        $result['updated'],
+        $result['expired'],
+    ));
+})->purpose('Reconcilia verificaciones de identidad pendientes o en revisión con Didit');
+
 Schedule::call(fn () => app(ExternalSearchCacheService::class)->prune())
     ->daily()
     ->name('external-search-cache-prune')
@@ -65,3 +77,8 @@ Schedule::command('plans:process-expirations')
     ->timezone('America/Monterrey')
     ->onOneServer()
     ->withoutOverlapping(30);
+Schedule::command('didit:sync-pending')
+    ->everyThirtyMinutes()
+    ->timezone('America/Monterrey')
+    ->onOneServer()
+    ->withoutOverlapping(10);

@@ -20,9 +20,21 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
 
 uses(RefreshDatabase::class);
+
+function paymentExternalCriteria(string $brandName = 'Toyota', string $modelName = 'Corolla', int $year = 2020): array
+{
+    $brand = CarBrand::query()->firstOrCreate(['slug' => Str::slug($brandName)], ['name' => $brandName]);
+    $model = CarModel::query()->firstOrCreate(
+        ['brand_id' => $brand->getKey(), 'slug' => Str::slug($modelName)],
+        ['name' => $modelName],
+    );
+
+    return ['brand_id' => $brand->getKey(), 'model_id' => $model->getKey(), 'year' => $year];
+}
 
 function paymentUser(): User
 {
@@ -300,9 +312,11 @@ it('returns external search results when firecrawl is configured', function () {
                 ],
             ],
         ]),
+        'https://http2.mlstatic.com/corolla.jpg' => Http::response('', 200, ['Content-Type' => 'image/jpeg']),
+        'https://autos.mercadolibre.com.mx/MLM-123456789-toyota-corolla-2020' => Http::response('<html><head><title>Toyota Corolla 2020</title></head></html>', 200, ['Content-Type' => 'text/html']),
     ]);
 
-    $this->postJson('/api/external-search', ['q' => 'toyota corolla'])
+    $this->postJson('/api/external-search', paymentExternalCriteria())
         ->assertOk()
         ->assertJsonPath('results.0.title', 'Toyota Corolla 2020');
 });
@@ -310,7 +324,7 @@ it('returns external search results when firecrawl is configured', function () {
 it('returns 422 for external search without firecrawl key', function () {
     config()->set('services.firecrawl.key', null);
 
-    $this->postJson('/api/external-search', ['q' => 'toyota corolla'])->assertStatus(422);
+    $this->postJson('/api/external-search', paymentExternalCriteria())->assertStatus(422);
 });
 
 it('stores push subscriptions for a user', function () {

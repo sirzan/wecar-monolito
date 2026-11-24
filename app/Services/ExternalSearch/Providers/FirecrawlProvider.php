@@ -12,7 +12,7 @@ use Illuminate\Support\Str;
 
 class FirecrawlProvider
 {
-    private const MAX_PER_PLATFORM = 10;
+    private const MAX_PER_PLATFORM = 12;
 
     private const AI_COMPLEMENT_THRESHOLD = 15;
 
@@ -195,7 +195,7 @@ class FirecrawlProvider
 
         return [
             'query' => $this->buildSearchQuery($query, $platformId),
-            'limit' => 10,
+            'limit' => 12,
             'country' => 'MX',
             'location' => 'Mexico',
             'ignoreInvalidURLs' => true,

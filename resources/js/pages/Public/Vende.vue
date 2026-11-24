@@ -952,56 +952,16 @@ const goBack = () => {
                         </div>
                     </div>
 
-                    <!-- Comparables internos -->
-                    <div v-if="comparablesLoading" class="rounded-2xl border border-border bg-muted/30 p-4 text-xs text-muted-foreground">
-                        <p class="flex items-center gap-2 font-bold">
-                            <LoaderCircle class="h-4 w-4 animate-spin" /> Calculando comparables de WeCar…
-                        </p>
-                    </div>
-
-                    <div v-else-if="priceComparables && priceComparables.samples > 0" class="rounded-2xl border border-primary/30 bg-accent/50 p-4 text-xs text-secondary flex items-start gap-3">
-                        <Info class="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                        <div class="min-w-0 flex-1">
-                            <div class="flex flex-wrap items-center justify-between gap-2">
-                                <p class="font-black">Datos de WeCar</p>
-                                <span class="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase text-primary">
-                                    Confianza {{ confidenceLabel(priceComparables.confidence) }}
-                                </span>
-                            </div>
-                            <p class="mt-1 text-muted-foreground">
-                                Basado en <strong>{{ priceComparables.samples }}</strong> autos similares
-                                {{ priceComparables.scope === 'version' ? 'con la misma versión' : 'del mismo modelo' }}{{ priceComparables.year_scope === 'range' ? ' (incluye años cercanos)' : ` (${form.year})` }}.
-                            </p>
-                            <p class="mt-1 text-muted-foreground">
-                                Rango típico <strong>{{ formatPrice(priceComparables.p25 ?? 0) }}</strong> – <strong>{{ formatPrice(priceComparables.p75 ?? 0) }}</strong>
-                                <span class="text-muted-foreground/70"> · Mín. {{ formatPrice(priceComparables.min ?? 0) }} · Máx. {{ formatPrice(priceComparables.max ?? 0) }}</span>
-                            </p>
-                            <p v-if="priceComparables.samples < 3" class="mt-1 font-semibold text-amber-600">
-                                Pocos comparables; usa esta referencia con cautela.
-                            </p>
-                            <button
-                                type="button"
-                                class="mt-2 rounded-full bg-primary px-3 py-1.5 font-bold text-primary-foreground hover:opacity-90"
-                                 @click="form.price = priceComparables.median ?? 0; form.price_confirmed = true"
-                            >
-                                Usar precio sugerido {{ formatPrice(priceComparables.median ?? 0) }}
-                            </button>
-                        </div>
-                    </div>
-
-                    <div v-else-if="comparablesError" class="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-xs text-amber-700">
-                        {{ comparablesError }}
-                    </div>
-
-                    <!-- Referencia Libro Azul / Mercado MXN -->
+                    <!-- Precio sugerido Libro Azul (Guía EBC) -->
                     <div v-if="shouldShowMarket" class="rounded-2xl border border-blue-500/30 bg-blue-500/5 p-4 text-xs text-secondary flex items-start gap-3">
                         <Info class="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
                         <div class="min-w-0 flex-1">
                             <div class="flex flex-wrap items-center justify-between gap-2">
                                 <p class="font-black text-blue-700">
-                                    {{ priceMarket?.source_label || 'Referencia Libro Azul / Mercado MXN' }}
+                                    {{ priceMarket?.source_label || 'Libro Azul (Guía EBC)' }}
                                 </p>
                                 <div class="flex flex-wrap items-center gap-1.5">
+                                    <span class="rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-bold uppercase text-blue-700">México · MXN</span>
                                     <span
                                         v-if="priceMarket?.match_level && priceMarket.match_level !== 'none'"
                                         class="rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-bold uppercase text-blue-700"
@@ -1015,7 +975,7 @@ const goBack = () => {
                             </div>
 
                             <p v-if="marketLoading" class="mt-1.5 flex items-center gap-2 text-muted-foreground">
-                                <LoaderCircle class="h-3.5 w-3.5 animate-spin" /> Consultando Libro Azul y mercado mexicano (MXN)…
+                                <LoaderCircle class="h-3.5 w-3.5 animate-spin" /> Consultando el Libro Azul (Guía EBC) en pesos mexicanos…
                             </p>
 
                             <template v-else-if="priceMarket && priceMarket.suggested">
@@ -1048,7 +1008,7 @@ const goBack = () => {
                                         class="rounded-full bg-blue-600 px-3 py-1.5 font-bold text-white hover:opacity-90"
                                         @click="form.price = priceMarket.suggested ?? 0; form.price_confirmed = true"
                                     >
-                                        Usar precio sugerido {{ formatPrice(priceMarket.suggested) }}
+                                        Usar precio Libro Azul {{ formatPrice(priceMarket.suggested) }}
                                     </button>
                                     <button
                                         type="button"
@@ -1061,7 +1021,7 @@ const goBack = () => {
                             </template>
 
                             <div v-else class="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-muted-foreground">
-                                <span>{{ marketError || 'Sin datos suficientes en Libro Azul ni mercado mexicano.' }}</span>
+                                <span>{{ marketError || 'Libro Azul no tiene una valuación para este vehículo. Captura tu precio manualmente.' }}</span>
                                 <button
                                     type="button"
                                     class="inline-flex items-center gap-1 rounded-full border border-blue-500/30 bg-background px-3 py-1 font-bold text-blue-700 hover:bg-blue-500/10"
@@ -1071,6 +1031,40 @@ const goBack = () => {
                                 </button>
                             </div>
                         </div>
+                    </div>
+
+                    <!-- Comparables internos (referencia secundaria) -->
+                    <div v-if="comparablesLoading" class="rounded-2xl border border-border bg-muted/30 p-4 text-xs text-muted-foreground">
+                        <p class="flex items-center gap-2 font-bold">
+                            <LoaderCircle class="h-4 w-4 animate-spin" /> Calculando referencia de WeCar…
+                        </p>
+                    </div>
+
+                    <div v-else-if="priceComparables && priceComparables.samples > 0" class="rounded-2xl border border-border bg-muted/30 p-4 text-xs text-secondary flex items-start gap-3">
+                        <Info class="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+                        <div class="min-w-0 flex-1">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <p class="font-black">Referencia WeCar (catálogo interno)</p>
+                                <span class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase text-muted-foreground">
+                                    Confianza {{ confidenceLabel(priceComparables.confidence) }}
+                                </span>
+                            </div>
+                            <p class="mt-1 text-muted-foreground">
+                                Basado en <strong>{{ priceComparables.samples }}</strong> autos similares
+                                {{ priceComparables.scope === 'version' ? 'con la misma versión' : 'del mismo modelo' }}{{ priceComparables.year_scope === 'range' ? ' (incluye años cercanos)' : ` (${form.year})` }}.
+                            </p>
+                            <p class="mt-1 text-muted-foreground">
+                                Rango típico <strong>{{ formatPrice(priceComparables.p25 ?? 0) }}</strong> – <strong>{{ formatPrice(priceComparables.p75 ?? 0) }}</strong>
+                                <span class="text-muted-foreground/70"> · Mín. {{ formatPrice(priceComparables.min ?? 0) }} · Máx. {{ formatPrice(priceComparables.max ?? 0) }}</span>
+                            </p>
+                            <p v-if="priceComparables.samples < 3" class="mt-1 font-semibold text-amber-600">
+                                Pocos comparables; usa esta referencia con cautela.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div v-else-if="comparablesError" class="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-xs text-amber-700">
+                        {{ comparablesError }}
                     </div>
 
                     <div class="flex items-center justify-between gap-3 border-t border-border pt-6">

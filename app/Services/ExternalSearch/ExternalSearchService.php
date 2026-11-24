@@ -168,9 +168,9 @@ class ExternalSearchService
             }
         }
 
-        $candidates = $this->normalizer->balanceByPlatform(array_values($this->normalizer->withIds($cars)), 24);
+        $candidates = $this->normalizer->balanceByPlatform(array_values($this->normalizer->withIds($cars)), 36);
         $verified = $this->normalizer->verifyLiveCars($candidates);
-        $cars = $this->normalizer->balanceByPlatform(array_values($this->normalizer->withIds($verified)), 15);
+        $cars = $this->normalizer->balanceByPlatform(array_values($this->normalizer->withIds($verified)), 24);
         $payload = [
             'results' => $cars,
             'platformsSearched' => collect($activePlatforms)->pluck('name')->values()->all(),
@@ -279,7 +279,7 @@ class ExternalSearchService
     {
         return array_values(array_filter(
             $results,
-            function (mixed $car): bool {
+            function (mixed $car) use ($query): bool {
                 if (! is_array($car)) {
                     return false;
                 }

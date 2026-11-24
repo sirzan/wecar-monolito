@@ -138,7 +138,141 @@ let debounce: ReturnType<typeof setTimeout> | null = null;
 const externalAsMain = computed(
     () =>
         props.cars.meta.total === 0 &&
-        (externalSearch.loading.value || externalSearch.results.value.length > 0),
+        (externalSearch.loading.value || externalSearch.results.value.length > 0 || props.externalCars.length > 0),
+);
+
+const MIN_EXTERNAL_RESULTS = 15;
+
+const externalBrand = computed(() => props.options.brands.find((brand) => brand.slug === form.value.brand) ?? null);
+const externalModel = computed(
+    () => props.options.models.find((model) => model.id === form.value.model && model.brand_id === externalBrand.value?.id) ?? null,
+);
+const externalExactYear = computed(() => {
+    const min = form.value.min_year;
+    const max = form.value.max_year;
+
+    return min && max && min === max ? Number(min) : null;
+});
+
+const externalSearchReady = computed(
+    () => externalBrand.value !== null && externalModel.value !== null && externalExactYear.value !== null,
+);
+
+const externalSearchCriteria = computed(() => {
+    if (!externalSearchReady.value || !externalBrand.value || !externalModel.value || externalExactYear.value === null) {
+        return null;
+    }
+
+    return {
+        brand_id: externalBrand.value.id,
+        model_id: externalModel.value.id,
+        year: externalExactYear.value,
+        ...(form.value.version ? { version_id: form.value.version } : {}),
+        ...(form.value.city ? { city: form.value.city } : {}),
+    };
+});
+
+const normalizeText = (value: string): string =>
+    value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+const strictTokens = (value: string): string[] =>
+    normalizeText(value)
+        .split(/[^a-z0-9]+/)
+        .filter((token) => token.length > 0 && !['los', 'las', 'del', 'de', 'en', 'la', 'el', 'y', 'con', 'para', 'por'].includes(token));
+
+const strictExternalMatches = (car: ExternalCar): boolean => {
+    if (!externalSearchReady.value || !externalBrand.value || !externalModel.value || externalExactYear.value === null) {
+        return false;
+    }
+
+    if (car.year !== null && Number(car.year) !== externalExactYear.value) {
+        return false;
+    }
+
+    const haystack = normalizeText([car.title, car.location ?? '', car.platformName ?? ''].join(' '));
+    const brandTokens = strictTokens(externalBrand.value.name);
+    const modelTokens = strictTokens(externalModel.value.name);
+
+    if (brandTokens.length === 0 || modelTokens.length === 0) return false;
+
+    return brandTokens.every((token) => haystack.includes(token))
+        && modelTokens.every((token) => haystack.includes(token));
+};
+
+const strictExternalCars = computed<ExternalCar[]>(() =>
+    props.externalCars.filter((car) => strictExternalMatches(car)),
+);
+
+const tokenize = (value: string): string[] =>
+    normalizeText(value)
+        .split(/[^a-z0-9]+/)
+        .filter((token) => token.length > 1 && !['los', 'las', 'del', 'de', 'en', 'la', 'el', 'y', 'con', 'para', 'por'].includes(token));
+
+const externalCombined = computed<ExternalCar[]>(() => {
+    if (!externalSearchReady.value) return [];
+
+    const merged: ExternalCar[] = [];
+    const seen = new Set<string>();
+
+    const push = (car: ExternalCar) => {
+        const key = car.id || car.slug || car.url || car.title;
+
+        if (!key || seen.has(key)) return;
+
+        seen.add(key);
+        merged.push(car);
+    };
+
+    for (const car of externalSearch.results.value) push(car);
+    for (const car of strictExternalCars.value) push(car);
+
+    const minPrice = Number(form.value.min_price);
+    const maxPrice = Number(form.value.max_price);
+    const minKm = Number(form.value.min_km);
+    const maxKm = Number(form.value.max_km);
+    const queryTokens = tokenize(form.value.q);
+
+    const matchesRanges = (car: ExternalCar): boolean => {
+        const price = Number(car.price);
+
+        if (Number.isFinite(price)) {
+            if (Number.isFinite(minPrice) && price < minPrice) return false;
+            if (Number.isFinite(maxPrice) && price > maxPrice) return false;
+        }
+
+        const km = Number(car.km);
+
+        if (Number.isFinite(km)) {
+            if (Number.isFinite(minKm) && km < minKm) return false;
+            if (Number.isFinite(maxKm) && km > maxKm) return false;
+        }
+
+        return true;
+    };
+
+    const matchesText = (car: ExternalCar): boolean => {
+        if (queryTokens.length === 0) return true;
+
+        const haystack = tokenize([car.title, car.location ?? '', car.platformName ?? ''].join(' '));
+
+        return queryTokens.some((token) => haystack.includes(token));
+    };
+
+    const strict = merged.filter((car) => strictExternalMatches(car) && matchesRanges(car) && matchesText(car));
+    const result = [...strict];
+
+    // Garantiza al menos 15 resultados del mismo vehículo en todas las plataformas cuando hay suficientes.
+    for (const car of merged) {
+        if (result.length >= MIN_EXTERNAL_RESULTS) break;
+        if (result.includes(car) || !matchesRanges(car)) continue;
+        result.push(car);
+    }
+
+    return result;
+});
+
+const showExternalCombined = computed(
+    () => props.cars.meta.total === 0 && externalCombined.value.length > 0,
 );
 
 onMounted(async () => {
@@ -152,7 +286,7 @@ onMounted(async () => {
     url.searchParams.delete('smart');
     window.history.replaceState(window.history.state, '', url);
 
-    if (props.cars.meta.total === 0 && externalSearch.enabled.value) {
+    if (props.cars.meta.total === 0 && externalSearch.enabled.value && externalSearchReady.value) {
         searchExternalFallback();
     }
 });
@@ -172,7 +306,7 @@ const filterLabel = (key: string, value: string): string => {
     if (key === 'min_km') return `Km desde ${Number(value).toLocaleString('es-MX')}`;
     if (key === 'max_km') return `Km hasta ${Number(value).toLocaleString('es-MX')}`;
     if (key === 'q') return `“${value}”`;
-    if (key === 'city') return `Ciudad: ${value}`;
+    if (key === 'city') return `Ubicación: ${value}`;
     if (key === 'body') return `Carrocería: ${value}`;
     if (key === 'transmission') return `Transmisión: ${value}`;
     if (key === 'fuel') return `Combustible: ${value}`;
@@ -294,7 +428,11 @@ const applySmartSearch = async () => {
         apply(true, (total) => {
             if (total === 0 && smartFallback.value) {
                 smartFallback.value = false;
-                toast.info('No hay resultados en WeCar. Buscando en otras plataformas…');
+
+                if (externalSearchReady.value) {
+                    toast.info('No hay resultados en WeCar. Buscando en otras plataformas…');
+                }
+
                 searchExternalFallback();
                 return;
             }
@@ -309,34 +447,51 @@ const applySmartSearch = async () => {
 
 
 const buildExternalQuery = () => {
-    const text = form.value.q.trim();
-    if (text) return text;
+    if (!externalSearchReady.value || !externalBrand.value || !externalModel.value || externalExactYear.value === null) {
+        return '';
+    }
 
-    const brandName = props.options.brands.find((brand) => brand.slug === form.value.brand)?.name ?? '';
-    const modelName = props.options.models.find((model) => model.id === form.value.model)?.name ?? '';
     const versionName = props.options.versions.find((version) => version.id === form.value.version)?.name ?? '';
-    const yearValue =
-        form.value.min_year && form.value.max_year && form.value.min_year === form.value.max_year
-            ? form.value.min_year
-            : (form.value.min_year || form.value.max_year || '');
 
-    const parts = [brandName, modelName, versionName, yearValue, form.value.body, form.value.city]
+    const parts = [
+        externalBrand.value.name,
+        externalModel.value.name,
+        String(externalExactYear.value),
+        versionName,
+        form.value.city,
+    ]
         .map((part) => part.trim())
         .filter(Boolean);
 
-    return parts.join(' ') || 'autos seminuevos en México';
+    return parts.join(' ');
 };
 
-const searchExternal = () => {
-    void externalSearch.search(buildExternalQuery());
+const runExternalSearch = (options: { modal?: boolean } = {}) => {
+    if (!externalSearchReady.value) {
+        toast.info('Para buscar en otras plataformas selecciona marca, modelo y año exacto.');
+        return;
+    }
+
+    void externalSearch.search(buildExternalQuery(), false, {
+        modal: options.modal ?? true,
+        criteria: externalSearchCriteria.value ?? undefined,
+    });
 };
 
-const searchExternalFallback = () => {
-    void externalSearch.search(buildExternalQuery(), false, { modal: false });
-};
+const searchExternal = () => runExternalSearch();
+
+const searchExternalFallback = () => runExternalSearch({ modal: false });
 
 const retryExternalSearch = () => {
-    void externalSearch.search(externalSearch.lastQuery.value || buildExternalQuery(), true);
+    if (!externalSearchReady.value) {
+        toast.info('Para buscar en otras plataformas selecciona marca, modelo y año exacto.');
+        return;
+    }
+
+    void externalSearch.search(externalSearch.lastQuery.value || buildExternalQuery(), true, {
+        modal: true,
+        criteria: externalSearchCriteria.value ?? undefined,
+    });
 };
 
 const clear = () => {
@@ -380,7 +535,8 @@ const clear = () => {
                 </button>
             </div>
 
-            <div class="border-t border-border/60 py-3 first:border-t-0 first:pt-0">
+            <div class="flex flex-col">
+            <div class="order-1 border-t border-border/60 py-3 first:border-t-0 first:pt-0">
                 <button type="button" class="flex w-full items-center justify-between gap-2 text-left" :aria-expanded="openGroups.brand" @click="toggleGroup('brand')">
                     <span class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Marca</span>
                     <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="openGroups.brand ? 'rotate-180' : ''" />
@@ -393,7 +549,7 @@ const clear = () => {
                 </div>
             </div>
 
-            <div class="border-t border-border/60 py-3">
+            <div class="order-2 border-t border-border/60 py-3">
                 <button type="button" class="flex w-full items-center justify-between gap-2 text-left" :aria-expanded="openGroups.model" @click="toggleGroup('model')">
                     <span class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Modelo</span>
                     <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="openGroups.model ? 'rotate-180' : ''" />
@@ -406,7 +562,7 @@ const clear = () => {
                 </div>
             </div>
 
-            <div class="border-t border-border/60 py-3">
+            <div class="order-3 border-t border-border/60 py-3">
                 <button type="button" class="flex w-full items-center justify-between gap-2 text-left" :aria-expanded="openGroups.version" @click="toggleGroup('version')">
                     <span class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Versión</span>
                     <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="openGroups.version ? 'rotate-180' : ''" />
@@ -419,9 +575,9 @@ const clear = () => {
                 </div>
             </div>
 
-            <div class="border-t border-border/60 py-3">
+            <div class="order-5 border-t border-border/60 py-3">
                 <button type="button" class="flex w-full items-center justify-between gap-2 text-left" :aria-expanded="openGroups.city" @click="toggleGroup('city')">
-                    <span class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Ciudad</span>
+                    <span class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Ubicación</span>
                     <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="openGroups.city ? 'rotate-180' : ''" />
                 </button>
                 <div v-show="openGroups.city" class="mt-2">
@@ -432,7 +588,7 @@ const clear = () => {
                 </div>
             </div>
 
-            <div class="border-t border-border/60 py-3">
+            <div class="order-8 border-t border-border/60 py-3">
                 <button type="button" class="flex w-full items-center justify-between gap-2 text-left" :aria-expanded="openGroups.body" @click="toggleGroup('body')">
                     <span class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Carrocería</span>
                     <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="openGroups.body ? 'rotate-180' : ''" />
@@ -448,7 +604,7 @@ const clear = () => {
                 </div>
             </div>
 
-            <div class="border-t border-border/60 py-3">
+            <div class="order-9 border-t border-border/60 py-3">
                 <button type="button" class="flex w-full items-center justify-between gap-2 text-left" :aria-expanded="openGroups.transmission" @click="toggleGroup('transmission')">
                     <span class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Transmisión</span>
                     <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="openGroups.transmission ? 'rotate-180' : ''" />
@@ -461,7 +617,7 @@ const clear = () => {
                 </div>
             </div>
 
-            <div class="border-t border-border/60 py-3">
+            <div class="order-10 border-t border-border/60 py-3">
                 <button type="button" class="flex w-full items-center justify-between gap-2 text-left" :aria-expanded="openGroups.fuel" @click="toggleGroup('fuel')">
                     <span class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Combustible</span>
                     <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="openGroups.fuel ? 'rotate-180' : ''" />
@@ -474,7 +630,7 @@ const clear = () => {
                 </div>
             </div>
 
-            <div class="border-t border-border/60 py-3">
+            <div class="order-11 border-t border-border/60 py-3">
                 <button type="button" class="flex w-full items-center justify-between gap-2 text-left" :aria-expanded="openGroups.color" @click="toggleGroup('color')">
                     <span class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Color</span>
                     <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="openGroups.color ? 'rotate-180' : ''" />
@@ -487,7 +643,7 @@ const clear = () => {
                 </div>
             </div>
 
-            <div class="border-t border-border/60 py-3">
+            <div class="order-6 border-t border-border/60 py-3">
                 <button type="button" class="flex w-full items-center justify-between gap-2 text-left" :aria-expanded="openGroups.price" @click="toggleGroup('price')">
                     <span class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Precio (MXN)</span>
                     <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="openGroups.price ? 'rotate-180' : ''" />
@@ -502,7 +658,7 @@ const clear = () => {
                 </div>
             </div>
 
-            <div class="border-t border-border/60 py-3">
+            <div class="order-7 border-t border-border/60 py-3">
                 <button type="button" class="flex w-full items-center justify-between gap-2 text-left" :aria-expanded="openGroups.km" @click="toggleGroup('km')">
                     <span class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Kilometraje</span>
                     <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="openGroups.km ? 'rotate-180' : ''" />
@@ -514,7 +670,7 @@ const clear = () => {
                 </div>
             </div>
 
-            <div class="border-t border-border/60 py-3">
+            <div class="order-4 border-t border-border/60 py-3">
                 <button type="button" class="flex w-full items-center justify-between gap-2 text-left" :aria-expanded="openGroups.year" @click="toggleGroup('year')">
                     <span class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Año</span>
                     <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="openGroups.year ? 'rotate-180' : ''" />
@@ -535,11 +691,12 @@ const clear = () => {
             <button
                 type="button"
                 :disabled="activeFiltersCount === 0"
-                class="mt-4 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm font-semibold text-secondary transition hover:border-primary/40 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border disabled:hover:text-secondary"
+                class="order-12 mt-4 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm font-semibold text-secondary transition hover:border-primary/40 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border disabled:hover:text-secondary"
                 @click="clear"
             >
                 Limpiar filtros
             </button>
+            </div>
             </div>
         </aside>
 
@@ -635,11 +792,15 @@ const clear = () => {
                 <button type="button" class="rounded-full px-2 py-1 text-[11px] font-bold text-primary hover:underline" @click="clear">Limpiar todo</button>
             </div>
 
+            <div v-if="cars.meta.total === 0 && !externalSearchReady" class="mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-700">
+                Para buscar en otras plataformas selecciona <strong>marca</strong>, <strong>modelo</strong> y <strong>año exacto</strong>.
+            </div>
+
             <div v-if="cars.data.length" class="grid gap-5 transition-opacity sm:grid-cols-2 lg:grid-cols-3" :class="filtering ? 'pointer-events-none opacity-50' : ''">
                 <CarCard v-for="car in cars.data" :key="car.id" :car="car" />
             </div>
 
-            <div v-else-if="externalSearch.loading.value" class="grid place-items-center rounded-3xl border border-dashed border-border bg-card py-20 text-center">
+            <div v-else-if="externalSearch.loading.value && !showExternalCombined" class="grid place-items-center rounded-3xl border border-dashed border-border bg-card py-20 text-center">
                 <LoaderCircle class="h-10 w-10 animate-spin text-primary" />
                 <h2 class="mt-4 text-lg font-bold text-secondary">Buscando en otras plataformas…</h2>
                 <p class="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
@@ -647,15 +808,17 @@ const clear = () => {
                 </p>
             </div>
 
-            <div v-else-if="externalSearch.results.value.length" class="space-y-5">
+            <div v-else-if="showExternalCombined" class="space-y-5">
                 <div class="rounded-2xl border border-primary/20 bg-accent/40 px-4 py-3">
-                    <p class="text-xs font-bold uppercase tracking-wider text-primary">Resultados en otras plataformas</p>
+                    <p class="text-xs font-bold uppercase tracking-wider text-primary">
+                        {{ externalCombined.length }} autos encontrados en otras plataformas
+                    </p>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        No encontramos autos en el catálogo WeCar. Estos anuncios provienen de plataformas aliadas.
+                        No encontramos autos en el catálogo WeCar. Te mostramos resultados de todas las plataformas aliadas, ordenados por coincidencia con tus filtros.
                     </p>
                 </div>
                 <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                    <ExternalCarCard v-for="car in externalSearch.results.value" :key="car.id" :car="car" @open="externalSearch.openExternal" />
+                    <ExternalCarCard v-for="car in externalCombined" :key="car.id" :car="car" @open="externalSearch.openExternal" />
                 </div>
             </div>
 
@@ -679,10 +842,11 @@ const clear = () => {
                     </div>
                 </div>
 
-                <div v-if="props.externalCars.length" class="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                    <ExternalCarCard v-for="car in props.externalCars" :key="car.id" :car="car" @open="externalSearch.openExternal" />
+                <div v-if="strictExternalCars.length" class="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                    <ExternalCarCard v-for="car in strictExternalCars" :key="car.id" :car="car" @open="externalSearch.openExternal" />
                 </div>
-                <p v-else class="mt-4 text-sm text-muted-foreground">Aún no hay autos externos en caché. Realiza una búsqueda para encontrarlos.</p>
+                <p v-else-if="!externalSearchReady" class="mt-4 text-sm text-muted-foreground">Selecciona marca, modelo y año exacto para ver autos guardados de otras plataformas.</p>
+                <p v-else class="mt-4 text-sm text-muted-foreground">Aún no hay autos externos guardados para este vehículo. Realiza una búsqueda para encontrarlos.</p>
 
                 <div class="mt-6">
                     <SearchTokensCard :status="externalSearch.status.value" :on-search="searchExternal" />

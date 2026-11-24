@@ -2,6 +2,7 @@
 
 use App\Models\Profile;
 use App\Models\User;
+use App\Services\DiditService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 
@@ -233,4 +234,146 @@ it('does not sync a callback that belongs to another session', function () {
         ->assertSessionHas('error');
 
     expect(Profile::query()->where('user_id', $user->getKey())->firstOrFail()->didit_status)->toBe('pending');
+});
+
+it('allows starting a new session when the previous one was left pending', function () {
+    config()->set('services.didit.api_key', 'didit-key');
+    config()->set('services.didit.workflow_id', 'workflow');
+
+    Http::fake([
+        'https://verification.didit.me/v3/session/' => Http::response([
+            'session_id' => 'session-nueva',
+            'url' => 'https://verify.didit.me/session/nueva',
+            'status' => 'Not Started',
+        ], 201),
+    ]);
+
+    $user = diditUser();
+    Profile::query()->create([
+        'user_id' => $user->getKey(),
+        'full_name' => $user->name,
+        'didit_session_id' => 'session-vieja',
+        'didit_status' => 'pending',
+        'metadata' => ['didit' => ['session_created_at' => now()->subDays(3)->toIso8601String()]],
+    ]);
+
+    $this->actingAs($user)
+        ->postJson('/api/didit/session')
+        ->assertOk()
+        ->assertJsonPath('session_id', 'session-nueva');
+
+    $profile = Profile::query()->where('user_id', $user->getKey())->firstOrFail();
+
+    expect($profile->didit_session_id)->toBe('session-nueva')
+        ->and($profile->didit_status)->toBe('pending')
+        ->and(data_get($profile->metadata, 'didit.session_created_at'))->not->toBeNull();
+});
+
+it('blocks a recent in review session without calling didit', function () {
+    config()->set('services.didit.api_key', 'didit-key');
+    config()->set('services.didit.workflow_id', 'workflow');
+
+    Http::fake();
+
+    $user = diditUser();
+    Profile::query()->create([
+        'user_id' => $user->getKey(),
+        'full_name' => $user->name,
+        'didit_session_id' => 'session-review-recent',
+        'didit_status' => 'in_review',
+        'metadata' => ['didit' => ['session_created_at' => now()->subMinutes(10)->toIso8601String()]],
+    ]);
+
+    $this->actingAs($user)
+        ->postJson('/api/didit/session')
+        ->assertStatus(409)
+        ->assertJsonPath('error', 'Tu verificación está en revisión.');
+
+    Http::assertNothingSent();
+});
+
+it('releases a stale in review session when didit reports it expired', function () {
+    config()->set('services.didit.api_key', 'didit-key');
+    config()->set('services.didit.workflow_id', 'workflow');
+
+    Http::fake([
+        'https://verification.didit.me/v3/session/session-review-stale/decision/' => Http::response([
+            'session_id' => 'session-review-stale',
+            'status' => 'Expired',
+        ]),
+        'https://verification.didit.me/v3/session/' => Http::response([
+            'session_id' => 'session-renovada',
+            'url' => 'https://verify.didit.me/session/renovada',
+            'status' => 'Not Started',
+        ], 201),
+    ]);
+
+    $user = diditUser();
+    Profile::query()->create([
+        'user_id' => $user->getKey(),
+        'full_name' => $user->name,
+        'didit_session_id' => 'session-review-stale',
+        'didit_status' => 'in_review',
+        'metadata' => ['didit' => ['session_created_at' => now()->subMinutes(120)->toIso8601String()]],
+    ]);
+
+    $this->actingAs($user)
+        ->postJson('/api/didit/session')
+        ->assertOk()
+        ->assertJsonPath('session_id', 'session-renovada');
+
+    expect(Profile::query()->where('user_id', $user->getKey())->firstOrFail()->didit_session_id)->toBe('session-renovada');
+});
+
+it('never downgrades an approved profile when a later webhook reports a decline', function () {
+    config()->set('services.didit.webhook_secret', 'didit-webhook-secret');
+
+    $user = diditUser();
+    $profile = Profile::query()->create([
+        'user_id' => $user->getKey(),
+        'full_name' => $user->name,
+        'didit_session_id' => 'session-approved-1',
+        'didit_status' => 'approved',
+        'didit_verified_at' => now(),
+    ]);
+    $webhook = diditWebhookPayload($profile, 'Declined');
+
+    $this->call('POST', '/api/webhooks/didit', [], [], [], [
+        'HTTP_X_SIGNATURE_V2' => $webhook['signature'],
+        'HTTP_X_TIMESTAMP' => $webhook['timestamp'],
+        'CONTENT_TYPE' => 'application/json',
+    ], $webhook['body'])->assertOk()->assertJson(['updated' => false]);
+
+    $profile->refresh();
+
+    expect($profile->didit_status)->toBe('approved')
+        ->and($profile->didit_verified_at)->not->toBeNull();
+});
+
+it('expires abandoned sessions during synchronization', function () {
+    config()->set('services.didit.api_key', 'didit-key');
+    config()->set('services.didit.workflow_id', 'workflow');
+
+    Http::fake([
+        'https://verification.didit.me/v3/session/session-abandoned/decision/' => Http::response(['message' => 'Not Found'], 404),
+    ]);
+
+    $user = diditUser();
+    Profile::query()->create([
+        'user_id' => $user->getKey(),
+        'full_name' => $user->name,
+        'didit_session_id' => 'session-abandoned',
+        'didit_status' => 'in_review',
+        'metadata' => ['didit' => ['session_created_at' => now()->subHours(30)->toIso8601String()]],
+    ]);
+
+    $result = app(DiditService::class)->syncPending();
+
+    $profile = Profile::query()->where('user_id', $user->getKey())->firstOrFail();
+
+    expect($result['checked'])->toBe(1)
+        ->and($result['expired'])->toBe(1)
+        ->and($profile->didit_status)->toBe('expired')
+        ->and($profile->didit_verified_at)->toBeNull()
+        ->and(data_get($profile->metadata, 'didit.reason'))->toBe('stale_session');
 });

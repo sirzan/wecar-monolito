@@ -76,7 +76,7 @@ it('returns comparables through the api', function () {
         ->assertJsonStructure(['min', 'p25', 'median', 'p75', 'max', 'confidence']);
 });
 
-it('fetches and caches market prices with robust parsing', function () {
+it('fetches and caches libro azul market prices with robust parsing', function () {
     Cache::flush();
     config()->set('services.firecrawl.key', 'test-key');
     $model = priceModel();
@@ -85,9 +85,9 @@ it('fetches and caches market prices with robust parsing', function () {
         'api.firecrawl.dev/*' => Http::response([
             'data' => [
                 'web' => [
-                    ['url' => 'https://example.com/a', 'json' => ['precio_minimo' => '1.2 millones', 'precio_sugerido' => '1.3 millones', 'precio_maximo' => '1.4 millones']],
-                    ['url' => 'https://example.com/b', 'json' => ['precio_minimo' => 1250000, 'precio_sugerido' => 1300000, 'precio_maximo' => 1350000]],
-                    ['url' => 'https://example.com/c', 'json' => ['precio_minimo' => 1280000, 'precio_sugerido' => 1320000, 'precio_maximo' => 1380000]],
+                    ['url' => 'https://www.libroazul.com/toyota/corolla/2022', 'json' => ['es_libro_azul' => true, 'moneda' => 'MXN', 'precio_minimo' => '1.2 millones', 'precio_sugerido' => '1.3 millones', 'precio_maximo' => '1.4 millones']],
+                    ['url' => 'https://www.libroazul.com/toyota/corolla/2022/b', 'json' => ['es_libro_azul' => true, 'moneda' => 'MXN', 'precio_minimo' => 1250000, 'precio_sugerido' => 1300000, 'precio_maximo' => 1350000]],
+                    ['url' => 'https://www.libroazul.com/toyota/corolla/2022/c', 'json' => ['es_libro_azul' => true, 'moneda' => 'MXN', 'precio_minimo' => 1280000, 'precio_sugerido' => 1320000, 'precio_maximo' => 1380000]],
                 ],
             ],
         ]),
@@ -97,14 +97,15 @@ it('fetches and caches market prices with robust parsing', function () {
     $first = $service->suggest($model, 2022, 'LE', 45000);
     $second = $service->suggest($model, 2022, 'LE', 45000);
 
-    expect($first['suggested'])->toBeGreaterThan(0)
-        ->and($first['suggested'])->toBeGreaterThan(1_000_000)
+    expect($first['suggested'])->toBeGreaterThan(1_000_000)
         ->and($first['currency'])->toBe('MXN')
+        ->and($first['source_type'])->toBe('libro_azul')
         ->and($second['cached'])->toBeTrue();
 
-    Http::assertSentCount(2);
+    Http::assertSentCount(1);
     Http::assertSent(fn (Request $request): bool => ($request['country'] ?? null) === 'MX'
-        && ($request['location'] ?? null) === 'Mexico');
+        && ($request['location'] ?? null) === 'Mexico'
+        && in_array('libroazul.com', $request['includeDomains'] ?? [], true));
 });
 
 it('returns a friendly market error when firecrawl is not configured', function () {
@@ -199,18 +200,12 @@ it('prioritizes libro azul mxn buy and sell valuations matched by version', func
         ->and($result['sources'])->toContain('libroazul.com');
 });
 
-it('rejects non-mxn currencies, new cars, financing, wrong model or year, foreign domains and falls back with exact decimal parsing', function () {
+it('rejects non-mxn currencies, new cars, financing, wrong model or year, and foreign sources without a libro azul valuation', function () {
     Cache::flush();
     config()->set('services.firecrawl.key', 'test-key');
     $model = priceModel();
 
     Http::fake(function (Request $request) {
-        $query = (string) ($request['query'] ?? '');
-
-        if (str_contains($query, 'Libro Azul')) {
-            return Http::response(['data' => ['web' => []]]);
-        }
-
         return Http::response([
             'data' => [
                 'web' => [
@@ -277,44 +272,38 @@ it('rejects non-mxn currencies, new cars, financing, wrong model or year, foreig
 
     $result = app(MarketPriceService::class)->suggest($model, 2022, 'LE');
 
-    expect($result['source_type'])->toBe('market_mx')
-        ->and($result['suggested'])->toBe(350000)
-        ->and($result['samples'])->toBe(1)
-        ->and($result['sources'])->toBe(['kavak.com']);
+    expect($result['suggested'])->toBeNull()
+        ->and($result['source_type'])->toBe('none')
+        ->and($result['samples'])->toBe(0)
+        ->and($result['error'])->toContain('Libro Azul');
 });
 
-it('parses decimal prices cleanly in strict markdown fallback while ignoring usd and financing lines', function () {
+it('parses decimal prices cleanly in strict markdown fallback on libro azul pages while ignoring usd and financing lines', function () {
     Cache::flush();
     config()->set('services.firecrawl.key', 'test-key');
     $model = priceModel();
 
-    Http::fake(function (Request $request) {
-        $query = (string) ($request['query'] ?? '');
-
-        if (str_contains($query, 'Libro Azul')) {
-            return Http::response(['data' => ['web' => []]]);
-        }
-
-        return Http::response([
+    Http::fake([
+        'api.firecrawl.dev/*' => Http::response([
             'data' => [
                 'web' => [
                     [
-                        'url' => 'https://www.seminuevos.com/toyota-corolla-2015',
+                        'url' => 'https://www.libroazul.com/inicio/autosusados/guiaprecios/toyota-corolla-2015',
                         'markdown' => implode("\n", [
-                            'Toyota Corolla 2015 seminuevo en Monterrey, Nuevo León (como nuevo)',
+                            'Toyota Corolla 2015 seminuevo Guía EBC',
                             'Precio en USD: $18,500.00 USD',
                             'Enganche desde $45,000.00 mensualidad $4,200.00',
-                            'Precio de contado MXN $85,000.00 (llévatelo con enganche desde $20,000 y bono de $5,000)',
+                            'Precio de contado MXN $85,000.00',
                         ]),
                     ],
                 ],
             ],
-        ]);
-    });
+        ]),
+    ]);
 
     $result = app(MarketPriceService::class)->suggest($model, 2015);
 
-    expect($result['source_type'])->toBe('market_mx')
+    expect($result['source_type'])->toBe('libro_azul')
         ->and($result['suggested'])->toBe(85000);
 });
 
@@ -363,7 +352,7 @@ it('adjusts cached market prices by mileage without re-querying firecrawl and su
         ->assertOk()
         ->json();
 
-    Http::assertSentCount(2);
+    Http::assertSentCount(1);
 
     expect($lowKm['cached'])->toBeFalse()
         ->and($lowKm['km_adjusted'])->toBeTrue()
@@ -376,13 +365,13 @@ it('adjusts cached market prices by mileage without re-querying firecrawl and su
         ->assertOk()
         ->json();
 
-    Http::assertSentCount(4);
+    Http::assertSentCount(2);
 
     expect($refreshed['cached'])->toBeFalse()
         ->and($refreshed['suggested'])->toBe(300000);
 });
 
-it('falls back to model-level open search when a specific catalog version returns no hits and filters out down-payment outliers on 2024 cars', function () {
+it('falls back to model-level libro azul search when a specific catalog version returns no hits', function () {
     Cache::flush();
     config()->set('services.firecrawl.key', 'test-key');
     $model = priceModel();
@@ -395,35 +384,37 @@ it('falls back to model-level open search when a specific catalog version return
             return Http::response(['data' => ['web' => []]]);
         }
 
-        // En el fallback automático sin versión, devuelve datos con esquema plano + un enganche infiltrado de $55,000.
+        // En el fallback automático sin versión, Libro Azul devuelve dos páginas con esquema plano.
         if (str_contains($query, 'Libro Azul')) {
-            return Http::response(['data' => ['web' => []]]);
-        }
-
-        return Http::response([
-            'data' => [
-                'web' => [
-                    [
-                        'url' => 'https://www.autocosmos.com.mx/catalogo/2024/toyota/corolla',
-                        'json' => [
-                            'moneda' => 'MXN',
-                            'precio_minimo' => 55000, // Enganche infiltrado que antes rompía el precio sugerido
-                            'precio_sugerido' => 410000,
-                            'precio_maximo' => 445000,
+            return Http::response([
+                'data' => [
+                    'web' => [
+                        [
+                            'url' => 'https://www.libroazul.com/toyota/corolla/2024',
+                            'json' => [
+                                'es_libro_azul' => true,
+                                'moneda' => 'MXN',
+                                'precio_minimo' => 390000,
+                                'precio_sugerido' => 420000,
+                                'precio_maximo' => 450000,
+                            ],
                         ],
-                    ],
-                    [
-                        'url' => 'https://www.seminuevos.com/usados/toyota-corolla-2024',
-                        'json' => [
-                            'moneda' => 'MXN',
-                            'precio_minimo' => 390000,
-                            'precio_sugerido' => 420000,
-                            'precio_maximo' => 450000,
+                        [
+                            'url' => 'https://www.libroazul.com/toyota/corolla/2024/guiaprecios',
+                            'json' => [
+                                'es_libro_azul' => true,
+                                'moneda' => 'MXN',
+                                'precio_minimo' => 400000,
+                                'precio_sugerido' => 430000,
+                                'precio_maximo' => 460000,
+                            ],
                         ],
                     ],
                 ],
-            ],
-        ]);
+            ]);
+        }
+
+        return Http::response(['data' => ['web' => []]]);
     });
 
     $result = app(MarketPriceService::class)->suggest(
@@ -436,6 +427,7 @@ it('falls back to model-level open search when a specific catalog version return
 
     expect($result['samples'])->toBe(2)
         ->and($result['match_level'])->toBe('model')
+        ->and($result['source_type'])->toBe('libro_azul')
         ->and($result['min'])->toBeGreaterThanOrEqual(300000)
         ->and($result['suggested'])->toBeGreaterThan(320000)
         ->and($result['km_adjusted'])->toBeTrue();

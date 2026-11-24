@@ -7,11 +7,16 @@ use App\Models\Profile;
 use App\Models\User;
 use Illuminate\Http\Client\Response;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
 class DiditService
 {
+    public const STALE_SESSION_MINUTES = 60;
+
+    public const ABANDONED_SESSION_HOURS = 24;
+
     private const FEATURE_ARRAYS = [
         'id_verifications',
         'liveness_checks',
@@ -80,16 +85,160 @@ class DiditService
             ['full_name' => $user->name],
         );
 
+        $normalizedStatus = $this->mapStatus($session['status'] ?? 'Not Started');
+        $metadata = $profile->metadata ?? [];
+        $metadata['didit'] = array_merge($metadata['didit'] ?? [], [
+            'session_id' => (string) $session['session_id'],
+            'session_created_at' => now()->toIso8601String(),
+            'status' => $session['status'] ?? 'Not Started',
+            'normalized_status' => $normalizedStatus,
+        ]);
+
         $profile->update([
             'didit_session_id' => $session['session_id'],
-            'didit_status' => $this->mapStatus($session['status'] ?? 'Not Started'),
+            'didit_status' => $normalizedStatus,
+            'didit_verified_at' => null,
+            'metadata' => $metadata,
         ]);
 
         return [
             'url' => (string) $session['url'],
             'session_id' => (string) $session['session_id'],
-            'status' => $this->mapStatus($session['status'] ?? 'Not Started'),
+            'status' => $normalizedStatus,
         ];
+    }
+
+    public function sessionStartedAt(Profile $profile): ?Carbon
+    {
+        $value = data_get($profile->metadata, 'didit.session_created_at');
+
+        if (! is_string($value) || $value === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($value);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Returns the blocking status when a new session must not be created.
+     * A session left in review for too long is re-checked against Didit and released when stale.
+     */
+    public function blockingStatus(Profile $profile): ?string
+    {
+        if ($profile->didit_status === 'approved') {
+            return 'approved';
+        }
+
+        if ($profile->didit_status !== 'in_review') {
+            return null;
+        }
+
+        $startedAt = $this->sessionStartedAt($profile) ?? $profile->updated_at;
+        $minutes = $startedAt instanceof Carbon ? (int) abs($startedAt->diffInMinutes(now())) : PHP_INT_MAX;
+
+        if ($minutes < self::STALE_SESSION_MINUTES) {
+            return 'in_review';
+        }
+
+        $decision = $profile->didit_session_id
+            ? $this->fetchDecision((string) $profile->didit_session_id)
+            : null;
+
+        if ($decision) {
+            $this->applyDecision($profile, $decision);
+            $profile->refresh();
+
+            if ($profile->didit_status === 'approved') {
+                return 'approved';
+            }
+
+            return $profile->didit_status === 'in_review' ? $this->staleDecision($minutes) : null;
+        }
+
+        return $this->staleDecision($minutes);
+    }
+
+    private function staleDecision(int $minutes): ?string
+    {
+        if ($minutes >= self::ABANDONED_SESSION_HOURS * 60) {
+            return null;
+        }
+
+        return 'in_review';
+    }
+
+    /**
+     * Reconciles pending/in review sessions with Didit and expires abandoned ones.
+     *
+     * @return array{checked:int, updated:int, expired:int}
+     */
+    public function syncPending(): array
+    {
+        $checked = 0;
+        $updated = 0;
+        $expired = 0;
+
+        if (! $this->configured()) {
+            return compact('checked', 'updated', 'expired');
+        }
+
+        Profile::query()
+            ->whereIn('didit_status', ['pending', 'in_review'])
+            ->whereNotNull('didit_session_id')
+            ->chunkById(100, function ($profiles) use (&$checked, &$updated, &$expired): void {
+                foreach ($profiles as $profile) {
+                    $checked++;
+
+                    $decision = $this->fetchDecision((string) $profile->didit_session_id);
+
+                    if ($decision && $this->applyDecision($profile, $decision)) {
+                        $updated++;
+                        $profile->refresh();
+
+                        if ($profile->didit_status === 'expired') {
+                            $expired++;
+                        }
+
+                        continue;
+                    }
+
+                    if (in_array($profile->didit_status, ['approved', 'declined'], true)) {
+                        continue;
+                    }
+
+                    $startedAt = $this->sessionStartedAt($profile) ?? $profile->updated_at;
+                    $hours = $startedAt instanceof Carbon ? (int) abs($startedAt->diffInHours(now())) : PHP_INT_MAX;
+
+                    if ($hours >= self::ABANDONED_SESSION_HOURS) {
+                        $this->markExpired($profile, 'stale_session');
+                        $updated++;
+                        $expired++;
+                    }
+                }
+            });
+
+        return compact('checked', 'updated', 'expired');
+    }
+
+    private function markExpired(Profile $profile, string $reason): void
+    {
+        $metadata = $profile->metadata ?? [];
+        $metadata['didit'] = array_merge($metadata['didit'] ?? [], [
+            'normalized_status' => 'expired',
+            'status' => 'Expired',
+            'reason' => $reason,
+            'checked_at' => now()->toIso8601String(),
+        ]);
+
+        $profile->update([
+            'didit_status' => 'expired',
+            'didit_verified_at' => null,
+            'metadata' => $metadata,
+        ]);
     }
 
     /**
@@ -129,6 +278,10 @@ class DiditService
     public function applyDecision(Profile $profile, array $payload): bool
     {
         $status = $this->mapStatus((string) ($payload['status'] ?? data_get($payload, 'decision.status', '')));
+
+        if ($profile->didit_status === 'approved' && $status !== 'approved') {
+            return false;
+        }
 
         if ($profile->didit_status === $status && ! ($status === 'approved' && $profile->didit_verified_at === null)) {
             return false;

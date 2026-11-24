@@ -7,8 +7,20 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
+
+function rateCriteria(string $brandName = 'Toyota', string $modelName = 'Corolla', int $year = 2025): array
+{
+    $brand = CarBrand::query()->firstOrCreate(['slug' => Str::slug($brandName)], ['name' => $brandName]);
+    $model = CarModel::query()->firstOrCreate(
+        ['brand_id' => $brand->getKey(), 'slug' => Str::slug($modelName)],
+        ['name' => $modelName],
+    );
+
+    return ['brand_id' => $brand->getKey(), 'model_id' => $model->getKey(), 'year' => $year];
+}
 
 it('tracks guest rate limits by forwarded client ip behind proxies and renders spanish 429 json', function () {
     Cache::flush();
@@ -20,12 +32,12 @@ it('tracks guest rate limits by forwarded client ip behind proxies and renders s
 
     for ($i = 0; $i < 20; $i++) {
         $this->withServerVariables($proxyA)
-            ->postJson('/api/external-search', ['q' => 'toyota 2025'])
+            ->postJson('/api/external-search', rateCriteria())
             ->assertOk();
     }
 
     $blocked = $this->withServerVariables($proxyA)
-        ->postJson('/api/external-search', ['q' => 'toyota 2025'])
+        ->postJson('/api/external-search', rateCriteria())
         ->assertStatus(429);
 
     expect($blocked->json('message'))->toContain('Demasiadas solicitudes en poco tiempo')
@@ -34,7 +46,7 @@ it('tracks guest rate limits by forwarded client ip behind proxies and renders s
 
     // Un segundo cliente detrás del mismo proxy no debe quedar bloqueado.
     $this->withServerVariables($proxyB)
-        ->postJson('/api/external-search', ['q' => 'toyota 2025'])
+        ->postJson('/api/external-search', rateCriteria())
         ->assertOk();
 });
 
@@ -60,7 +72,7 @@ it('allows higher throughput for authenticated and admin users without triggerin
     $this->actingAs($admin);
 
     for ($i = 0; $i < 15; $i++) {
-        $this->postJson('/api/external-search', ['q' => 'toyota '.$i])->assertOk();
+        $this->postJson('/api/external-search', rateCriteria('Toyota', 'Corolla', 2024))->assertOk();
     }
 
     for ($i = 0; $i < 25; $i++) {

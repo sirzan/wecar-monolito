@@ -3,7 +3,6 @@
 namespace App\Services\Pricing;
 
 use App\Models\CarModel;
-use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -145,7 +144,7 @@ class MarketPriceService
         string $version,
         int $year,
     ): array {
-        $libroAzulQuery = trim(implode(' ', array_filter([
+        $query = trim(implode(' ', array_filter([
             $brand,
             $modelName,
             $version,
@@ -153,51 +152,26 @@ class MarketPriceService
             'Libro Azul Guía EBC precio México pesos',
         ])));
 
-        $marketMxQuery = trim(implode(' ', array_filter([
-            $brand,
-            $modelName,
-            $version,
-            (string) $year,
-            'precio México pesos seminuevo',
-        ])));
+        $response = Http::withToken($apiKey)
+            ->connectTimeout(8)
+            ->timeout(self::TIMEOUT_SECONDS)
+            ->post('https://api.firecrawl.dev/v2/search', $this->firecrawlPayload(
+                $query,
+                5,
+                $brand,
+                $modelName,
+                $version,
+                $year,
+            ));
 
-        $responses = Http::pool(fn (Pool $pool) => [
-            $pool->as('libro_azul')
-                ->withToken($apiKey)
-                ->connectTimeout(8)
-                ->timeout(self::TIMEOUT_SECONDS)
-                ->post('https://api.firecrawl.dev/v2/search', $this->firecrawlPayload(
-                    $libroAzulQuery,
-                    3,
-                    $brand,
-                    $modelName,
-                    $version,
-                    $year,
-                )),
-            $pool->as('market_mx')
-                ->withToken($apiKey)
-                ->connectTimeout(8)
-                ->timeout(self::TIMEOUT_SECONDS)
-                ->post('https://api.firecrawl.dev/v2/search', $this->firecrawlPayload(
-                    $marketMxQuery,
-                    4,
-                    $brand,
-                    $modelName,
-                    $version,
-                    $year,
-                )),
-        ]);
+        $results = $this->extractSearchResults($response, 'libro_azul', $modelName, $year);
 
-        $libroAzulResults = $this->extractSearchResults($responses['libro_azul'] ?? null, 'libro_azul', $modelName, $year);
-        $marketMxResults = $this->extractSearchResults($responses['market_mx'] ?? null, 'market_mx', $modelName, $year);
-
-        if ($libroAzulResults === null && $marketMxResults === null) {
-            return $this->empty('No se pudo consultar el mercado en este momento.');
+        if ($results === null) {
+            return $this->empty('No se pudo consultar Libro Azul en este momento.');
         }
 
         return $this->aggregate(
-            $libroAzulResults ?? [],
-            $marketMxResults ?? [],
+            $results,
             $brand,
             $modelName,
             $version,
@@ -222,6 +196,7 @@ class MarketPriceService
         return [
             'query' => $query,
             'limit' => $limit,
+            'includeDomains' => ['libroazul.com', 'libroazul.com.mx'],
             'country' => 'MX',
             'location' => 'Mexico',
             'scrapeOptions' => [
@@ -309,59 +284,32 @@ class MarketPriceService
     }
 
     /**
-     * @param  array<int, mixed>  $libroAzulResults
-     * @param  array<int, mixed>  $marketMxResults
+     * @param  array<int, mixed>  $results
      * @return array<string, mixed>
      */
     private function aggregate(
-        array $libroAzulResults,
-        array $marketMxResults,
+        array $results,
         string $brand,
         string $modelName,
         string $version,
         int $year,
     ): array {
-        $libroAzulItems = $this->collectItems($libroAzulResults, 'libro_azul', $brand, $modelName, $version, $year);
-        $marketMxItems = $this->collectItems($marketMxResults, 'market_mx', $brand, $modelName, $version, $year);
+        $items = $this->collectItems($results, 'libro_azul', $brand, $modelName, $version, $year);
 
-        $libroAzulFallback = $libroAzulItems === []
-            ? $this->collectFromMarkdownFallback($libroAzulResults, 'libro_azul', $brand, $modelName, $version, $year)
-            : [];
-        $marketMxFallback = $marketMxItems === []
-            ? $this->collectFromMarkdownFallback($marketMxResults, 'market_mx', $brand, $modelName, $version, $year)
-            : [];
-
-        $allCollected = [
-            ...$libroAzulItems,
-            ...$libroAzulFallback,
-            ...$marketMxItems,
-            ...$marketMxFallback,
-        ];
-
-        $libroAzulPool = [];
-        $marketMxPool = [];
-
-        foreach ($allCollected as $item) {
-            if (($item['record_type'] ?? '') === 'libro_azul') {
-                $libroAzulPool[] = $item;
-            } else {
-                $marketMxPool[] = $item;
-            }
+        if ($items === []) {
+            $items = $this->collectFromMarkdownFallback($results, 'libro_azul', $brand, $modelName, $version, $year);
         }
 
-        if ($libroAzulPool !== []) {
-            $summary = $this->summarize($libroAzulPool, $marketMxPool, 'libro_azul', $version, $year);
+        $libroAzulPool = array_values(array_filter(
+            $items,
+            fn (array $item) => ($item['record_type'] ?? '') === 'libro_azul',
+        ));
 
-            if (($summary['samples'] ?? 0) > 0) {
-                return $summary;
-            }
+        if ($libroAzulPool === []) {
+            return $this->empty('Libro Azul no tiene una valuación para este vehículo.');
         }
 
-        if ($marketMxPool !== []) {
-            return $this->summarize($marketMxPool, [], 'market_mx', $version, $year);
-        }
-
-        return $this->empty('Sin coincidencias de precio en MXN para este vehículo');
+        return $this->summarize($libroAzulPool, [], 'libro_azul', $version, $year);
     }
 
     /**
@@ -397,7 +345,12 @@ class MarketPriceService
 
             $pageTitle = (string) ($result['title'] ?? '');
             $isLibroAzulPage = $this->isLibroAzulSource($sourceUrl, $pageTitle, (bool) ($extracted['es_libro_azul'] ?? false));
-            $effectiveChannel = $isLibroAzulPage ? 'libro_azul' : $channel;
+
+            if (! $isLibroAzulPage) {
+                continue;
+            }
+
+            $effectiveChannel = 'libro_azul';
 
             $pageItems = [];
 
@@ -469,16 +422,11 @@ class MarketPriceService
         $isLibroAzul = $this->isLibroAzulSource($sourceUrl, $pageTitle, (bool) ($raw['es_libro_azul'] ?? false))
             || strtolower(trim((string) ($raw['tipo_registro'] ?? ''))) === 'libro_azul';
 
-        $defaultType = $isLibroAzul ? 'libro_azul' : 'seminuevo_venta';
-        $recordType = strtolower(trim((string) ($raw['tipo_registro'] ?? $defaultType)));
-
-        if (in_array($recordType, ['auto_nuevo', 'financiamiento'], true)) {
+        if (! $isLibroAzul) {
             return null;
         }
 
-        if ($isLibroAzul) {
-            $recordType = 'libro_azul';
-        }
+        $recordType = 'libro_azul';
 
         $extractedYear = isset($raw['anio']) && is_numeric($raw['anio']) ? (int) $raw['anio'] : null;
 
@@ -577,9 +525,15 @@ class MarketPriceService
                 continue;
             }
 
+            $pageTitle = (string) ($result['title'] ?? '');
+
+            if (! $this->isLibroAzulSource($sourceUrl, $pageTitle, false)) {
+                continue;
+            }
+
             $pages[] = [
                 'url' => $sourceUrl,
-                'title' => (string) ($result['title'] ?? ''),
+                'title' => $pageTitle,
                 'content' => $markdown,
             ];
         }
@@ -782,19 +736,6 @@ class MarketPriceService
             }
         }
 
-        if ($sourceType === 'libro_azul' && count($allValues) < 3 && $secondaryItems !== []) {
-            $secondaryVersion = array_values(array_filter($secondaryItems, fn (array $item) => (bool) ($item['version_matched'] ?? false)));
-            $secondaryPool = $secondaryVersion !== [] ? $secondaryVersion : $secondaryItems;
-
-            foreach ($secondaryPool as $item) {
-                $candidate = $item['suggested'] ?? null;
-
-                if ($candidate !== null && $candidate >= ($median * 0.65) && $candidate <= ($median * 1.5)) {
-                    $allValues[] = $candidate;
-                }
-            }
-        }
-
         $allValues = $this->removeOutliers($allValues, $year);
 
         if ($allValues === []) {
@@ -947,7 +888,7 @@ class MarketPriceService
             $year,
         ]);
 
-        return 'market-price:v3:'.md5($key);
+        return 'market-price:v4:'.md5($key);
     }
 
     /**

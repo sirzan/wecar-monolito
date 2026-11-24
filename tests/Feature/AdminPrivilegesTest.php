@@ -124,6 +124,12 @@ it('gives admins unlimited external searches and direct source urls', function (
     $admin = User::factory()->create();
     $admin->assignRole('superadmin');
 
+    $brand = CarBrand::query()->firstOrCreate(['slug' => 'toyota'], ['name' => 'Toyota']);
+    $model = CarModel::query()->firstOrCreate(
+        ['brand_id' => $brand->getKey(), 'slug' => 'corolla'],
+        ['name' => 'Corolla'],
+    );
+
     Http::fake([
         'api.firecrawl.dev/*' => Http::response([
             'data' => [[
@@ -144,9 +150,11 @@ it('gives admins unlimited external searches and direct source urls', function (
         '*' => Http::response('', 200),
     ]);
 
+    $criteria = ['brand_id' => $brand->getKey(), 'model_id' => $model->getKey(), 'year' => 2020];
+
     for ($i = 0; $i < 4; $i++) {
         $this->actingAs($admin)
-            ->postJson('/api/external-search', ['q' => 'toyota corolla'])
+            ->postJson('/api/external-search', $criteria)
             ->assertOk()
             ->assertJsonPath('limitReached', false);
     }
