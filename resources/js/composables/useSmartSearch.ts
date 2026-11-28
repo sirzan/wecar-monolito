@@ -1,6 +1,8 @@
 const ALLOWED_FILTERS = [
     'q',
     'brand',
+    'model',
+    'city',
     'body',
     'transmission',
     'fuel',
@@ -51,7 +53,7 @@ export async function resolveSmartFilters(query: string): Promise<SmartFilters> 
         result[key] = String(value);
     }
 
-    if (!result.q) {
+    if (Object.keys(result).length === 0) {
         result.q = trimmed;
     }
 

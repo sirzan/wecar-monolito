@@ -5,6 +5,7 @@ use App\Models\CarBrand;
 use App\Models\CarModel;
 use App\Models\CarStatus;
 use App\Models\CarVersion;
+use App\Models\ExternalListing;
 use App\Models\Financiera;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -249,4 +250,97 @@ it('seeds all 39 financieras correctly from FinancieraSeeder', function () {
     expect($kavak)->not->toBeNull()
         ->and($kavak->tipo)->toBe('fintech')
         ->and((int) $kavak->score_min)->toBe(540);
+});
+
+it('applies filters, search and sorting to both local cars and stored external listings on comprar', function () {
+    $this->seed();
+    $localCar = makeCar();
+
+    $toyota = CarBrand::query()->where('slug', 'toyota')->firstOrFail();
+    $corolla = CarModel::query()->where('brand_id', $toyota->getKey())->where('slug', 'corolla')->firstOrFail();
+
+    ExternalListing::query()->create([
+        'external_id' => 'ext-corolla-mty-2022',
+        'source' => 'kavak',
+        'source_url' => 'https://www.kavak.com/mx/usado/toyota-corolla-18_le_cvt-sedan-2022',
+        'slug' => '2022-toyota-corolla-le-ext-corolla-mty-2022',
+        'title' => 'Toyota Corolla LE 2022 CVT',
+        'make' => 'toyota',
+        'model' => 'corolla-le-cvt',
+        'year' => 2022,
+        'price' => 310000,
+        'mileage' => 38000,
+        'location' => 'Monterrey, Nuevo León',
+        'images' => ['https://cdn.kavak.services/corolla-mty.jpg'],
+        'last_seen_at' => now(),
+    ]);
+
+    ExternalListing::query()->create([
+        'external_id' => 'ext-civic-cdmx-2023',
+        'source' => 'seminuevos',
+        'source_url' => 'https://www.seminuevos.com/vehicle/autos-honda-civic-cdmx-2023/4899999',
+        'slug' => '2023-honda-civic-ext-civic-cdmx-2023',
+        'title' => 'Honda Civic Touring 2023',
+        'make' => 'honda',
+        'model' => 'civic-touring',
+        'year' => 2023,
+        'price' => 480000,
+        'mileage' => 15000,
+        'location' => 'Ciudad de México',
+        'images' => ['https://images.latamautos.com/thumbs/civic-cdmx.jpg'],
+        'last_seen_at' => now(),
+    ]);
+
+    // Filtro combinado (marca + modelo + ciudad + precio + año) aplica a ambos (local y externo)
+    $this->get('/comprar?brand=toyota&model='.$corolla->getKey().'&city=Monterrey&max_price=350000&min_year=2022&max_year=2022')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Public/Comprar')
+            ->has('cars.data', 1)
+            ->where('cars.data.0.slug', $localCar->slug)
+            ->has('externalCars', 1)
+            ->where('externalTotal', 1)
+            ->where('externalCars.0.id', 'ext-corolla-mty-2022')
+        );
+
+    // Búsqueda por texto libre "Honda Civic 2023" encuentra el auto externo guardado aunque no haya local
+    $this->get('/comprar?q=Honda+Civic+2023')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('cars.data', 0)
+            ->has('externalCars', 1)
+            ->where('externalTotal', 1)
+            ->where('externalCars.0.id', 'ext-civic-cdmx-2023')
+        );
+
+    // Ordenamiento por precio ascendente sobre externos
+    $this->get('/comprar?sort=price-asc')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('externalCars', 2)
+            ->where('externalCars.0.id', 'ext-corolla-mty-2022')
+            ->where('externalCars.1.id', 'ext-civic-cdmx-2023')
+        );
+});
+
+it('parses natural language smart search into filters that work on both local and external listings without openai', function () {
+    $this->seed();
+    config()->set('services.openai.key', null);
+
+    $toyota = CarBrand::query()->firstOrCreate(['slug' => 'toyota'], ['name' => 'Toyota']);
+    $corolla = CarModel::query()->firstOrCreate(
+        ['brand_id' => $toyota->getKey(), 'slug' => 'corolla'],
+        ['name' => 'Corolla'],
+    );
+
+    $response = $this->postJson('/api/ai-search', [
+        'q' => 'Toyota Corolla 2022, hasta $350,000, en Monterrey',
+    ])->assertOk();
+
+    $response->assertJsonPath('filters.brand', 'toyota')
+        ->assertJsonPath('filters.model', $corolla->getKey())
+        ->assertJsonPath('filters.min_year', '2022')
+        ->assertJsonPath('filters.max_year', '2022')
+        ->assertJsonPath('filters.max_price', '350000')
+        ->assertJsonPath('filters.city', 'Monterrey');
 });

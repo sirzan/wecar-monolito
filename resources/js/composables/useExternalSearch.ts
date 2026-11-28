@@ -163,6 +163,12 @@ export function useExternalSearch() {
         }
     };
 
+    const clearResults = () => {
+        results.value = [];
+        platformsSearched.value = [];
+        error.value = null;
+    };
+
     const openModal = () => {
         showModal.value = true;
     };
@@ -213,6 +219,7 @@ export function useExternalSearch() {
         refreshStatus,
         loadCached,
         search,
+        clearResults,
         openExternal,
         openOriginal,
         openModal,

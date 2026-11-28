@@ -267,6 +267,23 @@ class ExternalSearchService
     }
 
     /**
+     * Busca y filtra autos externos almacenados en la base de datos usando los filtros del catálogo /comprar.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array{results: array<int, array<string, mixed>>, total: int}
+     */
+    public function searchStored(?User $user, array $filters = [], int $limit = 24): array
+    {
+        $unlimited = $this->hasUnlimitedAccess($user);
+        $stored = $this->cache->searchListings($filters, $limit);
+
+        return [
+            'results' => $this->normalizer->toClient($stored['results'], $unlimited),
+            'total' => $stored['total'],
+        ];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function resolve(?User $user, ?string $ip, string $id): array

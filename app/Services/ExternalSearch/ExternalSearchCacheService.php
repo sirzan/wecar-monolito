@@ -2,9 +2,13 @@
 
 namespace App\Services\ExternalSearch;
 
+use App\Models\CarBrand;
+use App\Models\CarModel;
+use App\Models\CarVersion;
 use App\Models\ExternalListing;
 use App\Models\ExternalSearchCache;
 use App\Support\ExternalListingSlug;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -251,6 +255,174 @@ class ExternalSearchCacheService
     }
 
     /**
+     * Filtra y ordena los autos externos almacenados en external_listings usando los mismos filtros de /comprar.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array{results: array<int, array<string, mixed>>, total: int}
+     */
+    public function searchListings(array $filters = [], int $limit = 24): array
+    {
+        if (ExternalListing::query()->doesntExist()) {
+            $this->recentCars(60);
+        }
+
+        $query = ExternalListing::query()
+            ->where(function (Builder $builder): void {
+                $builder->where('last_seen_at', '>=', now()->subDays($this->days()))
+                    ->orWhereNull('last_seen_at');
+            });
+
+        $brandSlug = is_string($filters['brand'] ?? null) ? trim($filters['brand']) : '';
+
+        if ($brandSlug !== '') {
+            $brandModel = CarBrand::query()->where('slug', $brandSlug)->first(['name', 'slug']);
+            $brandName = $brandModel?->name ?? str_replace('-', ' ', $brandSlug);
+            $slugNormalized = Str::slug($brandSlug);
+
+            $query->where(function (Builder $builder) use ($slugNormalized, $brandName): void {
+                $builder->where('make', $slugNormalized)
+                    ->orWhereLike('make', '%'.$slugNormalized.'%')
+                    ->orWhereLike('title', '%'.$brandName.'%');
+            });
+        }
+
+        $modelId = is_string($filters['model'] ?? null) ? trim($filters['model']) : '';
+
+        if ($modelId !== '') {
+            $carModel = CarModel::query()->find($modelId, ['name', 'slug']);
+
+            if ($carModel !== null) {
+                $modelSlug = Str::slug($carModel->slug ?: $carModel->name);
+                $modelName = trim($carModel->name);
+
+                $query->where(function (Builder $builder) use ($modelSlug, $modelName): void {
+                    $builder->whereLike('model', '%'.$modelSlug.'%')
+                        ->orWhereLike('title', '%'.$modelName.'%');
+                });
+            }
+        }
+
+        $versionId = is_string($filters['version'] ?? null) ? trim($filters['version']) : '';
+
+        if ($versionId !== '') {
+            $carVersion = CarVersion::query()->find($versionId, ['name']);
+
+            if ($carVersion !== null && trim($carVersion->name) !== '') {
+                $versionTokens = array_values(array_filter(
+                    preg_split('/[\s\/-]+/u', trim($carVersion->name)) ?: [],
+                    static fn (string $token): bool => mb_strlen($token) >= 2,
+                ));
+
+                foreach (array_slice($versionTokens, 0, 3) as $token) {
+                    $query->where(function (Builder $builder) use ($token): void {
+                        $builder->whereLike('title', '%'.$token.'%')
+                            ->orWhereLike('slug', '%'.Str::slug($token).'%');
+                    });
+                }
+            }
+        }
+
+        $city = is_string($filters['city'] ?? null) ? trim($filters['city']) : '';
+
+        if ($city !== '') {
+            $cityVariants = $this->cityVariants($city);
+
+            $query->where(function (Builder $builder) use ($cityVariants): void {
+                foreach ($cityVariants as $variant) {
+                    $builder->orWhereLike('location', '%'.$variant.'%')
+                        ->orWhereLike('title', '%'.$variant.'%');
+                }
+            });
+        }
+
+        foreach (['body', 'transmission', 'fuel', 'color'] as $attribute) {
+            $value = is_string($filters[$attribute] ?? null) ? trim($filters[$attribute]) : '';
+
+            if ($value === '') {
+                continue;
+            }
+
+            $keywords = $this->attributeKeywords($attribute, $value);
+
+            $query->where(function (Builder $builder) use ($keywords): void {
+                foreach ($keywords as $keyword) {
+                    $builder->orWhereLike('title', '%'.$keyword.'%')
+                        ->orWhereLike('slug', '%'.Str::slug($keyword).'%');
+                }
+            });
+        }
+
+        if (isset($filters['min_price']) && is_numeric($filters['min_price'])) {
+            $query->whereNotNull('price')->where('price', '>=', (float) $filters['min_price']);
+        }
+
+        if (isset($filters['max_price']) && is_numeric($filters['max_price'])) {
+            $query->whereNotNull('price')->where('price', '<=', (float) $filters['max_price']);
+        }
+
+        if (isset($filters['min_year']) && is_numeric($filters['min_year'])) {
+            $query->whereNotNull('year')->where('year', '>=', (int) $filters['min_year']);
+        }
+
+        if (isset($filters['max_year']) && is_numeric($filters['max_year'])) {
+            $query->whereNotNull('year')->where('year', '<=', (int) $filters['max_year']);
+        }
+
+        if (isset($filters['min_km']) && is_numeric($filters['min_km'])) {
+            $query->whereNotNull('mileage')->where('mileage', '>=', (int) $filters['min_km']);
+        }
+
+        if (isset($filters['max_km']) && is_numeric($filters['max_km'])) {
+            $query->whereNotNull('mileage')->where('mileage', '<=', (int) $filters['max_km']);
+        }
+
+        $q = is_string($filters['q'] ?? null) ? trim($filters['q']) : '';
+
+        if ($q !== '') {
+            $tokens = array_values(array_filter(
+                preg_split('/[\s,]+/u', $q) ?: [],
+                static fn (string $token): bool => mb_strlen($token) >= 2,
+            ));
+
+            foreach (array_slice($tokens, 0, 6) as $token) {
+                $slugToken = Str::slug($token);
+
+                $query->where(function (Builder $builder) use ($token, $slugToken): void {
+                    $builder->whereLike('title', '%'.$token.'%')
+                        ->orWhereLike('location', '%'.$token.'%');
+
+                    if ($slugToken !== '') {
+                        $builder->orWhereLike('make', '%'.$slugToken.'%')
+                            ->orWhereLike('model', '%'.$slugToken.'%')
+                            ->orWhereLike('slug', '%'.$slugToken.'%');
+                    }
+
+                    if (preg_match('/^(19|20)\d{2}$/', $token) === 1) {
+                        $builder->orWhere('year', (int) $token);
+                    }
+                });
+            }
+        }
+
+        $total = (clone $query)->count();
+
+        match ($filters['sort'] ?? 'recent') {
+            'price-asc' => $query->orderByRaw('CASE WHEN price IS NULL THEN 1 ELSE 0 END ASC')->orderBy('price'),
+            'price-desc' => $query->orderByRaw('CASE WHEN price IS NULL THEN 1 ELSE 0 END ASC')->orderByDesc('price'),
+            'year-desc' => $query->orderByRaw('CASE WHEN year IS NULL THEN 1 ELSE 0 END ASC')->orderByDesc('year'),
+            'km-asc' => $query->orderByRaw('CASE WHEN mileage IS NULL THEN 1 ELSE 0 END ASC')->orderBy('mileage'),
+            default => $query->orderByDesc('last_seen_at')->orderByDesc('updated_at'),
+        };
+
+        $rows = $query->limit(max(1, min(60, $limit)))->get();
+
+        return [
+            'results' => $this->formatListingRows($rows),
+            'total' => $total,
+        ];
+    }
+
+    /**
      * @return array<int, array<string, mixed>>
      */
     public function adminCars(ExternalSearchCache $cache): array
@@ -365,6 +537,17 @@ class ExternalSearchCacheService
             ->limit(max($limit * 3, 60))
             ->get();
 
+        $cars = $this->formatListingRows($rows);
+
+        return array_slice($this->normalizer->sortByPlatform($cars), 0, $limit);
+    }
+
+    /**
+     * @param  Collection<int, ExternalListing>  $rows
+     * @return array<int, array<string, mixed>>
+     */
+    private function formatListingRows(Collection $rows): array
+    {
         $cars = [];
         $seen = [];
         $platforms = collect(config('external_search.platforms', []))->keyBy('id');
@@ -383,6 +566,7 @@ class ExternalSearchCacheService
             $seen[$row->external_id] = true;
             $cars[] = [
                 'id' => (string) $row->external_id,
+                'slug' => (string) $row->slug,
                 'title' => $title,
                 'price' => $row->price !== null ? (int) round((float) $row->price) : null,
                 'year' => $row->year,
@@ -398,7 +582,58 @@ class ExternalSearchCacheService
             ];
         }
 
-        return array_slice($this->normalizer->sortByPlatform($cars), 0, $limit);
+        return $cars;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function cityVariants(string $city): array
+    {
+        $primary = trim(explode(',', $city)[0] ?? $city);
+        $lower = Str::lower(Str::ascii($primary));
+
+        if (in_array($lower, ['cdmx', 'ciudad de mexico', 'distrito federal'], true)) {
+            return ['CDMX', 'Ciudad de México', 'Ciudad de Mexico', 'Distrito Federal'];
+        }
+
+        if ($lower === 'estado de mexico' || $lower === 'edomex') {
+            return ['Estado de México', 'Estado de Mexico', 'Edomex'];
+        }
+
+        return array_values(array_unique(array_filter([$city, $primary])));
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function attributeKeywords(string $attribute, string $value): array
+    {
+        $lower = Str::lower(Str::ascii($value));
+
+        return match ($attribute) {
+            'transmission' => match (true) {
+                str_contains($lower, 'auto') || str_contains($lower, 'cvt') => [$value, 'aut', 'automatico', 'automatica', 'cvt', 'dsg', 'tiptronic'],
+                str_contains($lower, 'man') || str_contains($lower, 'estandar') => [$value, 'manual', 'estandar', 'std'],
+                default => [$value],
+            },
+            'fuel' => match (true) {
+                str_contains($lower, 'hibrid') || str_contains($lower, 'hybrid') => [$value, 'hibrido', 'híbrido', 'hybrid', 'hev', 'phev'],
+                str_contains($lower, 'electr') => [$value, 'electrico', 'eléctrico', 'ev'],
+                str_contains($lower, 'diesel') => [$value, 'diesel', 'diésel', 'tdi'],
+                default => [$value],
+            },
+            'body' => match (true) {
+                str_contains($lower, 'suv') => [$value, 'suv', 'camioneta'],
+                str_contains($lower, 'sedan') => [$value, 'sedan', 'sedán'],
+                str_contains($lower, 'pickup') || str_contains($lower, 'pick') => [$value, 'pickup', 'pick up', 'cabina'],
+                str_contains($lower, 'hatch') => [$value, 'hatchback', 'hb'],
+                str_contains($lower, 'coupe') => [$value, 'coupe', 'coupé'],
+                str_contains($lower, 'minivan') => [$value, 'minivan', 'van'],
+                default => [$value],
+            },
+            default => [$value],
+        };
     }
 
     /**

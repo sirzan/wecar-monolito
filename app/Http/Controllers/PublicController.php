@@ -145,18 +145,47 @@ class PublicController extends Controller
             ->with(['brand', 'model', 'version', 'status', 'agency']);
 
         $query->when($filters['q'] ?? null, function (Builder $query, string $q) {
-            $term = '%'.trim($q).'%';
-            $query->where(function (Builder $query) use ($term) {
-                $query->whereLike('description', $term)
-                    ->orWhereHas('brand', fn (Builder $query) => $query->whereLike('name', $term))
-                    ->orWhereHas('model', fn (Builder $query) => $query->whereLike('name', $term));
-            });
+            $tokens = array_values(array_filter(
+                preg_split('/[\s,]+/u', trim($q)) ?: [],
+                static fn (string $token): bool => mb_strlen($token) >= 2,
+            ));
+
+            foreach (array_slice($tokens, 0, 6) as $token) {
+                $term = '%'.$token.'%';
+                $query->where(function (Builder $query) use ($term, $token) {
+                    $query->whereLike('description', $term)
+                        ->orWhereLike('city', $term)
+                        ->orWhereLike('body', $term)
+                        ->orWhereLike('transmission', $term)
+                        ->orWhereLike('fuel', $term)
+                        ->orWhereLike('color', $term)
+                        ->orWhereHas('brand', fn (Builder $query) => $query->whereLike('name', $term))
+                        ->orWhereHas('model', fn (Builder $query) => $query->whereLike('name', $term))
+                        ->orWhereHas('version', fn (Builder $query) => $query->whereLike('name', $term));
+
+                    if (preg_match('/^(19|20)\d{2}$/', $token) === 1) {
+                        $query->orWhere('year', (int) $token);
+                    }
+                });
+            }
         });
 
         $query->when($filters['brand'] ?? null, fn (Builder $query, string $brand) => $query->whereRelation('brand', 'slug', $brand));
         $query->when($filters['model'] ?? null, fn (Builder $query, string $model) => $query->where('model_id', $model));
         $query->when($filters['version'] ?? null, fn (Builder $query, string $version) => $query->where('version_id', $version));
-        $query->when($filters['city'] ?? null, fn (Builder $query, string $city) => $query->where('city', $city));
+        $query->when($filters['city'] ?? null, function (Builder $query, string $city) {
+            $primary = trim(explode(',', $city)[0] ?? $city);
+            $lower = Str::lower(Str::ascii($primary));
+            $variants = in_array($lower, ['cdmx', 'ciudad de mexico', 'distrito federal'], true)
+                ? ['CDMX', 'Ciudad de México', 'Ciudad de Mexico', 'Distrito Federal']
+                : array_values(array_unique(array_filter([$city, $primary])));
+
+            $query->where(function (Builder $query) use ($variants) {
+                foreach ($variants as $variant) {
+                    $query->orWhereLike('city', '%'.$variant.'%');
+                }
+            });
+        });
         $query->when($filters['body'] ?? null, fn (Builder $query, string $body) => $query->where('body', $body));
         $query->when($filters['transmission'] ?? null, fn (Builder $query, string $transmission) => $query->where('transmission', $transmission));
         $query->when($filters['fuel'] ?? null, fn (Builder $query, string $fuel) => $query->where('fuel', $fuel));
@@ -177,6 +206,7 @@ class PublicController extends Controller
         };
 
         $cars = $query->paginate(24)->withQueryString();
+        $storedExternal = $this->externalSearch->searchStored($request->user(), $filters, 24);
 
         return Inertia::render('Public/Comprar', [
             'filters' => $filters,
@@ -190,7 +220,8 @@ class PublicController extends Controller
                 ],
             ],
             'options' => $this->catalogOptions(),
-            'externalCars' => $this->externalSearch->cached($request->user(), 24)['results'],
+            'externalCars' => $storedExternal['results'],
+            'externalTotal' => $storedExternal['total'],
             'smartSearch' => $request->boolean('smart'),
             'seo' => $seo,
         ]);
@@ -635,12 +666,23 @@ class PublicController extends Controller
     private function catalogOptions(): array
     {
         $publishedCars = Car::query()->published();
+        $activeExternal = ExternalListing::query()
+            ->where(function (Builder $query): void {
+                $query->where('last_seen_at', '>=', now()->subDays((int) config('external_search.cache_days', 7)))
+                    ->orWhereNull('last_seen_at');
+            });
 
         $brandCounts = (clone $publishedCars)
             ->selectRaw('brand_id, count(*) as total')
             ->whereNotNull('brand_id')
             ->groupBy('brand_id')
             ->pluck('total', 'brand_id');
+
+        $externalMakeCounts = (clone $activeExternal)
+            ->selectRaw('make, count(*) as total')
+            ->whereNotNull('make')
+            ->groupBy('make')
+            ->pluck('total', 'make');
 
         $brands = CarBrand::query()
             ->orderBy('name')
@@ -649,17 +691,31 @@ class PublicController extends Controller
                 'id' => $brand->getKey(),
                 'name' => $brand->name,
                 'slug' => $brand->slug,
-                'count' => (int) ($brandCounts[$brand->getKey()] ?? 0),
+                'count' => (int) ($brandCounts[$brand->getKey()] ?? 0) + (int) ($externalMakeCounts[$brand->slug] ?? 0),
             ]);
 
-        $cities = (clone $publishedCars)
-            ->selectRaw('city, count(*) as total')
-            ->whereNotNull('city')
-            ->groupBy('city')
-            ->orderByDesc('total')
-            ->limit(20)
-            ->get()
-            ->map(fn ($row) => ['value' => $row->city, 'count' => (int) $row->total]);
+        $cityTotals = [];
+
+        foreach ((clone $publishedCars)->selectRaw('city, count(*) as total')->whereNotNull('city')->groupBy('city')->get() as $row) {
+            $cityName = trim((string) $row->city);
+
+            if ($cityName !== '') {
+                $cityTotals[$cityName] = ($cityTotals[$cityName] ?? 0) + (int) $row->total;
+            }
+        }
+
+        foreach ((clone $activeExternal)->selectRaw('location, count(*) as total')->whereNotNull('location')->groupBy('location')->get() as $row) {
+            $cityName = trim((string) $row->location);
+
+            if ($cityName !== '') {
+                $cityTotals[$cityName] = ($cityTotals[$cityName] ?? 0) + (int) $row->total;
+            }
+        }
+
+        arsort($cityTotals);
+        $cities = collect(array_slice($cityTotals, 0, 25, true))
+            ->map(fn (int $count, string $value) => ['value' => $value, 'count' => $count])
+            ->values();
 
         $bodies = (clone $publishedCars)
             ->selectRaw('body, count(*) as total')
@@ -711,10 +767,23 @@ class PublicController extends Controller
             ->get()
             ->map(fn ($row) => ['value' => $row->color, 'count' => (int) $row->total]);
 
-        $minPrice = (clone $publishedCars)->min('price') ?? 0;
-        $maxPrice = (clone $publishedCars)->max('price') ?? 1000000;
-        $minYear = (clone $publishedCars)->min('year') ?? 2000;
-        $maxYear = (clone $publishedCars)->max('year') ?? (int) date('Y') + 1;
+        $carMinPrice = (clone $publishedCars)->min('price');
+        $carMaxPrice = (clone $publishedCars)->max('price');
+        $extMinPrice = (clone $activeExternal)->whereNotNull('price')->min('price');
+        $extMaxPrice = (clone $activeExternal)->whereNotNull('price')->max('price');
+        $minPrices = array_values(array_filter([$carMinPrice, $extMinPrice], fn ($v) => $v !== null && (float) $v > 0));
+        $maxPrices = array_values(array_filter([$carMaxPrice, $extMaxPrice], fn ($v) => $v !== null && (float) $v > 0));
+
+        $minPrice = $minPrices !== [] ? min($minPrices) : 0;
+        $maxPrice = $maxPrices !== [] ? max($maxPrices) : 1000000;
+        $carMinYear = (clone $publishedCars)->min('year');
+        $carMaxYear = (clone $publishedCars)->max('year');
+        $extMinYear = (clone $activeExternal)->whereNotNull('year')->min('year');
+        $extMaxYear = (clone $activeExternal)->whereNotNull('year')->max('year');
+        $minYears = array_values(array_filter([$carMinYear, $extMinYear], fn ($v) => $v !== null));
+        $maxYears = array_values(array_filter([$carMaxYear, $extMaxYear], fn ($v) => $v !== null));
+        $minYear = $minYears !== [] ? min($minYears) : 2000;
+        $maxYear = $maxYears !== [] ? max($maxYears) : (int) date('Y') + 1;
 
         return [
             'brands' => $brands,

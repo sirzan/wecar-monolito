@@ -29,6 +29,7 @@ const props = defineProps<{
     filters: Record<string, string>;
     cars: { data: CarCardData[]; meta: { current_page: number; last_page: number; per_page: number; total: number } };
     externalCars: ExternalCar[];
+    externalTotal?: number;
     smartSearch?: boolean;
     options: {
         brands: { id: string; name: string; slug: string; count: number }[];
@@ -201,14 +202,71 @@ const cachedExternalCars = computed<ExternalCar[]>(() => {
     });
 });
 
-const externalSectionRef = ref<HTMLElement | null>(null);
+type UnifiedCatalogItem =
+    | { kind: 'local'; key: string; price: number | null; year: number | null; km: number | null; car: CarCardData }
+    | { kind: 'external'; key: string; price: number | null; year: number | null; km: number | null; car: ExternalCar; isLive: boolean };
+
+const unifiedCatalogItems = computed<UnifiedCatalogItem[]>(() => {
+    const liveIds = new Set(liveExternalCars.value.map((car) => car.id));
+
+    const localItems: UnifiedCatalogItem[] = props.cars.data.map((car) => ({
+        kind: 'local',
+        key: `local-${car.id}`,
+        price: Number.isFinite(Number(car.price)) ? Number(car.price) : null,
+        year: Number.isFinite(Number(car.year)) ? Number(car.year) : null,
+        km: Number.isFinite(Number(car.km)) ? Number(car.km) : null,
+        car,
+    }));
+
+    const externalItems: UnifiedCatalogItem[] = cachedExternalCars.value.map((car) => ({
+        kind: 'external',
+        key: `external-${car.id}`,
+        price: car.price,
+        year: car.year,
+        km: car.km,
+        car,
+        isLive: liveIds.has(car.id),
+    }));
+
+    const liveItems = externalItems.filter((item) => item.kind === 'external' && item.isLive);
+    const storedExternalItems = externalItems.filter((item) => item.kind === 'external' && !item.isLive);
+
+    const combined = liveItems.length > 0
+        ? [...liveItems, ...localItems, ...storedExternalItems]
+        : [...localItems, ...storedExternalItems];
+
+    const sort = form.value.sort;
+
+    if (sort === 'recent') {
+        return combined;
+    }
+
+    const compareNullable = (a: number | null, b: number | null, desc = false) => {
+        if (a === null && b === null) return 0;
+        if (a === null) return 1;
+        if (b === null) return -1;
+
+        return desc ? b - a : a - b;
+    };
+
+    return [...combined].sort((a, b) => {
+        if (sort === 'price-asc') return compareNullable(a.price, b.price, false);
+        if (sort === 'price-desc') return compareNullable(a.price, b.price, true);
+        if (sort === 'year-desc') return compareNullable(a.year, b.year, true);
+        if (sort === 'km-asc') return compareNullable(a.km, b.km, false);
+
+        return 0;
+    });
+});
+
+const catalogGridRef = ref<HTMLElement | null>(null);
 
 const closeExternalDialog = () => {
     externalDialogOpen.value = false;
 
-    if (liveExternalCars.value.length > 0 && props.cars.data.length > 0) {
+    if (liveExternalCars.value.length > 0) {
         void nextTick(() => {
-            externalSectionRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            catalogGridRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
     }
 };
@@ -279,11 +337,15 @@ const normalizeRanges = () => {
     }
 };
 
+const storedExternalTotal = computed(() => Math.max(props.externalTotal ?? props.externalCars.length, cachedExternalCars.value.length));
+const combinedResultsTotal = computed(() => props.cars.meta.total + storedExternalTotal.value);
+
 const apply = (immediate = false, onSuccess?: (total: number) => void) => {
     if (debounce) clearTimeout(debounce);
     debounce = setTimeout(
         () => {
             normalizeRanges();
+            externalSearch.clearResults();
             const params: Record<string, string> = {};
             Object.entries(form.value).forEach(([key, value]) => {
                 if (value) params[key] = String(value);
@@ -295,8 +357,14 @@ const apply = (immediate = false, onSuccess?: (total: number) => void) => {
                 onStart: () => { filtering.value = true; },
                 onFinish: () => { filtering.value = false; },
                 onSuccess: (page) => {
-                    const total = (page.props as { cars?: { meta?: { total?: number } } }).cars?.meta?.total ?? 0;
-                    onSuccess?.(total);
+                    const pageProps = page.props as {
+                        cars?: { meta?: { total?: number } };
+                        externalCars?: ExternalCar[];
+                        externalTotal?: number;
+                    };
+                    const localTotal = pageProps.cars?.meta?.total ?? 0;
+                    const externalCount = pageProps.externalTotal ?? pageProps.externalCars?.length ?? 0;
+                    onSuccess?.(localTotal + externalCount);
                 },
             });
         },
@@ -354,11 +422,11 @@ const applySmartSearch = async () => {
             filters = { q: form.value.q.trim() };
         }
 
-        for (const key of ['brand', 'body', 'transmission', 'fuel', 'min_price', 'max_price', 'min_year', 'max_year']) {
+        for (const key of ['brand', 'model', 'city', 'body', 'transmission', 'fuel', 'min_price', 'max_price', 'min_year', 'max_year']) {
             (form.value as Record<string, string>)[key] = filters[key] ?? '';
         }
 
-        form.value.q = filters.q ?? form.value.q;
+        form.value.q = filters.q ?? '';
 
         await nextTick();
         suspendWatchers.value = false;
@@ -367,7 +435,7 @@ const applySmartSearch = async () => {
         apply(true, (total) => {
             if (total === 0 && smartFallback.value) {
                 smartFallback.value = false;
-                toast.info('No hay resultados en WeCar. Completa la búsqueda externa.');
+                toast.info('No encontramos coincidencias guardadas. Busca en vivo en otras plataformas.');
                 openExternalSearch(true);
 
                 return;
@@ -654,8 +722,15 @@ const clear = () => {
 
             <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <p class="text-xs text-muted-foreground sm:text-sm">
-                    <template v-if="cars.meta.total > 0">
+                    <template v-if="cars.meta.total > 0 && storedExternalTotal > 0">
+                        {{ combinedResultsTotal.toLocaleString('es-MX') }} autos encontrados
+                        ({{ cars.meta.total.toLocaleString('es-MX') }} en WeCar · {{ storedExternalTotal.toLocaleString('es-MX') }} en otras plataformas)
+                    </template>
+                    <template v-else-if="cars.meta.total > 0">
                         {{ cars.meta.total.toLocaleString('es-MX') }} {{ cars.meta.total === 1 ? 'auto encontrado' : 'autos encontrados' }}
+                    </template>
+                    <template v-else-if="storedExternalTotal > 0">
+                        {{ storedExternalTotal.toLocaleString('es-MX') }} {{ storedExternalTotal === 1 ? 'auto encontrado' : 'autos encontrados' }} en otras plataformas
                     </template>
                     <template v-else>
                         Sin resultados en el catálogo
@@ -684,86 +759,55 @@ const clear = () => {
                 <button type="button" class="rounded-full px-2 py-1 text-[11px] font-bold text-primary hover:underline" @click="clear">Limpiar todo</button>
             </div>
 
-            <div v-if="cars.data.length" class="grid gap-5 transition-opacity sm:grid-cols-2 lg:grid-cols-3" :class="filtering ? 'pointer-events-none opacity-50' : ''">
-                <CarCard v-for="car in cars.data" :key="car.id" :car="car" />
-            </div>
-
-            <div v-else-if="cachedExternalCars.length" class="space-y-5">
-                <div class="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-primary/20 bg-accent/40 px-4 py-3">
+            <div ref="catalogGridRef" class="space-y-5">
+                <div
+                    v-if="liveExternalCars.length"
+                    class="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-primary/20 bg-accent/40 px-4 py-3"
+                >
                     <div>
                         <p class="text-xs font-bold uppercase tracking-wider text-primary">
-                            <template v-if="liveExternalCars.length">
-                                {{ liveExternalCars.length }} autos encontrados para “{{ liveExternalQuery }}” en otras plataformas
-                            </template>
-                            <template v-else>
-                                {{ cachedExternalCars.length }} autos encontrados en otras plataformas
-                            </template>
+                            {{ liveExternalCars.length }} autos recién encontrados para “{{ liveExternalQuery }}”
                         </p>
-                        <p class="mt-1 text-sm text-muted-foreground">
-                            <template v-if="liveExternalCars.length">
-                                Mostrando los resultados más recientes de tu búsqueda externa junto con hallazgos guardados.
-                            </template>
-                            <template v-else>
-                                No encontramos autos en el catálogo WeCar. Te mostramos resultados guardados de búsquedas recientes.
-                            </template>
+                        <p class="mt-0.5 text-xs text-muted-foreground sm:text-sm">
+                            Integrados directamente en el catálogo junto con los autos disponibles.
                         </p>
                     </div>
-                    <Button v-if="liveExternalCars.length" variant="outline" size="sm" class="rounded-full" @click="openExternalSearch(true)">
+                    <Button variant="outline" size="sm" class="rounded-full" @click="openExternalSearch(true)">
                         Cambiar búsqueda
                     </Button>
                 </div>
-                <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                    <ExternalCarCard v-for="car in cachedExternalCars" :key="car.id" :car="car" @open="openExternalCar" />
-                </div>
-                <div v-if="externalSearch.enabled.value" class="pt-2">
-                    <SearchTokensCard :status="externalSearch.status.value" :on-search="() => openExternalSearch(true)" />
-                </div>
-            </div>
 
-            <div v-else class="grid place-items-center rounded-3xl border border-dashed border-border bg-card py-20 text-center">
-                <X class="h-10 w-10 text-muted-foreground" />
-                <h2 class="mt-4 text-lg font-bold text-secondary">Sin resultados</h2>
-                <p class="mt-2 max-w-md text-sm text-muted-foreground">
-                    Prueba ajustando los filtros o busca en otras plataformas con las especificaciones que elijas.
-                </p>
-                <div class="mt-5 flex flex-wrap items-center justify-center gap-2">
-                    <Button class="gap-1.5 rounded-full" @click="openExternalSearch(true)">
-                        <Globe class="h-4 w-4" /> Buscar en otras plataformas
-                    </Button>
-                    <Button variant="outline" class="rounded-full" @click="clear">Limpiar filtros</Button>
+                <div
+                    v-if="unifiedCatalogItems.length"
+                    class="grid gap-5 transition-opacity sm:grid-cols-2 lg:grid-cols-3"
+                    :class="filtering ? 'pointer-events-none opacity-50' : ''"
+                >
+                    <template v-for="item in unifiedCatalogItems" :key="item.key">
+                        <CarCard v-if="item.kind === 'local'" :car="item.car" />
+                        <ExternalCarCard v-else :car="item.car" @open="openExternalCar" />
+                    </template>
+                </div>
+
+                <div v-else class="grid place-items-center rounded-3xl border border-dashed border-border bg-card py-20 text-center">
+                    <X class="h-10 w-10 text-muted-foreground" />
+                    <h2 class="mt-4 text-lg font-bold text-secondary">Sin resultados</h2>
+                    <p class="mt-2 max-w-md text-sm text-muted-foreground">
+                        Prueba ajustando los filtros o busca en otras plataformas con las especificaciones que elijas.
+                    </p>
+                    <div class="mt-5 flex flex-wrap items-center justify-center gap-2">
+                        <Button class="gap-1.5 rounded-full" @click="openExternalSearch(true)">
+                            <Globe class="h-4 w-4" /> Buscar en otras plataformas
+                        </Button>
+                        <Button variant="outline" class="rounded-full" @click="clear">Limpiar filtros</Button>
+                    </div>
                 </div>
             </div>
 
             <Pagination :current-page="cars.meta.current_page" :last-page="cars.meta.last_page" :base-query="filters" />
 
-            <section
-                v-if="(cars.data.length > 0 && (cachedExternalCars.length || externalSearch.enabled.value)) || (cars.data.length === 0 && !cachedExternalCars.length && externalSearch.enabled.value)"
-                ref="externalSectionRef"
-                class="mt-12 border-t border-border pt-8"
-            >
-                <div class="flex flex-wrap items-end justify-between gap-3">
-                    <div>
-                        <p class="text-xs font-bold uppercase tracking-wider text-primary">
-                            {{ liveExternalCars.length ? `Resultados de “${liveExternalQuery}”` : 'Búsqueda inteligente' }}
-                        </p>
-                        <h2 class="mt-1 text-xl font-black text-secondary">
-                            {{ liveExternalCars.length ? `${liveExternalCars.length} autos encontrados en otras plataformas` : 'Autos encontrados en otras plataformas' }}
-                        </h2>
-                    </div>
-                    <Button v-if="liveExternalCars.length" variant="outline" size="sm" class="rounded-full" @click="openExternalSearch(true)">
-                        Nueva búsqueda externa
-                    </Button>
-                </div>
-
-                <div v-if="cachedExternalCars.length" class="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                    <ExternalCarCard v-for="car in cachedExternalCars" :key="car.id" :car="car" @open="openExternalCar" />
-                </div>
-                <p v-else class="mt-4 text-sm text-muted-foreground">Aún no hay autos externos guardados. Realiza una búsqueda para encontrarlos.</p>
-
-                <div class="mt-6">
-                    <SearchTokensCard :status="externalSearch.status.value" :on-search="() => openExternalSearch(true)" />
-                </div>
-            </section>
+            <div v-if="externalSearch.enabled.value" class="mt-10 border-t border-border pt-6">
+                <SearchTokensCard :status="externalSearch.status.value" :on-search="() => openExternalSearch(true)" />
+            </div>
         </div>
     </section>
 
