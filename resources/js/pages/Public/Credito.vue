@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { usePage } from '@inertiajs/vue3';
 import { CheckCircle2, Clock, FileCheck, Percent, ShieldCheck } from '@lucide/vue';
 import PublicLayout from '@/layouts/PublicLayout.vue';
 import SeoHead from '@/components/site/SeoHead.vue';
 import Button from '@/components/ui/Button.vue';
-import Input from '@/components/ui/Input.vue';
 import Label from '@/components/ui/Label.vue';
 import FinanciarAutoDialog from '@/components/credito/FinanciarAutoDialog.vue';
 import FinancialPartnersCarousel from '@/components/site/FinancialPartnersCarousel.vue';
+import { useCarVersions } from '@/composables/useCarVersions';
+import { loadCreditDraft, saveCreditDraft } from '@/composables/useCreditDraft';
 import { vehicleYears } from '@/lib/carCatalog';
 import { monthlyPayment, serviceFee, SIMULATOR_ANNUAL_RATE } from '@/lib/creditCalculator';
 
@@ -20,12 +21,15 @@ const props = defineProps<{
     seo: { title: string; description: string; canonical: string };
 }>();
 
-const page = usePage<{ url: string }>();
+const DRAFT_SCOPE = 'credito';
+
+const page = usePage<{ auth?: { user: { id: string } | null } }>();
 const query = new URL(page.url, 'http://localhost').searchParams;
 const priceFromQuery = Number(query.get('precio') ?? 0);
 const yearFromQuery = Number(query.get('year') ?? 0);
 const brandFromQuery = props.brands.find((item) => item.id === query.get('brand_id') || item.name === query.get('brand'));
 const modelFromQuery = brandFromQuery?.models.find((item) => item.id === query.get('model_id') || item.name === query.get('model'));
+const hasVehicleQuery = Boolean(brandFromQuery || modelFromQuery || yearFromQuery > 0 || priceFromQuery > 0);
 
 const price = ref(priceFromQuery > 0 ? priceFromQuery : 280000);
 const downPaymentPct = ref(20);
@@ -37,69 +41,141 @@ const year = ref<number | null>(yearFromQuery > 0 ? yearFromQuery : null);
 const km = ref(Number(query.get('km') ?? 0));
 const carId = ref(query.get('car_id') ?? '');
 const dialogOpen = ref(false);
-const versions = ref<{ id: string; name: string }[]>([]);
-const versionsLoading = ref(false);
-const versionsError = ref('');
-let versionsTimer: ReturnType<typeof setTimeout> | null = null;
+const isHydrating = ref(true);
+
+const {
+    versions,
+    loading: versionsLoading,
+    error: versionsError,
+    load: fetchVersions,
+    scheduleLoad: scheduleVersionsLoad,
+} = useCarVersions({ fast: true, debounceMs: 150 });
 
 const models = computed(() => props.brands.find((item) => item.name === brand.value)?.models ?? []);
 const selectedBrandId = computed(() => props.brands.find((item) => item.name === brand.value)?.id ?? '');
 const selectedModelId = computed(() => models.value.find((item) => item.name === model.value)?.id ?? '');
+const versionSelectOptions = computed(() => {
+    if (version.value && !versions.value.some((item) => item.name === version.value)) {
+        return [{ id: 'selected-version', name: version.value }, ...versions.value];
+    }
+
+    return versions.value;
+});
 const selectedVersionId = computed(() => versions.value.find((item) => item.name === version.value)?.id ?? query.get('version_id') ?? '');
 const downPayment = computed(() => Math.round((price.value * downPaymentPct.value) / 100));
 const financed = computed(() => Math.max(price.value - downPayment.value, 0));
 const monthly = computed(() => monthlyPayment(financed.value, SIMULATOR_ANNUAL_RATE, term.value));
 const serviceFeeAmount = computed(() => serviceFee(financed.value));
 
-const loadVersions = async () => {
-    if (!selectedModelId.value || !year.value) {
-        versions.value = [];
-        version.value = '';
+const loadVersions = async (force = false) => {
+    await fetchVersions({
+        brandId: selectedBrandId.value,
+        modelId: selectedModelId.value,
+        year: year.value,
+        force,
+    });
+};
+
+const persistSimulatorDraft = () => {
+    if (isHydrating.value) {
         return;
     }
 
-    versionsLoading.value = true;
-    versionsError.value = '';
-
-    try {
-        const params = new URLSearchParams({
+    saveCreditDraft(DRAFT_SCOPE, {
+        simulator: {
+            year: year.value,
+            brand: brand.value,
+            brand_id: selectedBrandId.value,
+            model: model.value,
             model_id: selectedModelId.value,
-            year: String(year.value),
-        });
-        const response = await fetch(`/api/car-versions?${params.toString()}`, {
-            headers: { Accept: 'application/json' },
-        });
-        const payload = await response.json().catch(() => ({}));
+            version: version.value,
+            version_id: selectedVersionId.value,
+            price: price.value,
+            downPaymentPct: downPaymentPct.value,
+            term: term.value,
+            km: km.value,
+            carId: carId.value,
+        },
+    });
+};
 
-        if (!response.ok) {
-            throw new Error(payload.error || 'No pudimos cargar las versiones.');
-        }
-
-        versions.value = payload.versions ?? [];
-
-        if (version.value && !versions.value.some((item) => item.name === version.value)) {
-            version.value = '';
-        }
-    } catch (error) {
-        versions.value = [];
-        version.value = '';
-        versionsError.value = error instanceof Error ? error.message : 'No pudimos cargar las versiones.';
-    } finally {
-        versionsLoading.value = false;
-    }
+const openCreditDialog = () => {
+    persistSimulatorDraft();
+    dialogOpen.value = true;
 };
 
 watch(
     () => [brand.value, model.value, year.value],
-    () => {
-        versions.value = [];
-        version.value = '';
-        versionsError.value = '';
+    (current, previous) => {
+        if (!isHydrating.value && previous && (current[0] !== previous[0] || current[1] !== previous[1] || current[2] !== previous[2])) {
+            version.value = '';
+        }
 
-        if (versionsTimer) clearTimeout(versionsTimer);
-        versionsTimer = setTimeout(loadVersions, 600);
+        scheduleVersionsLoad({
+            brandId: selectedBrandId.value,
+            modelId: selectedModelId.value,
+            year: year.value,
+        });
     },
 );
+
+watch(
+    () => [year.value, brand.value, model.value, version.value, price.value, downPaymentPct.value, term.value],
+    () => {
+        persistSimulatorDraft();
+    },
+);
+
+onMounted(() => {
+    const draft = loadCreditDraft(DRAFT_SCOPE);
+
+    if (draft?.simulator && !hasVehicleQuery) {
+        const savedBrand = props.brands.find(
+            (item) => item.id === draft.simulator?.brand_id || item.name === draft.simulator?.brand,
+        );
+        const savedModel = savedBrand?.models.find(
+            (item) => item.id === draft.simulator?.model_id || item.name === draft.simulator?.model,
+        );
+
+        if (draft.simulator.year) {
+            year.value = draft.simulator.year;
+        }
+        if (savedBrand) {
+            brand.value = savedBrand.name;
+        }
+        if (savedModel) {
+            model.value = savedModel.name;
+        }
+        if (draft.simulator.version) {
+            version.value = draft.simulator.version;
+        }
+        if (typeof draft.simulator.price === 'number' && draft.simulator.price > 0) {
+            price.value = draft.simulator.price;
+        }
+        if (typeof draft.simulator.downPaymentPct === 'number' && draft.simulator.downPaymentPct > 0) {
+            downPaymentPct.value = draft.simulator.downPaymentPct;
+        }
+        if (typeof draft.simulator.term === 'number' && draft.simulator.term > 0) {
+            term.value = draft.simulator.term;
+        }
+        if (typeof draft.simulator.km === 'number' && draft.simulator.km >= 0) {
+            km.value = draft.simulator.km;
+        }
+        if (draft.simulator.carId) {
+            carId.value = draft.simulator.carId;
+        }
+    }
+
+    isHydrating.value = false;
+
+    if (selectedModelId.value && year.value) {
+        void loadVersions();
+    }
+
+    if (draft?.autoReopen && page.props.auth?.user) {
+        dialogOpen.value = true;
+    }
+});
 
 const formatPrice = (value: number) =>
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(value);
@@ -154,23 +230,29 @@ const benefits = [
                             </select>
                         </div>
                         <div>
-                            <Label class="font-normal">Versión</Label>
-                                <select
-                                    v-model="version"
-                                    :disabled="!model || versionsLoading"
-                                    class="mt-1.5 h-10 w-full rounded-md border border-input bg-background field-select pl-3 pr-10 text-sm disabled:opacity-50"
-                                >
+                            <Label class="font-normal">Versión (opcional)</Label>
+                            <select
+                                v-model="version"
+                                :disabled="!model || !year || (versionsLoading && versionSelectOptions.length === 0)"
+                                class="mt-1.5 h-10 w-full rounded-md border border-input bg-background field-select pl-3 pr-10 text-sm disabled:opacity-50"
+                            >
                                 <option value="">
-                                    {{ versionsLoading ? 'Cargando versiones…' : versions.length ? 'Versión (opcional)' : 'Versión no disponible (opcional)' }}
+                                    {{ !model || !year
+                                        ? 'Opcional (elige modelo y año)'
+                                        : versionsLoading
+                                        ? 'Cargando versiones…'
+                                        : versionSelectOptions.length
+                                        ? 'Sin especificar (opcional)'
+                                        : 'Sin versiones (opcional)' }}
                                 </option>
-                                <option v-for="item in versions" :key="item.id" :value="item.name">{{ item.name }}</option>
+                                <option v-for="item in versionSelectOptions" :key="item.id" :value="item.name">{{ item.name }}</option>
                             </select>
                             <p v-if="versionsError" class="mt-1 text-[11px] font-semibold text-destructive">{{ versionsError }}</p>
                             <button
-                                v-if="!versionsLoading && versions.length === 0 && model"
+                                v-if="!versionsLoading && versionSelectOptions.length === 0 && model && year"
                                 type="button"
                                 class="mt-1 text-[11px] font-bold text-primary hover:underline"
-                                @click="loadVersions"
+                                @click="loadVersions(true)"
                             >
                                 Reintentar
                             </button>
@@ -222,7 +304,7 @@ const benefits = [
                         <p class="text-[10px] text-secondary-foreground/60">Cargo por servicio (2.5%)</p>
                         <p class="text-sm font-normal">{{ formatPrice(serviceFeeAmount) }}</p>
                     </div>
-                    <Button variant="hero" size="lg" class="mt-4 w-full" :disabled="!model" @click="dialogOpen = true">
+                    <Button variant="hero" size="lg" class="mt-4 w-full" :disabled="!model" @click="openCreditDialog">
                         Completar perfil y comparar
                     </Button>
                     <p class="mt-2.5 text-center text-[11px] text-secondary-foreground/70">
@@ -272,6 +354,7 @@ const benefits = [
 
     <FinanciarAutoDialog
         :open="dialogOpen"
+        :draft-scope="DRAFT_SCOPE"
         :brands="brands"
         :car="carId ? { id: carId, brand, brand_id: selectedBrandId, model, model_id: selectedModelId, version, version_id: selectedVersionId, year, price, km } : null"
         :initial="{

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { Link, useForm } from '@inertiajs/vue3';
 import { Eye, EyeOff, LoaderCircle } from '@lucide/vue';
 import PublicLayout from '@/layouts/PublicLayout.vue';
@@ -14,6 +14,16 @@ import FormFieldError from '@/components/ui/FormFieldError.vue';
 import { useRequiredValidation } from '@/composables/useRequiredValidation';
 
 defineOptions({ layout: PublicLayout });
+
+const props = defineProps<{
+    redirect?: string | null;
+}>();
+
+const redirectQuery = computed(() =>
+    props.redirect ? `?redirect=${encodeURIComponent(props.redirect)}` : '',
+);
+const googleHref = computed(() => `/auth/google/redirect${redirectQuery.value}`);
+const loginHref = computed(() => `/login${redirectQuery.value}`);
 
 type AccountType = 'personal' | 'agency';
 
@@ -71,7 +81,7 @@ const submit = () => {
             <p class="mt-2 text-center text-sm text-muted-foreground">Únete y encuentra tu auto ideal</p>
 
             <a
-                href="/auth/google/redirect"
+                :href="googleHref"
                 class="mt-6 flex h-12 w-full items-center justify-center gap-3 rounded-full border border-input bg-background text-sm font-semibold transition-colors hover:bg-accent"
             >
                 <svg class="h-5 w-5" viewBox="0 0 48 48" aria-hidden="true">
@@ -195,7 +205,7 @@ const submit = () => {
 
             <p class="mt-6 text-center text-sm text-muted-foreground">
                 ¿Ya tienes cuenta?
-                <Link href="/login" class="font-bold text-primary hover:underline">Inicia sesión</Link>
+                <Link :href="loginHref" class="font-bold text-primary hover:underline">Inicia sesión</Link>
             </p>
         </div>
     </section>

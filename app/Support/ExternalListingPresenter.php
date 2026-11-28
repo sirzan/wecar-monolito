@@ -23,13 +23,15 @@ class ExternalListingPresenter
             $description = 'Anuncio publicado en '.$listing->source.'. Revisa los detalles y confirma la información directamente con el vendedor antes de cualquier pago.';
         }
 
+        [$brand, $model] = self::resolveMakeAndModel($listing);
+
         return [
             'id' => $listing->external_id,
             'slug' => $listing->slug,
             'title' => $listing->title,
-            'brand' => $listing->make,
+            'brand' => $brand,
             'brand_id' => null,
-            'model' => $listing->model,
+            'model' => $model,
             'model_id' => null,
             'version' => null,
             'version_id' => null,
@@ -103,5 +105,42 @@ class ExternalListingPresenter
             'platformColor' => (string) ($platform['color'] ?? '#0f1729'),
             'platformInitials' => (string) ($platform['initials'] ?? strtoupper(substr($listing->source, 0, 2))),
         ];
+    }
+
+    /**
+     * @return array{0: ?string, 1: ?string}
+     */
+    private static function resolveMakeAndModel(ExternalListing $listing): array
+    {
+        $brand = filled($listing->make) ? trim((string) $listing->make) : null;
+        $model = filled($listing->model) ? trim((string) $listing->model) : null;
+
+        if ($brand !== null && $model !== null) {
+            return [$brand, $model];
+        }
+
+        $cleanTitle = preg_replace('/\b(19|20)\d{2}\b/u', ' ', (string) $listing->title) ?? '';
+        $cleanTitle = preg_replace('/[^\p{L}\p{N}\s-]+/u', ' ', $cleanTitle) ?? '';
+        $tokens = array_values(array_filter(
+            preg_split('/\s+/u', trim($cleanTitle)) ?: [],
+            static fn (string $token): bool => $token !== '' && ! in_array(mb_strtolower($token), ['en', 'venta', 'usado', 'usados', 'seminuevo', 'seminuevos', 'auto', 'autos'], true),
+        ));
+
+        if ($brand === null && isset($tokens[0])) {
+            $brand = $tokens[0];
+        }
+
+        if ($model === null) {
+            $remaining = array_values(array_filter(
+                $tokens,
+                static fn (string $token): bool => $brand === null || mb_strtolower($token) !== mb_strtolower($brand),
+            ));
+
+            if (isset($remaining[0])) {
+                $model = $remaining[0];
+            }
+        }
+
+        return [$brand, $model];
     }
 }

@@ -22,8 +22,9 @@ class CreditApplicationService
      * @param  array<string, mixed>  $data
      * @param  array<string, UploadedFile>  $files
      * @param  array<int, string>  $reuse
+     * @param  array<string, mixed>  $profileExtras
      */
-    public function submit(User $user, array $data, array $files, array $reuse = []): CreditApplication
+    public function submit(User $user, array $data, array $files, array $reuse = [], array $profileExtras = []): CreditApplication
     {
         $recent = CreditApplication::query()
             ->where('email', Str::lower($data['email']))
@@ -39,7 +40,7 @@ class CreditApplicationService
             ]);
         }
 
-        return DB::transaction(function () use ($user, $data, $files, $reuse) {
+        return DB::transaction(function () use ($user, $data, $files, $reuse, $profileExtras) {
             $application = CreditApplication::query()->create([
                 ...$data,
                 'user_id' => $user->getKey(),
@@ -61,7 +62,7 @@ class CreditApplicationService
                 }
             }
 
-            $this->updateProfile($user, $data);
+            $this->updateProfile($user, $data, $profileExtras);
 
             return $application->fresh(['documents', 'financiera', 'car']);
         });
@@ -69,8 +70,9 @@ class CreditApplicationService
 
     /**
      * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $profileExtras
      */
-    private function updateProfile(User $user, array $data): void
+    private function updateProfile(User $user, array $data, array $profileExtras = []): void
     {
         $profileData = [
             'full_name' => $data['full_name'],
@@ -89,10 +91,30 @@ class CreditApplicationService
             'ingreso_mensual' => $data['ingreso_mensual'] ?? null,
         ];
 
+        if (isset($data['deuda_mensual'])) {
+            $profileData['deuda_mensual'] = $data['deuda_mensual'];
+        }
+
         foreach (['ciudad' => 'city', 'banco' => 'banco', 'tipo_cuenta' => 'tipo_cuenta'] as $input => $column) {
             if (filled($data[$input] ?? null)) {
                 $profileData[$column] = $data[$input];
             }
+        }
+
+        if (! isset($profileData['city']) && filled($data['alcaldia'] ?? null)) {
+            $profileData['city'] = $data['alcaldia'];
+        }
+
+        if (filled($profileExtras['state'] ?? null)) {
+            $profileData['state'] = $profileExtras['state'];
+        }
+
+        if (isset($profileExtras['antiguedad_anios']) && $profileExtras['antiguedad_anios'] !== null) {
+            $profileData['antiguedad_anios'] = (int) $profileExtras['antiguedad_anios'];
+        }
+
+        if (filled($profileExtras['tipo_trabajo'] ?? null)) {
+            $profileData['tipo_trabajo'] = $profileExtras['tipo_trabajo'];
         }
 
         if (filled($data['down_payment'] ?? null)) {

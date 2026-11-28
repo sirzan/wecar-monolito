@@ -17,6 +17,7 @@ class CarVersionController extends Controller
             'brand' => ['nullable', 'string', 'max:120'],
             'model' => ['nullable', 'string', 'max:120'],
             'year' => ['required', 'integer', 'min:1990', 'max:'.(date('Y') + 1)],
+            'fast' => ['nullable', 'boolean'],
         ]);
 
         $model = null;
@@ -41,8 +42,12 @@ class CarVersionController extends Controller
             ], 422);
         }
 
+        $list = $request->boolean('fast')
+            ? $versions->fastVersionsFor($model, (int) $validated['year'])
+            : $versions->versionsFor($model, (int) $validated['year']);
+
         return response()->json([
-            'versions' => $versions->versionsFor($model, (int) $validated['year']),
+            'versions' => $list,
         ]);
     }
 }

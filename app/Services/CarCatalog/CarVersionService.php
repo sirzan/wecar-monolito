@@ -57,6 +57,29 @@ class CarVersionService
     /**
      * @return array<int, array{id: string, name: string}>
      */
+    public function fastVersionsFor(CarModel $model, int $year): array
+    {
+        $cacheKey = $this->cacheKey($model->getKey(), $year);
+        $cached = Cache::get($cacheKey);
+
+        if (is_array($cached) && $cached !== []) {
+            return $cached;
+        }
+
+        $local = $this->localVersions($model, $year);
+
+        if ($local !== []) {
+            Cache::put($cacheKey, $local, now()->addHours(self::SUCCESS_TTL_HOURS));
+
+            return $local;
+        }
+
+        return $this->localModelVersions($model);
+    }
+
+    /**
+     * @return array<int, array{id: string, name: string}>
+     */
     public function localVersions(CarModel $model, int $year): array
     {
         return CarVersion::query()
@@ -72,6 +95,31 @@ class CarVersionService
                 'name' => $version->name,
             ])
             ->all();
+    }
+
+    /**
+     * Fallback local sin red: devuelve versiones registradas para el mismo modelo en otros años.
+     *
+     * @return array<int, array{id: string, name: string}>
+     */
+    public function localModelVersions(CarModel $model): array
+    {
+        $versions = [];
+
+        foreach (CarVersion::query()->where('model_id', $model->getKey())->orderBy('name')->get(['id', 'name']) as $version) {
+            $key = mb_strtolower(trim($version->name));
+
+            if ($key === '' || isset($versions[$key])) {
+                continue;
+            }
+
+            $versions[$key] = [
+                'id' => $version->getKey(),
+                'name' => trim($version->name),
+            ];
+        }
+
+        return array_values($versions);
     }
 
     public function validateForModel(CarModel $model, string $versionId, int $year): ?CarVersion
@@ -154,10 +202,10 @@ class CarVersionService
 
         try {
             $response = Http::withToken($apiKey)
-                ->timeout(30)
+                ->timeout(12)
                 ->post('https://api.firecrawl.dev/v2/search', [
                     'query' => $query,
-                    'limit' => 5,
+                    'limit' => 3,
                     'scrapeOptions' => [
                         'onlyMainContent' => true,
                         'formats' => [[

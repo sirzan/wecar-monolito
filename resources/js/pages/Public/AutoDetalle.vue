@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import { Link, router } from '@inertiajs/vue3';
+import { computed, onMounted, ref, watch } from 'vue';
+import { Link, router, usePage } from '@inertiajs/vue3';
 import {
     AlertCircle,
     ArrowRight,
@@ -47,6 +47,7 @@ import SeoHead from '@/components/site/SeoHead.vue';
 import CarCard, { type CarCardData } from '@/components/site/CarCard.vue';
 import Button from '@/components/ui/Button.vue';
 import FinanciarAutoDialog from '@/components/credito/FinanciarAutoDialog.vue';
+import { loadCreditDraft, saveCreditDraft } from '@/composables/useCreditDraft';
 import { useFavoritesStore } from '@/stores/favorites';
 import { CAR_DETAIL_ANNUAL_RATE, estimatedMonthlyFromPrice, monthlyPayment, serviceFee } from '@/lib/creditCalculator';
 
@@ -94,7 +95,9 @@ const props = defineProps<{
     seo: { title: string; description: string; canonical: string; image: string | null; images: string[]; noindex: boolean; robots: string; availability: string };
 }>();
 
+const page = usePage<{ auth?: { user: { id: string } | null } }>();
 const isExternal = computed(() => Boolean(props.external));
+const draftScope = computed(() => `auto:${props.car.slug || props.car.id}`);
 
 const images = computed(() => (props.car.gallery.length ? props.car.gallery : props.car.image ? [props.car.image] : []));
 const active = ref(0);
@@ -104,7 +107,41 @@ const showFullDescription = ref(false);
 const favorites = useFavoritesStore();
 const isFavorite = computed(() => (isExternal.value ? favorites.hasExternal(props.car.id) : favorites.has(props.car.id)));
 
-onMounted(() => void favorites.bootstrap());
+// Finance Calculator State
+const downPaymentPct = ref(20);
+const termMonths = ref(48);
+const annualInterestRate = ref(CAR_DETAIL_ANNUAL_RATE);
+
+onMounted(() => {
+    void favorites.bootstrap();
+
+    const draft = loadCreditDraft(draftScope.value);
+
+    if (draft?.simulator) {
+        if (typeof draft.simulator.downPaymentPct === 'number' && draft.simulator.downPaymentPct > 0) {
+            downPaymentPct.value = draft.simulator.downPaymentPct;
+        }
+        if (typeof draft.simulator.term === 'number' && draft.simulator.term > 0) {
+            termMonths.value = draft.simulator.term;
+        }
+    }
+
+    if (draft?.autoReopen && page.props.auth?.user) {
+        financiarOpen.value = true;
+    }
+});
+
+watch(
+    () => [downPaymentPct.value, termMonths.value],
+    () => {
+        saveCreditDraft(draftScope.value, {
+            simulator: {
+                downPaymentPct: downPaymentPct.value,
+                term: termMonths.value,
+            },
+        });
+    },
+);
 
 const formatPrice = (value: number) => {
     const amount = Number(value);
@@ -116,11 +153,6 @@ const formatPrice = (value: number) => {
 
 const formatKm = (value: number | null) =>
     value == null ? 'Kilometraje no especificado' : new Intl.NumberFormat('es-MX').format(value) + ' km';
-
-// Finance Calculator State
-const downPaymentPct = ref(20);
-const termMonths = ref(48);
-const annualInterestRate = ref(CAR_DETAIL_ANNUAL_RATE);
 
 const financedAmount = computed(() => {
     return Math.max(0, props.car.price * (1 - downPaymentPct.value / 100));
@@ -773,6 +805,7 @@ const jsonLd = computed(() => [
         <!-- Modal FinanciarAutoDialog -->
         <FinanciarAutoDialog
             :open="financiarOpen"
+            :draft-scope="draftScope"
             :car="{
                 id: car.id,
                 brand: car.brand,

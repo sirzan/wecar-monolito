@@ -8,8 +8,10 @@ use App\Actions\Fortify\UpdateUserPassword;
 use App\Actions\Fortify\UpdateUserProfileInformation;
 use App\Http\Responses\LoginResponse as AppLoginResponse;
 use App\Http\Responses\PasskeyLoginResponse as AppPasskeyLoginResponse;
+use App\Http\Responses\RegisterResponse as AppRegisterResponse;
 use App\Http\Responses\TwoFactorLoginResponse as AppTwoFactorLoginResponse;
 use App\Models\User;
+use App\Support\LoginRedirector;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -19,6 +21,7 @@ use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Laravel\Fortify\Actions\RedirectIfTwoFactorAuthenticatable;
 use Laravel\Fortify\Contracts\LoginResponse as LoginResponseContract;
+use Laravel\Fortify\Contracts\RegisterResponse as RegisterResponseContract;
 use Laravel\Fortify\Contracts\TwoFactorLoginResponse as TwoFactorLoginResponseContract;
 use Laravel\Fortify\Fortify;
 use Laravel\Passkeys\Contracts\PasskeyLoginResponse as PasskeyLoginResponseContract;
@@ -31,6 +34,7 @@ class FortifyServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(LoginResponseContract::class, AppLoginResponse::class);
+        $this->app->singleton(RegisterResponseContract::class, AppRegisterResponse::class);
         $this->app->singleton(TwoFactorLoginResponseContract::class, AppTwoFactorLoginResponse::class);
         $this->app->singleton(PasskeyLoginResponseContract::class, AppPasskeyLoginResponse::class);
     }
@@ -53,8 +57,20 @@ class FortifyServiceProvider extends ServiceProvider
                 : null;
         });
 
-        Fortify::loginView(fn () => Inertia::render('Auth/Login'));
-        Fortify::registerView(fn () => Inertia::render('Auth/Register'));
+        Fortify::loginView(function (Request $request) {
+            $redirect = app(LoginRedirector::class)->storeIntended($request, $request->query('redirect'));
+
+            return Inertia::render('Auth/Login', [
+                'redirect' => $redirect,
+            ]);
+        });
+        Fortify::registerView(function (Request $request) {
+            $redirect = app(LoginRedirector::class)->storeIntended($request, $request->query('redirect'));
+
+            return Inertia::render('Auth/Register', [
+                'redirect' => $redirect,
+            ]);
+        });
         Fortify::requestPasswordResetLinkView(fn () => Inertia::render('Auth/ForgotPassword'));
         Fortify::resetPasswordView(fn (Request $request) => Inertia::render('Auth/ResetPassword', [
             'email' => $request->email,

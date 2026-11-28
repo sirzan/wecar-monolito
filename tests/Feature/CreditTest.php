@@ -4,6 +4,7 @@ use App\Mail\CreditApplicationReceived;
 use App\Mail\CreditApplicationSubmitted;
 use App\Models\CreditApplication;
 use App\Models\Financiera;
+use App\Models\Profile;
 use App\Models\User;
 use App\Services\CreditOfferService;
 use App\Services\CreditScoringService;
@@ -286,4 +287,158 @@ it('allows authorized users and admins to view and manage credit applications', 
     $this->actingAs($client)
         ->get('/panel/tramites')
         ->assertOk();
+});
+
+it('returns saved account configuration in credit profile endpoint and persists updates', function () {
+    $user = User::factory()->create([
+        'name' => 'Ana López',
+        'email' => 'ana.lopez@example.com',
+        'phone' => '8112345678',
+        'email_verified_at' => null,
+    ]);
+
+    Profile::query()->create([
+        'user_id' => $user->getKey(),
+        'full_name' => 'Ana López',
+        'phone' => '8112345678',
+        'birthdate' => '1992-08-20',
+        'city' => 'Monterrey',
+        'state' => 'Nuevo León',
+        'rfc' => 'LOAA920820ABC',
+    ]);
+
+    $this->actingAs($user)
+        ->getJson('/api/credito/perfil')
+        ->assertOk()
+        ->assertJsonPath('profile.full_name', 'Ana López')
+        ->assertJsonPath('profile.phone', '8112345678')
+        ->assertJsonPath('profile.alcaldia', 'Monterrey')
+        ->assertJsonPath('profile.ciudad', 'Monterrey')
+        ->assertJsonPath('profile.state', 'Nuevo León')
+        ->assertJsonPath('profile.account_complete', false);
+
+    $this->actingAs($user)
+        ->putJson('/api/credito/perfil', [
+            'full_name' => 'Ana López García',
+            'phone' => '8112345678',
+            'birthdate' => '1992-08-20',
+            'rfc' => 'loaa920820abc',
+            'calle' => 'Av. Constitución 500',
+            'colonia' => 'Centro',
+            'cp' => '64000',
+            'alcaldia' => 'Monterrey',
+            'ciudad' => 'Monterrey',
+            'state' => 'Nuevo León',
+            'pais' => 'México',
+            'ocupacion' => 'Arquitecta',
+            'empresa' => 'Estudio Norte',
+            'antiguedad' => '4 años',
+            'antiguedad_anios' => 4,
+            'ingreso_mensual' => 45000,
+            'deuda_mensual' => 4000,
+        ])
+        ->assertOk()
+        ->assertJsonPath('success', true)
+        ->assertJsonPath('profile.account_complete', true)
+        ->assertJsonPath('profile.rfc', 'LOAA920820ABC')
+        ->assertJsonPath('profile.ocupacion', 'Arquitecta');
+
+    expect($user->fresh()->name)->toBe('Ana López García')
+        ->and($user->profile->fresh()->calle)->toBe('Av. Constitución 500')
+        ->and($user->profile->fresh()->antiguedad_anios)->toBe(4);
+});
+
+it('submits credit application without a vehicle version', function () {
+    Storage::fake('local');
+    Mail::fake();
+    $this->seed();
+
+    $user = User::factory()->create(['email_verified_at' => now()]);
+    $financiera = Financiera::query()->where('slug', 'bbva')->firstOrFail();
+
+    $response = $this->actingAs($user)->postJson('/api/credito/solicitudes', [
+        'full_name' => 'Carlos Ruiz',
+        'email' => 'carlos.ruiz@example.com',
+        'phone' => '5511223344',
+        'birthdate' => '1988-03-12',
+        'calle' => 'Insurgentes Sur 100',
+        'colonia' => 'Roma Norte',
+        'cp' => '06700',
+        'alcaldia' => 'Cuauhtémoc',
+        'ciudad' => 'Ciudad de México',
+        'state' => 'CDMX',
+        'pais' => 'México',
+        'ocupacion' => 'Ingeniero',
+        'ingreso_mensual' => 50000,
+        'deuda_mensual' => 2000,
+        'car_brand' => 'Ford',
+        'car_model' => 'Fiesta',
+        'car_version' => null,
+        'car_year' => 2022,
+        'car_price' => 260000,
+        'car_km' => 30000,
+        'financiera_id' => $financiera->getKey(),
+        'financiera_name' => 'BBVA Auto',
+        'car_condition' => 'used',
+        'bureau' => 'bueno',
+        'employment' => 'fijo',
+        'tenure' => 3,
+        'age' => 38,
+        'down_payment' => 52000,
+        'term_months' => 48,
+        'ine' => UploadedFile::fake()->create('ine.pdf', 200, 'application/pdf'),
+        'domicilio' => UploadedFile::fake()->create('domicilio.pdf', 200, 'application/pdf'),
+        'estado_cuenta' => UploadedFile::fake()->create('estado.pdf', 200, 'application/pdf'),
+    ]);
+
+    $response->assertOk()->assertJsonPath('success', true);
+
+    $application = CreditApplication::query()->where('email', 'carlos.ruiz@example.com')->first();
+    expect($application)->not->toBeNull()
+        ->and($application->car_version)->toBeNull()
+        ->and($user->fresh()->profile?->state)->toBe('CDMX');
+});
+
+it('redirects back to the credit flow after login and registration while blocking external redirects', function () {
+    $this->seed();
+
+    $user = User::factory()->create([
+        'email' => 'credito.return@example.com',
+        'password' => 'Password123',
+        'email_verified_at' => now(),
+    ]);
+
+    $this->get('/login?redirect=/credito')
+        ->assertOk();
+
+    $this->post('/login', [
+        'email' => 'credito.return@example.com',
+        'password' => 'Password123',
+    ])->assertRedirect('/credito');
+
+    auth()->logout();
+
+    // External URLs must be ignored and fall back to default panel dashboard
+    $this->get('/login?redirect=https://evil.example/phish')
+        ->assertOk();
+
+    $this->post('/login', [
+        'email' => 'credito.return@example.com',
+        'password' => 'Password123',
+    ])->assertRedirect(route('panel.dashboard'));
+
+    auth()->logout();
+
+    // Registration preserves safe internal redirect
+    $this->get('/registro?redirect=/credito')
+        ->assertOk();
+
+    $this->post('/register', [
+        'account_type' => 'personal',
+        'name' => 'Nuevo Cliente',
+        'email' => 'nuevo.cliente@example.com',
+        'password' => 'Password123!',
+        'password_confirmation' => 'Password123!',
+        'terms' => true,
+    ])->assertRedirect('/credito');
 });

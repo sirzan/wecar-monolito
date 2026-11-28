@@ -23,6 +23,8 @@ import FormFieldError from '@/components/ui/FormFieldError.vue';
 import MoneyInput from '@/components/ui/MoneyInput.vue';
 import PhoneInput from '@/components/ui/PhoneInput.vue';
 import ZipCodeFields from '@/components/forms/ZipCodeFields.vue';
+import { useCarVersions } from '@/composables/useCarVersions';
+import { clearCreditDraft, loadCreditDraft, saveCreditDraft } from '@/composables/useCreditDraft';
 import { vehicleYears } from '@/lib/carCatalog';
 import { formatMxn } from '@/lib/currency';
 import { cn } from '@/lib/utils';
@@ -51,6 +53,7 @@ interface CarInput {
 const props = withDefaults(
     defineProps<{
         open: boolean;
+        draftScope?: string;
         car?: CarInput | null;
         brands?: Brand[];
         initial?: {
@@ -68,6 +71,7 @@ const props = withDefaults(
         };
     }>(),
     {
+        draftScope: 'credito',
         car: null,
         brands: () => [],
         initial: () => ({}),
@@ -84,13 +88,27 @@ type Step = 1 | 2 | 3 | 4 | 5;
 const step = ref<Step>(1);
 const evaluating = ref(false);
 const submitting = ref(false);
+const savingAccount = ref(false);
 const submitError = ref<string | null>(null);
 const successFolio = ref<string | null>(null);
 const showAllOffers = ref(false);
 const accountCompleted = ref(false);
+const profileLoadedFromAccount = ref(false);
+const editingVehicle = ref(false);
 const documentsOpen = ref(true);
 const loginPromptOpen = ref(false);
 const fieldErrors = ref<Record<string, string>>({});
+const isHydrating = ref(false);
+
+const currentRedirectPath = computed(() => {
+    if (typeof window === 'undefined') {
+        return '/credito';
+    }
+
+    return `${window.location.pathname}${window.location.search}`;
+});
+const loginHref = computed(() => `/login?redirect=${encodeURIComponent(currentRedirectPath.value)}`);
+const registerHref = computed(() => `/registro?redirect=${encodeURIComponent(currentRedirectPath.value)}`);
 
 const fieldInvalid = (field: string): boolean => Boolean(fieldErrors.value[field]);
 const fieldMessage = (field: string): string => fieldErrors.value[field] ?? '';
@@ -186,72 +204,84 @@ const onModelChange = () => {
     resolveModelName();
 };
 
-const versionOptions = ref<{ id: string; name: string }[]>([]);
-const versionsLoading = ref(false);
-const versionsError = ref('');
-let versionsTimer: ReturnType<typeof setTimeout> | null = null;
+const {
+    versions: fetchedVersions,
+    loading: versionsLoading,
+    error: versionsError,
+    load: fetchVersions,
+    scheduleLoad: scheduleVersionsLoad,
+    reset: resetVersions,
+} = useCarVersions({ fast: true, debounceMs: 150 });
 
-const loadVersions = async () => {
-    if ((!profile.modelId && (!profile.brand || !profile.model)) || !profile.year) {
-        versionOptions.value = [];
+const versionOptions = computed(() => {
+    const list = [...fetchedVersions.value];
+    const current = (profile.version || props.car?.version || '').trim();
+
+    if (current && !list.some((version) => version.name === current)) {
+        list.unshift({ id: profile.versionId || 'selected-version', name: current });
+    }
+
+    return list;
+});
+
+const hasPreselectedVehicle = computed(() =>
+    Boolean(profile.brand.trim() && profile.model.trim() && profile.year),
+);
+
+const vehicleSummaryTitle = computed(() => {
+    if (props.car?.title) {
+        return props.car.title;
+    }
+
+    return [profile.brand, profile.model, profile.version, profile.year]
+        .filter((part) => part !== null && part !== undefined && String(part).trim() !== '')
+        .join(' ');
+});
+
+const loadVersions = async (force = false) => {
+    if (!props.open || props.car || !editingVehicle.value) {
         return;
     }
 
-    versionsLoading.value = true;
-    versionsError.value = '';
-
-    try {
-        const params = new URLSearchParams({
-            year: String(profile.year),
-        });
-
-        if (profile.modelId) {
-            params.set('model_id', profile.modelId);
-        } else {
-            params.set('brand', profile.brand);
-            params.set('model', profile.model);
-        }
-
-        const response = await fetch(`/api/car-versions?${params.toString()}`, {
-            headers: { Accept: 'application/json' },
-        });
-        const payload = await response.json().catch(() => ({}));
-
-        if (!response.ok) {
-            throw new Error(payload.error || 'No pudimos cargar las versiones.');
-        }
-
-        versionOptions.value = payload.versions ?? [];
-
-        const carVersion = props.car?.version;
-
-        if (carVersion && !versionOptions.value.some((version) => version.name === carVersion)) {
-            versionOptions.value = [{ id: 'car-version', name: carVersion }, ...versionOptions.value];
-        }
-
-        if (profile.version && !versionOptions.value.some((version) => version.name === profile.version) && !props.car?.version) {
-            profile.version = '';
-        }
-    } catch (error) {
-        versionOptions.value = props.car?.version ? [{ id: 'car-version', name: props.car.version }] : [];
-        versionsError.value = error instanceof Error ? error.message : 'No pudimos cargar las versiones.';
-    } finally {
-        versionsLoading.value = false;
-    }
+    await fetchVersions({
+        brandId: profile.brandId,
+        modelId: profile.modelId,
+        brand: profile.brand,
+        model: profile.model,
+        year: profile.year,
+        force,
+    });
 };
 
 watch(
     () => [profile.brandId, profile.modelId, profile.year],
     (value, oldValue) => {
-        if (oldValue && (value[0] !== oldValue[0] || value[1] !== oldValue[1] || value[2] !== oldValue[2])) {
-            profile.version = props.car?.version ?? '';
-            profile.versionId = props.car?.version_id ?? '';
+        if (isHydrating.value || !props.open || props.car || !editingVehicle.value) {
+            return;
         }
 
-        if (versionsTimer) clearTimeout(versionsTimer);
-        versionsTimer = setTimeout(loadVersions, 600);
+        if (oldValue && (value[0] !== oldValue[0] || value[1] !== oldValue[1] || value[2] !== oldValue[2])) {
+            profile.version = '';
+            profile.versionId = '';
+        }
+
+        scheduleVersionsLoad({
+            brandId: profile.brandId,
+            modelId: profile.modelId,
+            brand: profile.brand,
+            model: profile.model,
+            year: profile.year,
+        });
     },
-    { immediate: true },
+);
+
+watch(
+    () => editingVehicle.value,
+    (editing) => {
+        if (editing && props.open && !props.car) {
+            void loadVersions();
+        }
+    },
 );
 
 const application = reactive({
@@ -353,6 +383,7 @@ const reset = () => {
     step.value = 1;
     evaluating.value = false;
     submitting.value = false;
+    savingAccount.value = false;
     submitError.value = null;
     successFolio.value = null;
     offers.value = [];
@@ -360,11 +391,184 @@ const reset = () => {
     selectedSlug.value = null;
     showAllOffers.value = false;
     accountCompleted.value = false;
+    profileLoadedFromAccount.value = false;
     documentsOpen.value = true;
     fieldErrors.value = {};
     documents.ine = {};
     documents.domicilio = {};
     documents.estado_cuenta = {};
+    resetVersions();
+};
+
+const isAccountDataComplete = computed(() =>
+    Boolean(
+        application.full_name.trim()
+        && application.email.trim()
+        && application.phone.trim()
+        && application.birthdate.trim()
+        && application.calle.trim()
+        && application.colonia.trim()
+        && application.cp.trim()
+        && application.alcaldia.trim()
+        && application.ocupacion.trim(),
+    ),
+);
+
+const persistDraft = (autoReopen = false) => {
+    saveCreditDraft(props.draftScope, {
+        autoReopen,
+        simulator: {
+            year: profile.year,
+            brand: profile.brand,
+            brand_id: profile.brandId,
+            model: profile.model,
+            model_id: profile.modelId,
+            version: profile.version,
+            version_id: profile.versionId,
+            price: Number(profile.price || 0),
+            downPaymentPct: basics.downPayment,
+            term: basics.term,
+            km: props.car?.km ?? props.initial?.km ?? 0,
+            carId: props.car?.id ?? '',
+        },
+        dialog: {
+            step: step.value,
+            basics: {
+                downPayment: basics.downPayment,
+                term: basics.term,
+                phone: basics.phone,
+            },
+            profile: {
+                income: profile.income,
+                tenure: profile.tenure,
+                debts: Number(profile.debts ?? 0),
+                age: profile.age,
+                employment: profile.employment,
+                bureau: profile.bureau,
+                brandId: profile.brandId,
+                modelId: profile.modelId,
+                brand: profile.brand,
+                model: profile.model,
+                version: profile.version,
+                versionId: profile.versionId,
+                year: profile.year,
+                price: Number(profile.price || 0),
+            },
+            application: {
+                full_name: application.full_name,
+                email: application.email,
+                phone: application.phone,
+                birthdate: application.birthdate,
+                rfc: application.rfc,
+                curp: application.curp,
+                calle: application.calle,
+                colonia: application.colonia,
+                cp: application.cp,
+                alcaldia: application.alcaldia,
+                ciudad: application.ciudad,
+                state: application.state,
+                pais: application.pais,
+                ocupacion: application.ocupacion,
+                empresa: application.empresa,
+                antiguedad: application.antiguedad,
+                banco: application.banco,
+                tipo_cuenta: application.tipo_cuenta,
+            },
+        },
+    });
+};
+
+const restoreDraft = (): boolean => {
+    const draft = loadCreditDraft(props.draftScope);
+
+    if (!draft?.dialog) {
+        return false;
+    }
+
+    const savedBasics = draft.dialog.basics;
+    const savedProfile = draft.dialog.profile;
+    const savedApp = draft.dialog.application;
+
+    if (savedBasics) {
+        if (savedBasics.downPayment >= 10 && savedBasics.downPayment <= 80) {
+            basics.downPayment = savedBasics.downPayment;
+        }
+        if (savedBasics.term >= 12 && savedBasics.term <= 72) {
+            basics.term = savedBasics.term;
+        }
+        if (savedBasics.phone) {
+            basics.phone = savedBasics.phone;
+        }
+    }
+
+    if (savedProfile) {
+        if (savedProfile.income !== null && savedProfile.income !== undefined) profile.income = savedProfile.income;
+        if (savedProfile.tenure !== null && savedProfile.tenure !== undefined) profile.tenure = savedProfile.tenure;
+        if (savedProfile.debts !== null && savedProfile.debts !== undefined) profile.debts = savedProfile.debts;
+        if (savedProfile.age !== null && savedProfile.age !== undefined) profile.age = savedProfile.age;
+        if (savedProfile.employment) profile.employment = savedProfile.employment;
+        if (savedProfile.bureau) profile.bureau = savedProfile.bureau;
+
+        if (!props.car) {
+            if (savedProfile.brand) profile.brand = savedProfile.brand;
+            if (savedProfile.brandId) profile.brandId = savedProfile.brandId;
+            if (savedProfile.model) profile.model = savedProfile.model;
+            if (savedProfile.modelId) profile.modelId = savedProfile.modelId;
+            if (savedProfile.version) profile.version = savedProfile.version;
+            if (savedProfile.versionId) profile.versionId = savedProfile.versionId;
+            if (savedProfile.year) profile.year = savedProfile.year;
+            if (savedProfile.price > 0) profile.price = savedProfile.price;
+        }
+    }
+
+    if (savedApp) {
+        for (const key of Object.keys(savedApp) as (keyof typeof savedApp)[]) {
+            const value = savedApp[key];
+
+            if (typeof value === 'string' && value.trim() !== '') {
+                application[key] = value;
+            }
+        }
+    }
+
+    if (draft.autoReopen) {
+        saveCreditDraft(props.draftScope, { autoReopen: false });
+    }
+
+    return true;
+};
+
+const dismissLoginPrompt = () => {
+    saveCreditDraft(props.draftScope, { autoReopen: false });
+    loginPromptOpen.value = false;
+    emit('close');
+};
+
+const parseTenureYears = (value: unknown, numericYears: unknown): number | null => {
+    if (numericYears !== null && numericYears !== undefined && Number.isFinite(Number(numericYears))) {
+        return Math.max(0, Number(numericYears));
+    }
+
+    const raw = String(value ?? '').trim().toLowerCase();
+
+    if (!raw) {
+        return null;
+    }
+
+    const tenureMap: Record<string, number> = {
+        'menos de 1 año': 0,
+        '1 a 3 años': 2,
+        '3 a 5 años': 4,
+        'más de 5 años': 6,
+    };
+
+    if (raw in tenureMap) {
+        return tenureMap[raw];
+    }
+
+    const numericMatch = raw.match(/\d+(?:\.\d+)?/);
+
+    return numericMatch ? Number(numericMatch[0]) : null;
 };
 
 const loadProfile = async () => {
@@ -376,33 +580,51 @@ const loadProfile = async () => {
         const data = await response.json();
         const saved = data.profile ?? {};
 
-        application.full_name = saved.full_name ?? user.value.name ?? '';
-        application.email = saved.email ?? user.value.email ?? '';
-        application.birthdate = saved.birthdate ?? '';
-        application.rfc = saved.rfc ?? '';
-        application.curp = saved.curp ?? '';
-        application.calle = saved.calle ?? '';
-        application.colonia = saved.colonia ?? '';
-        application.cp = saved.cp ?? '';
-        application.alcaldia = saved.alcaldia ?? '';
-        application.state = saved.state ?? '';
-        application.ocupacion = saved.ocupacion ?? '';
-        application.empresa = saved.empresa ?? '';
-        application.antiguedad = saved.antiguedad ?? '';
-        application.phone = saved.phone ?? application.phone;
+        const fillIfEmpty = (field: keyof typeof application, value: unknown) => {
+            if (typeof application[field] !== 'string') {
+                return;
+            }
+
+            const current = String(application[field] ?? '').trim();
+            const incoming = typeof value === 'string' ? value.trim() : '';
+
+            if (!current && incoming) {
+                (application as Record<string, unknown>)[field] = incoming;
+            }
+        };
+
+        fillIfEmpty('full_name', saved.full_name ?? user.value.name);
+        fillIfEmpty('email', saved.email ?? user.value.email);
+        fillIfEmpty('phone', saved.phone);
+        fillIfEmpty('birthdate', saved.birthdate);
+        fillIfEmpty('rfc', saved.rfc);
+        fillIfEmpty('curp', saved.curp);
+        fillIfEmpty('calle', saved.calle);
+        fillIfEmpty('colonia', saved.colonia);
+        fillIfEmpty('cp', saved.cp);
+        fillIfEmpty('alcaldia', saved.alcaldia ?? saved.ciudad);
+        fillIfEmpty('ciudad', saved.ciudad ?? saved.alcaldia);
+        fillIfEmpty('state', saved.state);
+        fillIfEmpty('pais', saved.pais ?? 'México');
+        fillIfEmpty('ocupacion', saved.ocupacion);
+        fillIfEmpty('empresa', saved.empresa);
+        fillIfEmpty('antiguedad', saved.antiguedad);
+        fillIfEmpty('banco', saved.banco);
+        fillIfEmpty('tipo_cuenta', saved.tipo_cuenta);
 
         if (saved.phone && !basics.phone) {
             basics.phone = saved.phone;
         }
 
-        profile.income = saved.ingreso_mensual !== null && saved.ingreso_mensual !== undefined
-            ? Number(saved.ingreso_mensual)
-            : profile.income;
-        profile.debts = saved.deuda_mensual !== null && saved.deuda_mensual !== undefined
-            ? Number(saved.deuda_mensual)
-            : profile.debts;
+        if (profile.income === null && saved.ingreso_mensual !== null && saved.ingreso_mensual !== undefined && Number(saved.ingreso_mensual) > 0) {
+            profile.income = Number(saved.ingreso_mensual);
+        }
 
-        if (saved.birthdate) {
+        if (profile.debts === null && saved.deuda_mensual !== null && saved.deuda_mensual !== undefined) {
+            profile.debts = Number(saved.deuda_mensual);
+        }
+
+        if (profile.age === null && saved.birthdate) {
             const birthdate = new Date(saved.birthdate);
 
             if (!Number.isNaN(birthdate.getTime())) {
@@ -421,9 +643,11 @@ const loadProfile = async () => {
         }
 
         const employmentMap: Record<string, string> = {
+            fijo: 'fijo',
             formal: 'fijo',
             independiente: 'honorarios',
             honorarios: 'honorarios',
+            negocio: 'negocio',
             'negocio propio': 'negocio',
             eventual: 'eventual',
         };
@@ -433,16 +657,21 @@ const loadProfile = async () => {
             profile.employment = employmentMap[savedEmployment];
         }
 
-        const tenureMap: Record<string, number> = {
-            'menos de 1 año': 0,
-            '1 a 3 años': 2,
-            '3 a 5 años': 4,
-            'más de 5 años': 6,
-        };
-        const savedTenure = String(saved.antiguedad ?? '').trim().toLowerCase();
+        if (profile.tenure === null) {
+            const parsedTenure = parseTenureYears(saved.antiguedad, saved.antiguedad_anios);
 
-        if (savedTenure && savedTenure in tenureMap && profile.tenure === null) {
-            profile.tenure = tenureMap[savedTenure];
+            if (parsedTenure !== null) {
+                profile.tenure = parsedTenure;
+            }
+        }
+
+        const hasSavedAccountData = Boolean(
+            saved.calle || saved.colonia || saved.cp || saved.alcaldia || saved.ocupacion || saved.birthdate || saved.rfc || saved.curp || saved.phone,
+        );
+        profileLoadedFromAccount.value = hasSavedAccountData;
+
+        if (isAccountDataComplete.value) {
+            accountCompleted.value = true;
         }
     } catch {
         // El usuario puede completar sus datos manualmente.
@@ -456,17 +685,37 @@ watch(
             return;
         }
 
+        isHydrating.value = true;
         reset();
         syncFromInitial();
-        loginPromptOpen.value = !user.value;
-        application.full_name = user.value?.name ?? '';
-        application.email = user.value?.email ?? '';
-        application.phone = basics.phone;
-        void loadSavedDocuments();
+        restoreDraft();
 
-        if (user.value) {
-            await loadProfile();
-            step.value = 2;
+        if (!application.full_name && user.value?.name) {
+            application.full_name = user.value.name;
+        }
+        if (!application.email && user.value?.email) {
+            application.email = user.value.email;
+        }
+        if (!application.phone && basics.phone) {
+            application.phone = basics.phone;
+        }
+
+        editingVehicle.value = !props.car && !hasPreselectedVehicle.value;
+        loginPromptOpen.value = !user.value;
+
+        if (!user.value) {
+            persistDraft(true);
+            isHydrating.value = false;
+            return;
+        }
+
+        void loadSavedDocuments();
+        await loadProfile();
+        step.value = 2;
+        isHydrating.value = false;
+
+        if (editingVehicle.value && !props.car) {
+            void loadVersions();
         }
     },
     { immediate: true },
@@ -475,7 +724,9 @@ watch(
 watch(
     () => basics.phone,
     (value) => {
-        application.phone = value;
+        if (value && value.trim() !== '') {
+            application.phone = value;
+        }
     },
 );
 
@@ -545,6 +796,8 @@ const goToProfile = () => {
 };
 
 const evaluate = async () => {
+    resolveModelName();
+
     const errors: Record<string, string> = {};
 
     if (profile.income === null || profile.income <= 0) errors.income = 'Ingresa tu ingreso mensual.';
@@ -552,12 +805,21 @@ const evaluate = async () => {
     if (!profile.employment) errors.employment = 'Selecciona tu tipo de empleo.';
     if (!profile.bureau) errors.bureau = 'Selecciona tu historial crediticio.';
     if (profile.tenure === null || profile.tenure < 0) errors.tenure = 'Ingresa tu antigüedad laboral.';
+    if (!profile.brand.trim()) errors.brand = 'Selecciona o ingresa la marca del vehículo.';
+    if (!profile.model.trim()) errors.model = 'Selecciona o ingresa el modelo del vehículo.';
     if (!profile.year) errors.year = 'Selecciona el año del vehículo.';
     if (!profile.price) errors.price = 'Ingresa el precio del vehículo.';
 
+    if (errors.brand || errors.model || errors.year || errors.price) {
+        if (!props.car) {
+            editingVehicle.value = true;
+        }
+    }
+
     const labels: Record<string, string> = {
         income: 'ingreso mensual', age: 'edad', employment: 'tipo de empleo', bureau: 'historial crediticio',
-        tenure: 'antigüedad laboral', year: 'año del vehículo', price: 'precio del vehículo',
+        tenure: 'antigüedad laboral', brand: 'marca del vehículo', model: 'modelo del vehículo',
+        year: 'año del vehículo', price: 'precio del vehículo',
     };
 
     const missing = Object.keys(errors).map((field) => labels[field]).filter(Boolean);
@@ -610,7 +872,8 @@ const evaluate = async () => {
         offers.value = (evaluation.value.opcionesRecomendadas ?? []).map(normalizeOffer);
         selectedSlug.value = offers.value.find((offer) => offer.califica)?.slug ?? null;
         showAllOffers.value = false;
-        accountCompleted.value = false;
+        accountCompleted.value = isAccountDataComplete.value;
+        persistDraft(false);
         step.value = 3;
     } catch (error) {
         submitError.value = error instanceof Error ? error.message : 'No se pudo evaluar tu perfil.';
@@ -626,16 +889,25 @@ const goToApplication = () => {
     }
 
     if (!user.value) {
+        persistDraft(true);
         loginPromptOpen.value = true;
         return;
     }
 
     submitError.value = null;
+
+    if (isAccountDataComplete.value) {
+        accountCompleted.value = true;
+        documentsOpen.value = true;
+        step.value = 5;
+        return;
+    }
+
     accountCompleted.value = false;
     step.value = 4;
 };
 
-const goToDocuments = () => {
+const goToDocuments = async () => {
     const required: [string, string, string | null | undefined][] = [
         ['full_name', 'nombre completo', application.full_name],
         ['email', 'correo', application.email],
@@ -661,8 +933,50 @@ const goToDocuments = () => {
     if (!applyFieldErrors(errors, `Completa: ${missing.join(', ')}.`)) return;
 
     submitError.value = null;
+    savingAccount.value = true;
+
+    try {
+        await fetch('/api/credito/perfil', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': csrf(),
+            },
+            body: JSON.stringify({
+                full_name: application.full_name,
+                phone: application.phone,
+                birthdate: application.birthdate,
+                rfc: application.rfc || null,
+                curp: application.curp || null,
+                calle: application.calle,
+                colonia: application.colonia,
+                cp: application.cp,
+                alcaldia: application.alcaldia,
+                ciudad: application.ciudad || application.alcaldia,
+                state: application.state || null,
+                pais: application.pais || 'México',
+                ocupacion: application.ocupacion,
+                empresa: application.empresa || null,
+                antiguedad: application.antiguedad || (profile.tenure !== null ? `${profile.tenure} años` : null),
+                antiguedad_anios: profile.tenure,
+                tipo_trabajo: profile.employment || null,
+                ingreso_mensual: profile.income,
+                deuda_mensual: profile.debts ?? 0,
+                banco: application.banco || null,
+                tipo_cuenta: application.tipo_cuenta || null,
+            }),
+        });
+        profileLoadedFromAccount.value = true;
+    } catch {
+        // Si falla el guardado en segundo plano, igual enviamos los datos con la solicitud.
+    } finally {
+        savingAccount.value = false;
+    }
+
     accountCompleted.value = true;
     documentsOpen.value = true;
+    persistDraft(false);
     step.value = 5;
 };
 
@@ -674,6 +988,7 @@ const submit = async () => {
     if (!selectedOffer.value) return;
 
     if (!user.value) {
+        persistDraft(true);
         loginPromptOpen.value = true;
         return;
     }
@@ -693,9 +1008,11 @@ const submit = async () => {
     try {
         const payload = {
             ...application,
+            ciudad: application.ciudad || application.alcaldia,
+            pais: application.pais || 'México',
             phone: application.phone || basics.phone,
             ingreso_mensual: Number(profile.income),
-            deuda_mensual: Number(profile.debts),
+            deuda_mensual: Number(profile.debts ?? 0),
             car_brand: profile.brand,
             car_model: profile.model,
             car_version: profile.version || props.car?.version || null,
@@ -754,6 +1071,7 @@ const submit = async () => {
         }
 
         successFolio.value = data.folio;
+        clearCreditDraft(props.draftScope);
     } catch (error) {
         submitError.value = error instanceof Error ? error.message : 'No se pudo enviar la solicitud.';
     } finally {
@@ -775,14 +1093,22 @@ const submit = async () => {
                         Para precalificar tu crédito, guardar tu avance y enviar tu solicitud necesitas una cuenta en WeCar.
                     </p>
                     <div class="mt-6 grid gap-2">
-                        <Link href="/login" class="inline-flex h-11 w-full items-center justify-center rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground transition hover:bg-primary/90">
+                        <Link
+                            :href="loginHref"
+                            class="inline-flex h-11 w-full items-center justify-center rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground transition hover:bg-primary/90"
+                            @click="persistDraft(true)"
+                        >
                             Iniciar sesión
                         </Link>
-                        <Link href="/registro" class="inline-flex h-11 w-full items-center justify-center rounded-full border border-input bg-background px-5 text-sm font-bold text-secondary transition hover:bg-accent">
+                        <Link
+                            :href="registerHref"
+                            class="inline-flex h-11 w-full items-center justify-center rounded-full border border-input bg-background px-5 text-sm font-bold text-secondary transition hover:bg-accent"
+                            @click="persistDraft(true)"
+                        >
                             Crear una cuenta
                         </Link>
                     </div>
-                    <button type="button" class="mt-4 text-xs font-semibold text-muted-foreground hover:text-secondary" @click="loginPromptOpen = false; emit('close')">
+                    <button type="button" class="mt-4 text-xs font-semibold text-muted-foreground hover:text-secondary" @click="dismissLoginPrompt">
                         Ahora no, seguir explorando
                     </button>
                 </div>
@@ -941,23 +1267,65 @@ const submit = async () => {
                                 <FormFieldError :message="fieldMessage('bureau')" />
                             </div>
 
-                            <template v-if="!props.car">
+                            <div class="sm:col-span-2 rounded-2xl border border-border bg-accent/30 p-4">
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <p class="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Vehículo seleccionado</p>
+                                        <p class="mt-0.5 truncate text-sm font-black text-secondary">
+                                            {{ vehicleSummaryTitle || 'Completa los datos del vehículo' }}
+                                        </p>
+                                    </div>
+                                    <button
+                                        v-if="!props.car && hasPreselectedVehicle"
+                                        type="button"
+                                        class="text-xs font-bold text-primary hover:underline"
+                                        @click="editingVehicle = !editingVehicle"
+                                    >
+                                        {{ editingVehicle ? 'Ocultar vehículo' : 'Cambiar vehículo' }}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <template v-if="props.car && (!profile.brand.trim() || !profile.model.trim() || !profile.year)">
+                                <div v-if="!profile.brand.trim()">
+                                    <Label for="external-brand">Marca *</Label>
+                                    <Input id="external-brand" v-model="profile.brand" data-field="brand" :invalid="fieldInvalid('brand')" class="mt-1.5" placeholder="Ej. Ford" />
+                                    <FormFieldError :message="fieldMessage('brand')" />
+                                </div>
+                                <div v-if="!profile.model.trim()">
+                                    <Label for="external-model">Modelo *</Label>
+                                    <Input id="external-model" v-model="profile.model" data-field="model" :invalid="fieldInvalid('model')" class="mt-1.5" placeholder="Ej. Fiesta" />
+                                    <FormFieldError :message="fieldMessage('model')" />
+                                </div>
+                                <div v-if="!profile.year">
+                                    <Label for="external-year">Año *</Label>
+                                    <select id="external-year" v-model.number="profile.year" data-field="year" :aria-invalid="fieldInvalid('year') || undefined" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background field-select pl-3 pr-10 text-sm" :class="fieldInvalid('year') ? 'border-destructive ring-2 ring-destructive/20' : ''">
+                                        <option :value="null">Selecciona el año</option>
+                                        <option v-for="year in vehicleYears" :key="year" :value="year">{{ year }}</option>
+                                    </select>
+                                    <FormFieldError :message="fieldMessage('year')" />
+                                </div>
+                            </template>
+
+                            <template v-if="!props.car && editingVehicle">
                                 <div>
-                                    <Label for="brand">Marca</Label>
-                                    <select id="brand" v-model="profile.brandId" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background field-select pl-3 pr-10 text-sm" @change="onBrandChange">
+                                    <Label for="brand">Marca *</Label>
+                                    <select id="brand" v-model="profile.brandId" data-field="brand" :aria-invalid="fieldInvalid('brand') || undefined" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background field-select pl-3 pr-10 text-sm" :class="fieldInvalid('brand') ? 'border-destructive ring-2 ring-destructive/20' : ''" @change="onBrandChange">
                                         <option value="">Selecciona</option>
                                         <option v-for="brand in brands" :key="brand.id" :value="brand.id">{{ brand.name }}</option>
                                     </select>
+                                    <FormFieldError :message="fieldMessage('brand')" />
                                 </div>
                                 <div>
-                                    <Label for="model">Modelo</Label>
-                                    <select id="model" v-model="profile.modelId" :disabled="!profile.brandId" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background field-select pl-3 pr-10 text-sm disabled:opacity-50" @change="onModelChange">
+                                    <Label for="model">Modelo *</Label>
+                                    <select id="model" v-model="profile.modelId" data-field="model" :disabled="!profile.brandId" :aria-invalid="fieldInvalid('model') || undefined" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background field-select pl-3 pr-10 text-sm disabled:opacity-50" :class="fieldInvalid('model') ? 'border-destructive ring-2 ring-destructive/20' : ''" @change="onModelChange">
                                         <option value="">{{ profile.brandId ? 'Selecciona el modelo' : 'Selecciona la marca primero' }}</option>
                                         <option v-for="model in modelOptions" :key="model.id" :value="model.id">{{ model.name }}</option>
                                     </select>
+                                    <FormFieldError :message="fieldMessage('model')" />
                                 </div>
                                 <div>
-                                    <Label for="year">Año</Label>
+                                    <Label for="year">Año *</Label>
                                     <select id="year" v-model.number="profile.year" data-field="year" :aria-invalid="fieldInvalid('year') || undefined" class="mt-1.5 h-10 w-full rounded-md border border-input bg-background field-select pl-3 pr-10 text-sm" :class="fieldInvalid('year') ? 'border-destructive ring-2 ring-destructive/20' : ''">
                                         <option :value="null">Selecciona el año</option>
                                         <option v-for="year in vehicleYears" :key="year" :value="year">{{ year }}</option>
@@ -965,36 +1333,35 @@ const submit = async () => {
                                     <FormFieldError :message="fieldMessage('year')" />
                                 </div>
                                 <div>
-                                    <Label for="price">Precio</Label>
+                                    <Label for="price">Precio *</Label>
                                     <MoneyInput id="price" v-model="profile.price" data-field="price" :invalid="fieldInvalid('price')" class="mt-1.5" placeholder="Ej. 250,000" />
                                     <FormFieldError :message="fieldMessage('price')" />
                                 </div>
+                                <div class="sm:col-span-2">
+                                    <Label for="version">Versión (opcional)</Label>
+                                    <select
+                                        id="version"
+                                        v-model="profile.version"
+                                        :disabled="!profile.modelId || !profile.year || (versionsLoading && versionOptions.length === 0)"
+                                        class="mt-1.5 h-10 w-full rounded-md border border-input bg-background field-select pl-3 pr-10 text-sm disabled:opacity-50"
+                                    >
+                                        <option value="">
+                                            {{ versionsLoading ? 'Cargando versiones…' : versionOptions.length ? 'Sin especificar (opcional)' : 'Sin versiones (opcional)' }}
+                                        </option>
+                                        <option v-for="version in versionOptions" :key="version.id" :value="version.name">{{ version.name }}</option>
+                                    </select>
+                                    <p v-if="versionsError" class="mt-1 text-[11px] font-semibold text-destructive">{{ versionsError }}</p>
+                                    <p v-else-if="!versionsLoading && versionOptions.length === 0" class="mt-1 text-[11px] text-muted-foreground">Campo opcional: puedes continuar sin seleccionar versión.</p>
+                                    <button
+                                        v-if="!versionsLoading && versionOptions.length === 0 && (profile.modelId || profile.model) && profile.year"
+                                        type="button"
+                                        class="mt-1 text-[11px] font-bold text-primary hover:underline"
+                                        @click="loadVersions(true)"
+                                    >
+                                        Reintentar
+                                    </button>
+                                </div>
                             </template>
-
-                            <div>
-                                <Label for="version">Versión (opcional)</Label>
-                                <select
-                                    id="version"
-                                    v-model="profile.version"
-                                    :disabled="versionsLoading || versionOptions.length === 0"
-                                    class="mt-1.5 h-10 w-full rounded-md border border-input bg-background field-select pl-3 pr-10 text-sm disabled:opacity-50"
-                                >
-                                    <option value="">
-                                        {{ versionsLoading ? 'Cargando versiones…' : versionOptions.length ? 'Selecciona la versión' : 'Sin versiones disponibles' }}
-                                    </option>
-                                    <option v-for="version in versionOptions" :key="version.id" :value="version.name">{{ version.name }}</option>
-                                </select>
-                                <p v-if="versionsError" class="mt-1 text-[11px] font-semibold text-destructive">{{ versionsError }}</p>
-                                <p v-else-if="!versionsLoading && versionOptions.length === 0" class="mt-1 text-[11px] text-muted-foreground">Puedes continuar sin versión; la financiera revisará el vehículo.</p>
-                                <button
-                                    v-if="!versionsLoading && versionOptions.length === 0 && (profile.modelId || profile.model)"
-                                    type="button"
-                                    class="mt-1 text-[11px] font-bold text-primary hover:underline"
-                                    @click="loadVersions"
-                                >
-                                    Reintentar
-                                </button>
-                            </div>
                         </div>
 
                         <!-- Paso 3 -->
@@ -1109,7 +1476,9 @@ const submit = async () => {
                         <div v-else-if="step === 4" class="space-y-5">
                             <div>
                                 <h3 class="text-lg font-black text-secondary">Tus datos de cuenta</h3>
-                                <p class="mt-1 text-sm text-muted-foreground">Usaremos esta información para integrar tu expediente y contactarte.</p>
+                                <p class="mt-1 text-sm text-muted-foreground">
+                                    {{ profileLoadedFromAccount ? 'Precargamos la información guardada en tu cuenta. Solo completa o ajusta lo que falte y la guardaremos automáticamente.' : 'Usaremos esta información para integrar tu expediente y la guardaremos en tu cuenta.' }}
+                                </p>
                             </div>
 
                             <div class="rounded-2xl border border-primary/20 bg-accent/30 p-4 text-sm">
@@ -1166,12 +1535,18 @@ const submit = async () => {
                                                 <FileText v-else class="h-5 w-5" />
                                             </span>
                                             <div>
-                                                <p class="text-sm font-bold text-secondary">Llenar solicitud</p>
-                                                <p class="mt-0.5 text-xs text-muted-foreground">Datos personales, domicilio, laborales y del crédito.</p>
+                                                <p class="text-sm font-bold text-secondary">
+                                                    {{ accountCompleted ? 'Datos de cuenta listos' : 'Llenar solicitud' }}
+                                                </p>
+                                                <p class="mt-0.5 text-xs text-muted-foreground">
+                                                    {{ accountCompleted
+                                                        ? `${application.full_name} · ${application.phone} · ${application.calle}, ${application.colonia}`
+                                                        : 'Datos personales, domicilio, laborales y del crédito.' }}
+                                                </p>
                                             </div>
                                         </div>
                                         <button type="button" class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/10" @click="step = 4">
-                                            {{ accountCompleted ? 'Editar' : 'Comenzar' }} <ChevronRight class="h-3.5 w-3.5" />
+                                            {{ accountCompleted ? 'Revisar / editar' : 'Comenzar' }} <ChevronRight class="h-3.5 w-3.5" />
                                         </button>
                                     </div>
 
@@ -1226,8 +1601,9 @@ const submit = async () => {
                     <Button v-else-if="step === 3" variant="hero" :disabled="!selectedOffer" @click="goToApplication">
                         <Banknote class="h-4 w-4" /> Continuar
                     </Button>
-                    <Button v-else-if="step === 4" variant="hero" :disabled="submitting" @click="goToDocuments">
-                        Continuar a solicitud <ChevronRight class="h-4 w-4" />
+                    <Button v-else-if="step === 4" variant="hero" :disabled="submitting || savingAccount" @click="goToDocuments">
+                        <Loader2 v-if="savingAccount" class="h-4 w-4 animate-spin" />
+                        {{ savingAccount ? 'Guardando…' : 'Guardar y continuar' }} <ChevronRight class="h-4 w-4" />
                     </Button>
                     <Button v-else variant="hero" :disabled="submitting" @click="submit">
                         <Loader2 v-if="submitting" class="h-4 w-4 animate-spin" />

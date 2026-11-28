@@ -102,6 +102,33 @@ it('exposes versions through the catalog endpoint', function () {
         ->assertJsonPath('versions.0.name', 'XLE');
 });
 
+it('returns fast local versions without calling firecrawl even when year has no exact match', function () {
+    Cache::flush();
+    config()->set('services.firecrawl.key', 'test-key');
+    Http::fake();
+
+    $model = versionModel();
+
+    CarVersion::query()->create([
+        'model_id' => $model->getKey(),
+        'name' => 'SE',
+        'year' => '2022',
+    ]);
+    CarVersion::query()->create([
+        'model_id' => $model->getKey(),
+        'name' => 'XLE',
+        'year' => '2023',
+    ]);
+
+    $this->getJson('/api/car-versions?model_id='.$model->getKey().'&year=2025&fast=1')
+        ->assertOk()
+        ->assertJsonCount(2, 'versions')
+        ->assertJsonPath('versions.0.name', 'SE')
+        ->assertJsonPath('versions.1.name', 'XLE');
+
+    Http::assertNothingSent();
+});
+
 it('requires a valid version to publish a car', function () {
     $this->seed();
 

@@ -6,6 +6,8 @@ use App\Models\Car;
 use App\Models\CreditApplication;
 use App\Models\CreditDocument;
 use App\Models\Financiera;
+use App\Models\Profile;
+use App\Models\User;
 use App\Services\CreditApplicationService;
 use App\Services\CreditDocumentService;
 use App\Services\CreditEvaluationService;
@@ -42,31 +44,181 @@ class CreditController extends Controller
 
     public function profile(Request $request): JsonResponse
     {
+        return response()->json([
+            'profile' => $this->buildProfilePayload($request->user()),
+        ]);
+    }
+
+    public function updateProfile(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'full_name' => ['required', 'string', 'min:2', 'max:160'],
+            'phone' => ['required', 'string', 'min:10', 'max:30'],
+            'birthdate' => ['required', 'date', 'before:today'],
+            'rfc' => ['nullable', 'string', 'max:20'],
+            'curp' => ['nullable', 'string', 'max:30'],
+            'calle' => ['required', 'string', 'max:200'],
+            'colonia' => ['required', 'string', 'max:120'],
+            'cp' => ['required', 'string', 'max:10'],
+            'alcaldia' => ['required', 'string', 'max:120'],
+            'ciudad' => ['nullable', 'string', 'max:120'],
+            'state' => ['nullable', 'string', 'max:80'],
+            'pais' => ['nullable', 'string', 'max:80'],
+            'ocupacion' => ['required', 'string', 'max:120'],
+            'empresa' => ['nullable', 'string', 'max:160'],
+            'antiguedad' => ['nullable', 'string', 'max:80'],
+            'antiguedad_anios' => ['nullable', 'numeric', 'min:0', 'max:80'],
+            'tipo_trabajo' => ['nullable', 'string', 'max:80'],
+            'ingreso_mensual' => ['nullable', 'numeric', 'min:0'],
+            'deuda_mensual' => ['nullable', 'numeric', 'min:0'],
+            'banco' => ['nullable', 'string', 'max:80'],
+            'tipo_cuenta' => ['nullable', 'string', 'max:80'],
+        ]);
+
         $user = $request->user();
-        $profile = $user->profile;
+        $rfc = filled($validated['rfc'] ?? null) ? Str::upper(trim((string) $validated['rfc'])) : null;
+        $curp = filled($validated['curp'] ?? null) ? Str::upper(trim((string) $validated['curp'])) : null;
+
+        $user->update([
+            'name' => trim($validated['full_name']),
+            'phone' => trim($validated['phone']),
+        ]);
+
+        $profileData = [
+            'full_name' => trim($validated['full_name']),
+            'phone' => trim($validated['phone']),
+            'birthdate' => $validated['birthdate'],
+            'rfc' => $rfc,
+            'curp' => $curp,
+            'calle' => trim($validated['calle']),
+            'colonia' => trim($validated['colonia']),
+            'cp' => trim($validated['cp']),
+            'alcaldia' => trim($validated['alcaldia']),
+            'city' => filled($validated['ciudad'] ?? null) ? trim((string) $validated['ciudad']) : trim($validated['alcaldia']),
+            'state' => filled($validated['state'] ?? null) ? trim((string) $validated['state']) : $user->profile?->state,
+            'pais' => filled($validated['pais'] ?? null) ? trim((string) $validated['pais']) : 'México',
+            'ocupacion' => trim($validated['ocupacion']),
+            'empresa' => filled($validated['empresa'] ?? null) ? trim((string) $validated['empresa']) : null,
+            'antiguedad' => filled($validated['antiguedad'] ?? null) ? trim((string) $validated['antiguedad']) : $user->profile?->antiguedad,
+        ];
+
+        if (isset($validated['antiguedad_anios'])) {
+            $profileData['antiguedad_anios'] = (int) round((float) $validated['antiguedad_anios']);
+        }
+
+        if (filled($validated['tipo_trabajo'] ?? null)) {
+            $profileData['tipo_trabajo'] = trim((string) $validated['tipo_trabajo']);
+        }
+
+        if (isset($validated['ingreso_mensual']) && (float) $validated['ingreso_mensual'] > 0) {
+            $profileData['ingreso_mensual'] = (float) $validated['ingreso_mensual'];
+        }
+
+        if (isset($validated['deuda_mensual'])) {
+            $profileData['deuda_mensual'] = (float) $validated['deuda_mensual'];
+        }
+
+        if (filled($validated['banco'] ?? null)) {
+            $profileData['banco'] = trim((string) $validated['banco']);
+        }
+
+        if (filled($validated['tipo_cuenta'] ?? null)) {
+            $profileData['tipo_cuenta'] = trim((string) $validated['tipo_cuenta']);
+        }
+
+        Profile::query()->updateOrCreate(
+            ['user_id' => $user->getKey()],
+            $profileData,
+        );
+
+        $user->unsetRelation('profile');
 
         return response()->json([
-            'profile' => [
-                'full_name' => $profile?->full_name ?? $user->name,
-                'email' => $user->email,
-                'phone' => $profile?->phone ?? $user->phone,
-                'birthdate' => $profile?->birthdate?->toDateString(),
-                'rfc' => $profile?->rfc,
-                'curp' => $profile?->curp,
-                'gender' => $profile?->genero,
-                'calle' => $profile?->calle,
-                'colonia' => $profile?->colonia,
-                'cp' => $profile?->cp,
-                'alcaldia' => $profile?->alcaldia,
-                'state' => $profile?->state,
-                'ocupacion' => $profile?->ocupacion ?? data_get($profile?->metadata, 'ocupacion'),
-                'empresa' => $profile?->empresa ?? data_get($profile?->metadata, 'empresa'),
-                'antiguedad' => $profile?->antiguedad ?? data_get($profile?->metadata, 'antiguedad'),
-                'tipo_trabajo' => $profile?->tipo_trabajo ?? data_get($profile?->metadata, 'tipo_trabajo'),
-                'ingreso_mensual' => $profile?->ingreso_mensual,
-                'deuda_mensual' => $profile?->deuda_mensual,
-            ],
+            'success' => true,
+            'profile' => $this->buildProfilePayload($user),
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildProfilePayload(User $user): array
+    {
+        $profile = $user->profile;
+        $lastApplication = CreditApplication::query()
+            ->where('user_id', $user->getKey())
+            ->latest('submitted_at')
+            ->latest('created_at')
+            ->first();
+
+        $pick = static function (mixed ...$values): mixed {
+            foreach ($values as $value) {
+                if (is_string($value)) {
+                    if (trim($value) !== '') {
+                        return trim($value);
+                    }
+
+                    continue;
+                }
+
+                if ($value !== null) {
+                    return $value;
+                }
+            }
+
+            return null;
+        };
+
+        $fullName = $pick($profile?->full_name, $user->name, $lastApplication?->full_name);
+        $email = $pick($user->email, $lastApplication?->email);
+        $phone = $pick($profile?->phone, $user->phone, $lastApplication?->phone);
+        $birthdate = $pick(
+            $profile?->birthdate?->toDateString(),
+            $lastApplication?->birthdate?->toDateString(),
+        );
+        $calle = $pick($profile?->calle, $lastApplication?->calle);
+        $colonia = $pick($profile?->colonia, $lastApplication?->colonia);
+        $cp = $pick($profile?->cp, $lastApplication?->cp);
+        $alcaldia = $pick($profile?->alcaldia, $lastApplication?->alcaldia, $profile?->city, $lastApplication?->ciudad);
+        $ciudad = $pick($profile?->city, $lastApplication?->ciudad, $alcaldia);
+        $ocupacion = $pick($profile?->ocupacion, data_get($profile?->metadata, 'ocupacion'), $lastApplication?->ocupacion);
+
+        $accountComplete = filled($fullName)
+            && filled($email)
+            && filled($phone)
+            && filled($birthdate)
+            && filled($calle)
+            && filled($colonia)
+            && filled($cp)
+            && filled($alcaldia)
+            && filled($ocupacion);
+
+        return [
+            'full_name' => $fullName,
+            'email' => $email,
+            'phone' => $phone,
+            'birthdate' => $birthdate,
+            'rfc' => $pick($profile?->rfc, $lastApplication?->rfc),
+            'curp' => $pick($profile?->curp, $lastApplication?->curp),
+            'gender' => $profile?->genero,
+            'calle' => $calle,
+            'colonia' => $colonia,
+            'cp' => $cp,
+            'alcaldia' => $alcaldia,
+            'ciudad' => $ciudad,
+            'state' => $pick($profile?->state),
+            'pais' => $pick($profile?->pais, $lastApplication?->pais) ?? 'México',
+            'ocupacion' => $ocupacion,
+            'empresa' => $pick($profile?->empresa, data_get($profile?->metadata, 'empresa'), $lastApplication?->empresa),
+            'antiguedad' => $pick($profile?->antiguedad, data_get($profile?->metadata, 'antiguedad'), $lastApplication?->antiguedad),
+            'antiguedad_anios' => $profile?->antiguedad_anios,
+            'tipo_trabajo' => $pick($profile?->tipo_trabajo, data_get($profile?->metadata, 'tipo_trabajo')),
+            'ingreso_mensual' => $pick($profile?->ingreso_mensual, data_get($profile?->metadata, 'ingreso_mensual'), $lastApplication?->ingreso_mensual),
+            'deuda_mensual' => $pick($profile?->deuda_mensual, data_get($profile?->metadata, 'deuda_mensual'), $lastApplication?->deuda_mensual),
+            'banco' => $pick($profile?->banco, data_get($profile?->metadata, 'banco'), $lastApplication?->banco),
+            'tipo_cuenta' => $pick($profile?->tipo_cuenta, data_get($profile?->metadata, 'tipo_cuenta'), $lastApplication?->tipo_cuenta),
+            'account_complete' => $accountComplete,
+        ];
     }
 
     public function evaluate(Request $request): JsonResponse
@@ -138,6 +290,7 @@ class CreditController extends Controller
             'cp' => ['required', 'string', 'max:10'],
             'alcaldia' => ['required', 'string', 'max:120'],
             'ciudad' => ['nullable', 'string', 'max:120'],
+            'state' => ['nullable', 'string', 'max:80'],
             'pais' => ['required', 'string', 'max:80'],
             'ocupacion' => ['required', 'string', 'max:120'],
             'empresa' => ['nullable', 'string', 'max:160'],
@@ -256,7 +409,7 @@ class CreditController extends Controller
             'reuse_ine', 'reuse_domicilio', 'reuse_estado_cuenta',
             'car_condition', 'bureau', 'employment', 'tenure', 'age',
             'score', 'risk_level', 'monthly_payment', 'rate', 'cat', 'total_to_pay',
-            'inputs', 'offers', 'financiera_name',
+            'inputs', 'offers', 'financiera_name', 'state',
         ])->all();
 
         $data = [
@@ -290,6 +443,11 @@ class CreditController extends Controller
             $data,
             $files->all(),
             $reuse,
+            [
+                'state' => $validated['state'] ?? null,
+                'antiguedad_anios' => isset($validated['tenure']) ? (int) round((float) $validated['tenure']) : null,
+                'tipo_trabajo' => $validated['employment'] ?? null,
+            ],
         );
 
         $this->applications->notify($application);

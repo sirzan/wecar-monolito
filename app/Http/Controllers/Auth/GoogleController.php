@@ -7,6 +7,7 @@ use App\Models\Profile;
 use App\Models\User;
 use App\Support\LoginRedirector;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -16,11 +17,13 @@ class GoogleController extends Controller
 {
     public function __construct(private readonly LoginRedirector $redirector) {}
 
-    public function redirect(): RedirectResponse
+    public function redirect(Request $request): RedirectResponse
     {
         if (! $this->isConfigured()) {
             return redirect()->route('login')->with('error', 'El inicio de sesión con Google no está configurado.');
         }
+
+        $this->redirector->storeIntended($request, $request->query('redirect'));
 
         return Socialite::driver('google')->redirect();
     }

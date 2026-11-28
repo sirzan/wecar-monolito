@@ -51,6 +51,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/garantia/cotizaciones/{quote}/pdf', [WarrantyQuoteController::class, 'pdf'])
         ->middleware('throttle:warranty-quote-read')
         ->name('garantia.cotizaciones.pdf');
+    Route::get('/api/credito/perfil', [CreditController::class, 'profile'])->name('credit.profile');
+    Route::put('/api/credito/perfil', [CreditController::class, 'updateProfile'])->name('credit.profile.update');
+    Route::get('/api/codigo-postal/{cp}', ZipCodeController::class)->middleware('throttle:30,1')->name('zip-code');
 });
 Route::get('/certificaciones', [PublicController::class, 'certificaciones'])->name('certificaciones');
 Route::get('/nosotros', [PublicController::class, 'nosotros'])->name('nosotros');
@@ -71,8 +74,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/api/notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
     Route::post('/api/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
     Route::get('/api/credito/documentos', [CreditController::class, 'documents'])->name('credit.documents');
-    Route::get('/api/credito/perfil', [CreditController::class, 'profile'])->name('credit.profile');
-    Route::get('/api/codigo-postal/{cp}', ZipCodeController::class)->middleware('throttle:30,1')->name('zip-code');
     Route::post('/api/credito/documentos', [CreditController::class, 'uploadDocument'])->name('credit.documents.store');
     Route::post('/api/credito/solicitudes', [CreditController::class, 'submit'])->middleware('throttle:10,1')->name('credit.apply');
     Route::get('/api/credito/solicitudes/{application}/documentos/{slot}', [CreditController::class, 'showDocument'])->name('credit.documents.show');
