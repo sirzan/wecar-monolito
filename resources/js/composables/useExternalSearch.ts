@@ -3,9 +3,12 @@ import { router } from '@inertiajs/vue3';
 import type {
     ExternalCar,
     ExternalResolveResponse,
+    ExternalSearchCriteria,
     ExternalSearchResponse,
     ExternalSearchStatus,
 } from '@/types/external';
+
+export type { ExternalSearchCriteria };
 
 const csrfToken = () =>
     document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
@@ -31,17 +34,10 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
     return response.json() as Promise<T>;
 }
 
-export interface ExternalSearchCriteria {
-    brand_id: string;
-    model_id: string;
-    year: number;
-    version_id?: string;
-    city?: string;
-}
-
 export function useExternalSearch() {
     const status = ref<ExternalSearchStatus | null>(null);
     const results = ref<ExternalCar[]>([]);
+    const platformsSearched = ref<string[]>([]);
     const cachedCars = ref<ExternalCar[]>([]);
     const loading = ref(false);
     const loadingCached = ref(false);
@@ -86,23 +82,33 @@ export function useExternalSearch() {
         refresh = false,
         options: { modal?: boolean; criteria?: ExternalSearchCriteria } = {},
     ) => {
-        if (!query.trim() || loading.value) return;
-        if (!options.criteria) return;
+        const trimmed = query.trim();
+        const criteria = options.criteria ?? {};
+        const hasBrand = Boolean(criteria.brand_id);
 
-        lastQuery.value = query.trim();
+        if ((!trimmed && !hasBrand) || loading.value) return;
+
+        lastQuery.value = trimmed;
         loading.value = true;
         error.value = null;
         results.value = [];
+        platformsSearched.value = [];
         showModal.value = options.modal ?? true;
+
+        const body: Record<string, unknown> = {
+            ...(trimmed ? { q: trimmed } : {}),
+            ...(criteria.brand_id ? { brand_id: criteria.brand_id } : {}),
+            ...(criteria.model_id ? { model_id: criteria.model_id } : {}),
+            ...(criteria.year ? { year: Number(criteria.year) } : {}),
+            ...(criteria.version_id ? { version_id: criteria.version_id } : {}),
+            ...(criteria.city ? { city: criteria.city } : {}),
+            ...(refresh ? { refresh: true } : {}),
+        };
 
         try {
             const payload = await request<ExternalSearchResponse>('/api/external-search', {
                 method: 'POST',
-                body: JSON.stringify({
-                    q: query.trim(),
-                    ...options.criteria,
-                    ...(refresh ? { refresh: true } : {}),
-                }),
+                body: JSON.stringify(body),
             });
 
             if (payload.limitReached) {
@@ -113,6 +119,7 @@ export function useExternalSearch() {
             }
 
             results.value = payload.results ?? [];
+            platformsSearched.value = payload.platformsSearched ?? [];
             error.value = payload.error ?? null;
             await refreshStatus();
         } catch (cause) {
@@ -187,6 +194,7 @@ export function useExternalSearch() {
     return {
         status,
         results,
+        platformsSearched,
         cachedCars,
         loading,
         loadingCached,

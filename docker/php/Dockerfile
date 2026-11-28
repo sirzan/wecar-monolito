@@ -57,7 +57,8 @@ COPY --from=vendor /app/vendor ./vendor
 COPY --from=wecar-ssr:latest /app/public/build ./public/build
 COPY --from=wecar-ssr:latest /app/bootstrap/ssr ./bootstrap/ssr
 
-RUN composer dump-autoload --optimize --no-dev \
+RUN rm -f public/hot \
+    && composer dump-autoload --optimize --no-dev \
     && mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache
 

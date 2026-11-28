@@ -10,16 +10,22 @@ class LoginRedirector
     {
         $intended = $request->session()->pull('url.intended');
         $user = $request->user();
+        $parsedIntended = is_string($intended) ? parse_url($intended) : false;
+        $path = is_array($parsedIntended) ? ($parsedIntended['path'] ?? null) : null;
+        $host = is_array($parsedIntended) ? ($parsedIntended['host'] ?? null) : null;
+        $isInternal = is_string($path)
+            && str_starts_with($path, '/')
+            && ! str_starts_with($path, '//')
+            && ($host === null || $host === $request->getHost());
+        $isAdminPath = $isInternal && ($path === '/admin' || str_starts_with($path, '/admin/'));
 
         if ($user?->hasAdminPrivileges()) {
-            $path = is_string($intended) ? parse_url($intended, PHP_URL_PATH) : null;
-
-            return is_string($path) && str_starts_with($path, '/admin')
+            return $isAdminPath
                 ? (string) $intended
                 : route('admin.dashboard');
         }
 
-        return is_string($intended) && $intended !== ''
+        return $isInternal && ! $isAdminPath
             ? $intended
             : route('panel.dashboard');
     }

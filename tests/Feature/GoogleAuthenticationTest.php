@@ -19,6 +19,8 @@ it('redirects to Google when the provider is configured', function () {
 });
 
 it('authenticates a user through Google', function () {
+    $this->seed();
+
     config()->set('services.google.client_id', 'google-client-id');
     config()->set('services.google.client_secret', 'google-client-secret');
     config()->set('services.google.redirect', 'http://localhost/auth/google/callback');
@@ -36,7 +38,9 @@ it('authenticates a user through Google', function () {
 
     expect($user->name)->toBe('Google User')
         ->and($user->email_verified_at)->not->toBeNull()
-        ->and(Hash::check('anything', $user->password))->toBeFalse();
+        ->and(Hash::check('anything', $user->password))->toBeFalse()
+        ->and($user->profile)->not->toBeNull()
+        ->and($user->hasRole('seller'))->toBeTrue();
 });
 
 it('redirects to login instead of throwing when Google is not configured', function () {

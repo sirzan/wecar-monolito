@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\Profile;
 use App\Models\User;
 use App\Support\LoginRedirector;
 use Illuminate\Http\RedirectResponse;
@@ -41,6 +42,15 @@ class GoogleController extends Controller
             $user->password = Hash::make(Str::random(32));
             $user->email_verified_at = now();
             $user->save();
+        }
+
+        Profile::query()->firstOrCreate(
+            ['user_id' => $user->getKey()],
+            ['full_name' => $user->name],
+        );
+
+        if ($user->getRoleNames()->isEmpty()) {
+            $user->assignRole('seller');
         }
 
         Auth::login($user, remember: true);

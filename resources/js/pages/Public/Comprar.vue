@@ -151,10 +151,18 @@ const externalExactYear = computed(() => {
 });
 
 const openExternalSearch = (prefill = false) => {
+    const inferredYear = externalExactYear.value
+        ?? (form.value.min_year ? Number(form.value.min_year) : null)
+        ?? (form.value.max_year ? Number(form.value.max_year) : null);
+
     externalDialogInitial.value = prefill
         ? {
+              ...(form.value.q.trim() ? { q: form.value.q.trim() } : {}),
               ...(externalBrandId.value ? { brand_id: externalBrandId.value } : {}),
-              ...(externalExactYear.value !== null ? { year: externalExactYear.value } : {}),
+              ...(form.value.model ? { model_id: form.value.model } : {}),
+              ...(form.value.version ? { version_id: form.value.version } : {}),
+              ...(inferredYear !== null ? { year: inferredYear } : {}),
+              ...(form.value.city ? { city: form.value.city } : {}),
           }
         : null;
 
@@ -178,10 +186,13 @@ const retryExternalSearch = () => {
 
 const openExternalCar = (car: ExternalCar) => externalSearch.openExternal(car);
 
+const liveExternalCars = computed<ExternalCar[]>(() => externalSearch.results.value);
+const liveExternalQuery = computed(() => lastExternalRequest.value?.query || externalSearch.lastQuery.value);
+
 const cachedExternalCars = computed<ExternalCar[]>(() => {
     const seen = new Set<string>();
 
-    return props.externalCars.filter((car) => {
+    return [...liveExternalCars.value, ...props.externalCars].filter((car) => {
         if (!car.id || seen.has(car.id)) return false;
 
         seen.add(car.id);
@@ -189,6 +200,18 @@ const cachedExternalCars = computed<ExternalCar[]>(() => {
         return true;
     });
 });
+
+const externalSectionRef = ref<HTMLElement | null>(null);
+
+const closeExternalDialog = () => {
+    externalDialogOpen.value = false;
+
+    if (liveExternalCars.value.length > 0 && props.cars.data.length > 0) {
+        void nextTick(() => {
+            externalSectionRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    }
+};
 
 onMounted(async () => {
     await externalSearch.refreshStatus();
@@ -666,16 +689,34 @@ const clear = () => {
             </div>
 
             <div v-else-if="cachedExternalCars.length" class="space-y-5">
-                <div class="rounded-2xl border border-primary/20 bg-accent/40 px-4 py-3">
-                    <p class="text-xs font-bold uppercase tracking-wider text-primary">
-                        {{ cachedExternalCars.length }} autos encontrados en otras plataformas
-                    </p>
-                    <p class="mt-1 text-sm text-muted-foreground">
-                        No encontramos autos en el catálogo WeCar. Te mostramos resultados guardados de búsquedas recientes.
-                    </p>
+                <div class="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-primary/20 bg-accent/40 px-4 py-3">
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-wider text-primary">
+                            <template v-if="liveExternalCars.length">
+                                {{ liveExternalCars.length }} autos encontrados para “{{ liveExternalQuery }}” en otras plataformas
+                            </template>
+                            <template v-else>
+                                {{ cachedExternalCars.length }} autos encontrados en otras plataformas
+                            </template>
+                        </p>
+                        <p class="mt-1 text-sm text-muted-foreground">
+                            <template v-if="liveExternalCars.length">
+                                Mostrando los resultados más recientes de tu búsqueda externa junto con hallazgos guardados.
+                            </template>
+                            <template v-else>
+                                No encontramos autos en el catálogo WeCar. Te mostramos resultados guardados de búsquedas recientes.
+                            </template>
+                        </p>
+                    </div>
+                    <Button v-if="liveExternalCars.length" variant="outline" size="sm" class="rounded-full" @click="openExternalSearch(true)">
+                        Cambiar búsqueda
+                    </Button>
                 </div>
                 <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                     <ExternalCarCard v-for="car in cachedExternalCars" :key="car.id" :car="car" @open="openExternalCar" />
+                </div>
+                <div v-if="externalSearch.enabled.value" class="pt-2">
+                    <SearchTokensCard :status="externalSearch.status.value" :on-search="() => openExternalSearch(true)" />
                 </div>
             </div>
 
@@ -683,7 +724,7 @@ const clear = () => {
                 <X class="h-10 w-10 text-muted-foreground" />
                 <h2 class="mt-4 text-lg font-bold text-secondary">Sin resultados</h2>
                 <p class="mt-2 max-w-md text-sm text-muted-foreground">
-                    Prueba ajustando los filtros o busca en otras plataformas con marca, modelo y año exacto.
+                    Prueba ajustando los filtros o busca en otras plataformas con las especificaciones que elijas.
                 </p>
                 <div class="mt-5 flex flex-wrap items-center justify-center gap-2">
                     <Button class="gap-1.5 rounded-full" @click="openExternalSearch(true)">
@@ -695,12 +736,23 @@ const clear = () => {
 
             <Pagination :current-page="cars.meta.current_page" :last-page="cars.meta.last_page" :base-query="filters" />
 
-            <section v-if="cachedExternalCars.length || externalSearch.enabled.value" class="mt-12 border-t border-border pt-8">
+            <section
+                v-if="(cars.data.length > 0 && (cachedExternalCars.length || externalSearch.enabled.value)) || (cars.data.length === 0 && !cachedExternalCars.length && externalSearch.enabled.value)"
+                ref="externalSectionRef"
+                class="mt-12 border-t border-border pt-8"
+            >
                 <div class="flex flex-wrap items-end justify-between gap-3">
                     <div>
-                        <p class="text-xs font-bold uppercase tracking-wider text-primary">Búsqueda inteligente</p>
-                        <h2 class="mt-1 text-xl font-black text-secondary">Autos encontrados en otras plataformas</h2>
+                        <p class="text-xs font-bold uppercase tracking-wider text-primary">
+                            {{ liveExternalCars.length ? `Resultados de “${liveExternalQuery}”` : 'Búsqueda inteligente' }}
+                        </p>
+                        <h2 class="mt-1 text-xl font-black text-secondary">
+                            {{ liveExternalCars.length ? `${liveExternalCars.length} autos encontrados en otras plataformas` : 'Autos encontrados en otras plataformas' }}
+                        </h2>
                     </div>
+                    <Button v-if="liveExternalCars.length" variant="outline" size="sm" class="rounded-full" @click="openExternalSearch(true)">
+                        Nueva búsqueda externa
+                    </Button>
                 </div>
 
                 <div v-if="cachedExternalCars.length" class="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -728,7 +780,7 @@ const clear = () => {
         :initial-criteria="externalDialogInitial"
         :year-min="options.year.min"
         :year-max="options.year.max"
-        @close="externalDialogOpen = false"
+        @close="closeExternalDialog"
         @search="submitExternalSearch"
         @open-car="openExternalCar"
         @retry="retryExternalSearch"

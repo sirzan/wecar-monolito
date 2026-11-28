@@ -13,9 +13,10 @@ class OpenAiStructurer
     /**
      * @param  array<int, array<string, mixed>>  $pages
      * @param  array<string, mixed>  $platform
+     * @param  array<string, mixed>  $specs
      * @return array<int, array<string, mixed>>
      */
-    public function structure(array $pages, array $platform, string $query): array
+    public function structure(array $pages, array $platform, string $query, array $specs = []): array
     {
         $apiKey = (string) config('services.openai.key');
 
@@ -31,11 +32,11 @@ class OpenAiStructurer
 
         try {
             $response = Http::withToken($apiKey)
-                ->connectTimeout(6)
-                ->timeout(25)
+                ->connectTimeout(4)
+                ->timeout(12)
                 ->post('https://api.openai.com/v1/chat/completions', $payload);
 
-            return $this->parseResponse($response, $platform, $query, $pages);
+            return $this->parseResponse($response, $platform, $query, $pages, $specs);
         } catch (\Throwable $exception) {
             report($exception);
 
@@ -47,9 +48,10 @@ class OpenAiStructurer
      * Procesa en paralelo el respaldo de OpenAI para múltiples plataformas.
      *
      * @param  array<string, array{pages: array<int, array<string, mixed>>, platform: array<string, mixed>}>  $tasks
+     * @param  array<string, mixed>  $specs
      * @return array<string, array<int, array<string, mixed>>>
      */
-    public function structureBatch(array $tasks, string $query): array
+    public function structureBatch(array $tasks, string $query, array $specs = []): array
     {
         $apiKey = (string) config('services.openai.key');
 
@@ -78,8 +80,8 @@ class OpenAiStructurer
                 foreach ($payloads as $platformId => $payload) {
                     $requests[] = $pool->as((string) $platformId)
                         ->withToken($apiKey)
-                        ->connectTimeout(6)
-                        ->timeout(25)
+                        ->connectTimeout(4)
+                        ->timeout(12)
                         ->post('https://api.openai.com/v1/chat/completions', $payload);
                 }
 
@@ -96,6 +98,7 @@ class OpenAiStructurer
                         $tasks[$platformId]['platform'],
                         $query,
                         $tasks[$platformId]['pages'],
+                        $specs,
                     )
                     : [];
             }
@@ -116,8 +119,8 @@ class OpenAiStructurer
     private function buildPayload(array $pages, array $platform, string $query): ?array
     {
         $combined = '';
-        $maxChars = 48_000;
-        $perPageLimit = 12_000;
+        $maxChars = 26_000;
+        $perPageLimit = 8_000;
         $platformId = (string) ($platform['id'] ?? '');
         $domain = isset($platform['domain']) ? (string) $platform['domain'] : null;
 
@@ -176,7 +179,7 @@ class OpenAiStructurer
         return [
             'model' => config('services.openai.model', 'gpt-4o-mini'),
             'temperature' => 0.1,
-            'max_tokens' => 3_000,
+            'max_tokens' => 2_000,
             'response_format' => [
                 'type' => 'json_schema',
                 'json_schema' => [
@@ -212,14 +215,14 @@ class OpenAiStructurer
                 [
                     'role' => 'system',
                     'content' => implode(' ', [
-                        'Eres un extractor estricto de anuncios INDIVIDUALES de autos en venta de '.$platform['name'].' en México.',
-                        'Extrae únicamente vehículos reales cuya marca, modelo y año coincidan EXACTAMENTE con la búsqueda: "'.$query.'".',
+                        'Eres un extractor de anuncios INDIVIDUALES de autos en venta de '.$platform['name'].' en México.',
+                        'Extrae vehículos reales cuya marca, modelo y año coincidan con la búsqueda: "'.$query.'". Si la búsqueda menciona versión o ciudad, prioriza coincidencias pero incluye también otros anuncios reales de la misma marca, modelo y año.',
                         'IGNORA autos recomendados o similares de otra marca o de otro año distinto al buscado.',
-                        'REGLA CRÍTICA: NUNCA devuelvas la página de listado/categoría (ej. URLs como /usados/..., /mx/seminuevos/ford/2024 o títulos como "Autos Ford 2024..."). Si una página es un listado con múltiples tarjetas, extrae CADA vehículo individual por separado.',
+                        'REGLA CRÍTICA: NUNCA devuelvas la página de listado/categoría (ej. URLs como /usados/..., /listado/..., /mx/seminuevos/ford/2024 o títulos como "Autos Ford 2024..."). Si una página es un listado con múltiples tarjetas, extrae CADA vehículo individual por separado.',
                         'PROHIBIDO inventar URLs o IDs de ejemplo (como example.com, MLM123456, MLM654321).',
                         'sourceUrl debe copiarse literalmente de "PÁGINA" (solo si es ficha individual), "Enlaces de detalle detectados" o del contenido, apuntando al anuncio específico del auto.',
-                        'price (entero MXN > 25000) e imageUrl son OBLIGATORIOS: copia la foto real del auto desde "Imágenes detectadas", "Imagen destacada" o el contenido (nunca banners ni placeholders). Si falta precio real o imagen real, omite el elemento.',
-                        'Extrae hasta 15 autos individuales diferentes.',
+                        'Copia imageUrl real del auto desde "Imágenes detectadas", "Imagen destacada" o el contenido (nunca banners, logos ni placeholders) y extrae price entero MXN (> 25000) cuando esté visible.',
+                        'Extrae hasta 12 autos individuales diferentes.',
                     ]),
                 ],
                 [
@@ -233,9 +236,10 @@ class OpenAiStructurer
     /**
      * @param  array<string, mixed>  $platform
      * @param  array<int, array<string, mixed>>  $pages
+     * @param  array<string, mixed>  $specs
      * @return array<int, array<string, mixed>>
      */
-    private function parseResponse(Response $response, array $platform, string $query, array $pages = []): array
+    private function parseResponse(Response $response, array $platform, string $query, array $pages = [], array $specs = []): array
     {
         if (! $response->successful()) {
             return [];
@@ -253,7 +257,7 @@ class OpenAiStructurer
 
             $car = $this->normalizer->normalize($rawCar, $platform, true);
 
-            if (! $car || ! $this->normalizer->matchesQuery($car, $query)) {
+            if (! $car || ! $this->normalizer->matchesQuery($car, $query, $specs)) {
                 continue;
             }
 

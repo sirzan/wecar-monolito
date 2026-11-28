@@ -79,6 +79,17 @@ it('respects an intended admin url for admins', function () {
         ])->assertRedirect('/admin/autos');
 });
 
+it('keeps regular users out of intended admin and external urls', function (string $intended) {
+    $this->seed();
+    $user = loginUser('seller', 'seller-intended@example.com');
+
+    $this->withSession(['url.intended' => $intended])
+        ->post('/login', [
+            'email' => $user->email,
+            'password' => 'Password123',
+        ])->assertRedirect('/panel');
+})->with(['/admin/autos', 'https://example.com/account']);
+
 it('renders the publication wizard inside the admin layout', function () {
     $this->seed();
     $admin = loginUser('superadmin', 'admin-create@example.com');

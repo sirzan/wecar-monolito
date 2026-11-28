@@ -2,6 +2,7 @@
 
 use App\Models\CarBrand;
 use App\Models\CarModel;
+use App\Models\CarVersion;
 use App\Models\CouponRecipient;
 use App\Models\ExternalListing;
 use App\Models\ExternalSearchCache;
@@ -836,7 +837,7 @@ it('rejects listing pages, banners, kavak base64 svg placeholders and null-price
                 ]);
             }
 
-            if (in_array('autocosmos.com.mx', $domains, true)) {
+            if (in_array('www.autocosmos.com.mx', $domains, true)) {
                 return Http::response([
                     'data' => [
                         [
@@ -1136,7 +1137,7 @@ it('keeps other platforms when one firecrawl request fails', function () {
         ->and(ExternalSearchCache::query()->count())->toBe(1);
 });
 
-it('shows basic candidates when live verification rejects every result', function () {
+it('keeps valid candidates when remote cdn or waf responds 403 but strictly drops confirmed 404 dead links', function () {
     Cache::flush();
     config()->set('services.firecrawl.key', 'test-key');
     config()->set('external_search.verify_live_cars', true);
@@ -1148,15 +1149,32 @@ it('shows basic candidates when live verification rejects every result', functio
             if (in_array('seminuevos.com', $domains, true)) {
                 return Http::response([
                     'data' => [[
-                        'url' => 'https://www.seminuevos.com/vehicle/autos-toyota-corolla-2025/991235',
+                        'url' => 'https://www.seminuevos.com/usados/-/autos/-/toyota/-/2025',
+                        'links' => [
+                            'https://www.seminuevos.com/vehicle/autos-toyota-corolla-2025/991235',
+                            'https://www.seminuevos.com/vehicle/autos-toyota-corolla-2025/991236',
+                        ],
+                        'images' => [
+                            'https://images.latamautos.com/thumbs/corolla-waf.jpg',
+                            'https://images.latamautos.com/thumbs/corolla-dead.jpg',
+                        ],
                         'json' => [
-                            'autos' => [[
-                                'title' => 'Toyota Corolla 2025',
-                                'price' => 450000,
-                                'year' => 2025,
-                                'imageUrl' => 'https://images.latamautos.com/thumbs/corolla-2.jpg',
-                                'sourceUrl' => 'https://www.seminuevos.com/vehicle/autos-toyota-corolla-2025/991235',
-                            ]],
+                            'autos' => [
+                                [
+                                    'title' => 'Toyota Corolla 2025 WAF',
+                                    'price' => 450000,
+                                    'year' => 2025,
+                                    'imageUrl' => 'https://images.latamautos.com/thumbs/corolla-waf.jpg',
+                                    'sourceUrl' => 'https://www.seminuevos.com/vehicle/autos-toyota-corolla-2025/991235',
+                                ],
+                                [
+                                    'title' => 'Toyota Corolla 2025 Muerto',
+                                    'price' => 440000,
+                                    'year' => 2025,
+                                    'imageUrl' => 'https://images.latamautos.com/thumbs/corolla-dead.jpg',
+                                    'sourceUrl' => 'https://www.seminuevos.com/vehicle/autos-toyota-corolla-2025/991236',
+                                ],
+                            ],
                         ],
                     ]],
                 ]);
@@ -1165,13 +1183,18 @@ it('shows basic candidates when live verification rejects every result', functio
             return Http::response(['data' => []]);
         }
 
+        if (str_contains($request->url(), '991235') || str_contains($request->url(), 'corolla-waf.jpg')) {
+            return Http::response('Forbidden', 403);
+        }
+
         return Http::response('Not found', 404);
     });
 
     $response = $this->postJson('/api/external-search', externalCriteria('Toyota', 'Corolla', 2025))
         ->assertOk();
 
-    expect($response->json('results'))->toHaveCount(1);
+    expect($response->json('results'))->toHaveCount(1)
+        ->and($response->json('results.0.title'))->toBe('Toyota Corolla 2025 WAF');
 });
 
 it('stores clean external listings and exposes them on comprar', function () {
@@ -1259,4 +1282,471 @@ it('repairs corrupted external listing titles and cache rows', function () {
 
     expect($cache->results)->toHaveCount(1)
         ->and($cache->results[0]['title'])->toBe('Acura MDX 2022');
+});
+
+it('searches all five platforms including apify facebook marketplace and returns 15 balanced verified results', function () {
+    Cache::flush();
+    config()->set('services.firecrawl.key', 'fc-test-key');
+    config()->set('services.openai.key', null);
+    config()->set('services.apify.token', 'apify-test-token');
+    config()->set('services.apify.facebook_enabled', true);
+    config()->set('external_search.verify_live_cars', true);
+
+    Http::fake(function (Request $request) {
+        $url = $request->url();
+
+        if (str_contains($url, 'api.apify.com')) {
+            $startUrl = (string) data_get($request->data(), 'startUrls.0.url', '');
+            expect($startUrl)->toContain('/marketplace/monterrey/search/')
+                ->and($startUrl)->not->toContain('autos');
+
+            return Http::response([
+                [
+                    'id' => '990001001',
+                    'marketplace_listing_title' => 'Toyota Corolla LE 2022',
+                    'listing_price' => ['amount' => '345000'],
+                    'primary_listing_photo' => ['image' => ['uri' => 'https://scontent.fbcdn.net/v/corolla-fb-1.jpg']],
+                    'location' => ['reverse_geocode' => ['city' => 'Monterrey', 'state' => 'NL']],
+                ],
+                [
+                    'id' => '990001002',
+                    'marketplace_listing_title' => 'Toyota Corolla XLE',
+                    'listing_price' => ['amount' => '368000'],
+                    'primary_listing_photo' => ['image' => ['uri' => 'https://scontent.fbcdn.net/v/corolla-fb-2.jpg']],
+                    'location' => ['reverse_geocode' => ['city' => 'San Pedro', 'state' => 'NL']],
+                ],
+                [
+                    'id' => '990001003',
+                    'marketplace_listing_title' => 'Toyota Corolla Base 2022',
+                    'listing_price' => ['amount' => '329000'],
+                    'primary_listing_photo' => ['image' => ['uri' => 'https://scontent.fbcdn.net/v/corolla-fb-3.jpg']],
+                    'location' => ['reverse_geocode' => ['city' => 'Monterrey', 'state' => 'NL']],
+                ],
+                [
+                    'id' => '990001004',
+                    'marketplace_listing_title' => 'Toyota Corolla SE 2022',
+                    'listing_price' => ['amount' => '389000'],
+                    'primary_listing_photo' => ['image' => ['uri' => 'https://scontent.fbcdn.net/v/corolla-fb-4.jpg']],
+                    'location' => ['reverse_geocode' => ['city' => 'Guadalupe', 'state' => 'NL']],
+                ],
+            ]);
+        }
+
+        if (str_contains($url, 'api.firecrawl.dev/v2/search')) {
+            $domains = $request['includeDomains'] ?? [];
+            $formats = data_get($request->data(), 'scrapeOptions.formats', []);
+            expect($formats)->toContain('images');
+
+            if (in_array('auto.mercadolibre.com.mx', $domains, true)) {
+                expect($domains)->toContain('autos.mercadolibre.com.mx')
+                    ->and($domains)->not->toContain('articulo.mercadolibre.com.mx');
+
+                return Http::response([
+                    'data' => [[
+                        'url' => 'https://listado.mercadolibre.com.mx/autos-camionetas/toyota/corolla/2022',
+                        'links' => [
+                            'https://auto.mercadolibre.com.mx/MLM-5000001-toyota-corolla-2022-_JM',
+                            'https://auto.mercadolibre.com.mx/MLM-5000002-toyota-corolla-2022-_JM',
+                            'https://auto.mercadolibre.com.mx/MLM-5000003-toyota-corolla-2022-_JM',
+                            'https://auto.mercadolibre.com.mx/MLM-5000004-toyota-corolla-2022-_JM',
+                        ],
+                        'images' => [
+                            'https://http2.mlstatic.com/D_NQ_NP_5000001.jpg',
+                            'https://http2.mlstatic.com/D_NQ_NP_5000002.jpg',
+                            'https://http2.mlstatic.com/D_NQ_NP_5000003.jpg',
+                            'https://http2.mlstatic.com/D_NQ_NP_5000004.jpg',
+                        ],
+                        'json' => [
+                            'autos' => [
+                                ['title' => 'Toyota Corolla LE 2022', 'price' => 355000, 'year' => 2022, 'imageUrl' => 'https://http2.mlstatic.com/D_NQ_NP_5000001.jpg', 'sourceUrl' => 'https://auto.mercadolibre.com.mx/MLM-5000001-toyota-corolla-2022-_JM'],
+                                ['title' => 'Toyota Corolla XLE 2022', 'price' => 390000, 'year' => 2022, 'imageUrl' => 'https://http2.mlstatic.com/D_NQ_NP_5000002.jpg', 'sourceUrl' => 'https://auto.mercadolibre.com.mx/MLM-5000002-toyota-corolla-2022-_JM'],
+                                ['title' => 'Toyota Corolla SE 2022', 'price' => 375000, 'year' => 2022, 'imageUrl' => 'https://http2.mlstatic.com/D_NQ_NP_5000003.jpg', 'sourceUrl' => 'https://auto.mercadolibre.com.mx/MLM-5000003-toyota-corolla-2022-_JM'],
+                                ['title' => 'Toyota Corolla Hybrid 2022', 'price' => 420000, 'year' => 2022, 'imageUrl' => 'https://http2.mlstatic.com/D_NQ_NP_5000004.jpg', 'sourceUrl' => 'https://auto.mercadolibre.com.mx/MLM-5000004-toyota-corolla-2022-_JM'],
+                            ],
+                        ],
+                    ]],
+                ]);
+            }
+
+            if (in_array('seminuevos.com', $domains, true)) {
+                return Http::response([
+                    'data' => [[
+                        'url' => 'https://www.seminuevos.com/usados/-/autos/-/toyota/-/corolla/-/2022',
+                        'links' => [
+                            'https://www.seminuevos.com/vehicle/autos-toyota-corolla-2022/5850001',
+                            'https://www.seminuevos.com/vehicle/autos-toyota-corolla-2022/5850002',
+                            'https://www.seminuevos.com/vehicle/autos-toyota-corolla-2022/5850003',
+                            'https://www.seminuevos.com/vehicle/autos-toyota-corolla-2022/5850004',
+                        ],
+                        'images' => [
+                            'https://images.latamautos.com/thumbs/5850001.jpg',
+                            'https://images.latamautos.com/thumbs/5850002.jpg',
+                            'https://images.latamautos.com/thumbs/5850003.jpg',
+                            'https://images.latamautos.com/thumbs/5850004.jpg',
+                        ],
+                        'markdown' => implode("\n", [
+                            '[Toyota Corolla LE 2022](/vehicle/autos-toyota-corolla-2022/5850001)',
+                            '$349,000 · 34,000 km',
+                            '[Toyota Corolla SE 2022](/vehicle/autos-toyota-corolla-2022/5850002)',
+                            '$379,000 · 28,000 km',
+                            '[Toyota Corolla XLE 2022](/vehicle/autos-toyota-corolla-2022/5850003)',
+                            '$399,000 · 21,000 km',
+                            '[Toyota Corolla Base 2022](/vehicle/autos-toyota-corolla-2022/5850004)',
+                            '$335,000 · 42,000 km',
+                        ]),
+                    ]],
+                ]);
+            }
+
+            if (in_array('kavak.com', $domains, true)) {
+                return Http::response([
+                    'data' => [[
+                        'url' => 'https://www.kavak.com/mx/seminuevos/toyota/corolla/2022',
+                        'links' => [
+                            'https://www.kavak.com/mx/seminuevos/toyota-corolla-2022-id-610001',
+                            'https://www.kavak.com/mx/seminuevos/toyota-corolla-2022-id-610002',
+                            'https://www.kavak.com/mx/seminuevos/toyota-corolla-2022-id-610003',
+                            'https://www.kavak.com/mx/seminuevos/toyota-corolla-2022-id-610004',
+                        ],
+                        'images' => [
+                            'https://cdn.kavak.services/610001.jpg',
+                            'https://cdn.kavak.services/610002.jpg',
+                            'https://cdn.kavak.services/610003.jpg',
+                            'https://cdn.kavak.services/610004.jpg',
+                        ],
+                        'markdown' => implode("\n", [
+                            '[Toyota Corolla LE 2022](/mx/seminuevos/toyota-corolla-2022-id-610001)',
+                            '$359,000 · 31,000 km',
+                            '[Toyota Corolla SE 2022](/mx/seminuevos/toyota-corolla-2022-id-610002)',
+                            '$382,000 · 26,500 km',
+                            '[Toyota Corolla XLE 2022](/mx/seminuevos/toyota-corolla-2022-id-610003)',
+                            '$405,000 · 19,200 km',
+                            '[Toyota Corolla Hybrid 2022](/mx/seminuevos/toyota-corolla-2022-id-610004)',
+                            '$429,000 · 16,000 km',
+                        ]),
+                    ]],
+                ]);
+            }
+
+            if (in_array('www.autocosmos.com.mx', $domains, true)) {
+                return Http::response([
+                    'data' => [[
+                        'url' => 'https://www.autocosmos.com.mx/auto/usado/toyota/corolla',
+                        'links' => [
+                            'https://www.autocosmos.com.mx/auto/usado/toyota/corolla/le/aa11bb22cc33',
+                            'https://www.autocosmos.com.mx/auto/usado/toyota/corolla/se/bb22cc33dd44',
+                            'https://www.autocosmos.com.mx/auto/usado/toyota/corolla/xle/cc33dd44ee55',
+                            'https://www.autocosmos.com.mx/auto/usado/toyota/corolla/base/dd44ee55ff66',
+                        ],
+                        'images' => [
+                            'https://cdn.autocosmos.com.mx/corolla-1.jpg',
+                            'https://cdn.autocosmos.com.mx/corolla-2.jpg',
+                            'https://cdn.autocosmos.com.mx/corolla-3.jpg',
+                            'https://cdn.autocosmos.com.mx/corolla-4.jpg',
+                        ],
+                        'json' => [
+                            'autos' => [
+                                ['title' => 'Toyota Corolla LE 2022', 'price' => 342000, 'year' => 2022, 'imageUrl' => 'https://cdn.autocosmos.com.mx/corolla-1.jpg', 'sourceUrl' => 'https://www.autocosmos.com.mx/auto/usado/toyota/corolla/le/aa11bb22cc33'],
+                                ['title' => 'Toyota Corolla SE 2022', 'price' => 372000, 'year' => 2022, 'imageUrl' => 'https://cdn.autocosmos.com.mx/corolla-2.jpg', 'sourceUrl' => 'https://www.autocosmos.com.mx/auto/usado/toyota/corolla/se/bb22cc33dd44'],
+                                ['title' => 'Toyota Corolla XLE 2022', 'price' => 396000, 'year' => 2022, 'imageUrl' => 'https://cdn.autocosmos.com.mx/corolla-3.jpg', 'sourceUrl' => 'https://www.autocosmos.com.mx/auto/usado/toyota/corolla/xle/cc33dd44ee55'],
+                                ['title' => 'Toyota Corolla Base 2022', 'price' => 328000, 'year' => 2022, 'imageUrl' => 'https://cdn.autocosmos.com.mx/corolla-4.jpg', 'sourceUrl' => 'https://www.autocosmos.com.mx/auto/usado/toyota/corolla/base/dd44ee55ff66'],
+                            ],
+                        ],
+                    ]],
+                ]);
+            }
+
+            return Http::response(['data' => []]);
+        }
+
+        if (preg_match('/\.(jpg|jpeg|png|webp)(\?|$)/i', $url)) {
+            return Http::response('jpeg-bytes', 200, ['Content-Type' => 'image/jpeg']);
+        }
+
+        return Http::response('<html>Toyota Corolla 2022 disponible</html>', 200, ['Content-Type' => 'text/html']);
+    });
+
+    $admin = User::factory()->create(['email_verified_at' => now()]);
+    Role::findOrCreate('superadmin', 'web');
+    $admin->assignRole('superadmin');
+
+    $criteria = array_merge(externalCriteria('Toyota', 'Corolla', 2022), ['city' => 'Monterrey']);
+
+    $response = $this->actingAs($admin)
+        ->postJson('/api/external-search', $criteria)
+        ->assertOk();
+
+    $results = collect($response->json('results'));
+    $byPlatform = $results->countBy('platformId')->all();
+
+    expect($results)->toHaveCount(15)
+        ->and($response->json('platformsSearched'))->toEqualCanonicalizing([
+            'Mercado Libre Autos',
+            'Facebook Marketplace',
+            'Seminuevos.com',
+            'Kavak',
+            'Autocosmos',
+        ])
+        ->and($byPlatform)->toMatchArray([
+            'mercadolibre' => 3,
+            'facebook' => 3,
+            'seminuevos' => 3,
+            'kavak' => 3,
+            'autocosmos' => 3,
+        ]);
+});
+
+it('allows flexible search without model or year and ranks version and city matches first without dropping valid cars', function () {
+    Cache::flush();
+    config()->set('services.firecrawl.key', 'fc-test-key');
+    config()->set('services.openai.key', null);
+    config()->set('external_search.verify_live_cars', false);
+
+    $brand = CarBrand::query()->firstOrCreate(['slug' => 'honda'], ['name' => 'Honda']);
+    $model = CarModel::query()->firstOrCreate(
+        ['brand_id' => $brand->getKey(), 'slug' => 'civic'],
+        ['name' => 'Civic'],
+    );
+    $version = CarVersion::query()->firstOrCreate(
+        ['model_id' => $model->getKey(), 'slug' => 'touring-turbo-cvt'],
+        ['name' => 'Touring Turbo CVT'],
+    );
+
+    Http::fake(function (Request $request) {
+        if (str_contains($request->url(), 'api.firecrawl.dev/v2/search')) {
+            $domains = $request['includeDomains'] ?? [];
+
+            if (in_array('seminuevos.com', $domains, true)) {
+                return Http::response([
+                    'data' => [[
+                        'url' => 'https://www.seminuevos.com/usados/-/autos/-/honda/-/civic/-/2023',
+                        'links' => [
+                            'https://www.seminuevos.com/vehicle/autos-honda-civic-guadalajara-2023/7001001',
+                            'https://www.seminuevos.com/vehicle/autos-honda-civic-touring-monterrey-2023/7001002',
+                        ],
+                        'images' => [
+                            'https://images.latamautos.com/thumbs/7001001.jpg',
+                            'https://images.latamautos.com/thumbs/7001002.jpg',
+                        ],
+                        'json' => [
+                            'autos' => [
+                                [
+                                    'title' => 'Honda Civic EX 2023',
+                                    'price' => 455000,
+                                    'year' => 2023,
+                                    'location' => 'Guadalajara',
+                                    'imageUrl' => 'https://images.latamautos.com/thumbs/7001001.jpg',
+                                    'sourceUrl' => 'https://www.seminuevos.com/vehicle/autos-honda-civic-guadalajara-2023/7001001',
+                                ],
+                                [
+                                    'title' => 'Honda Civic Touring 2023',
+                                    'price' => 510000,
+                                    'year' => 2023,
+                                    'location' => 'Monterrey',
+                                    'imageUrl' => 'https://images.latamautos.com/thumbs/7001002.jpg',
+                                    'sourceUrl' => 'https://www.seminuevos.com/vehicle/autos-honda-civic-touring-monterrey-2023/7001002',
+                                ],
+                            ],
+                        ],
+                    ]],
+                ]);
+            }
+
+            return Http::response(['data' => []]);
+        }
+
+        return Http::response('', 200);
+    });
+
+    // 1. Solo marca (sin modelo ni año obligatorio)
+    $this->postJson('/api/external-search', ['brand_id' => $brand->getKey()])
+        ->assertOk()
+        ->assertJsonCount(2, 'results');
+
+    // 2. Búsqueda libre por texto (sin brand_id)
+    $this->postJson('/api/external-search', ['q' => 'Honda Civic 2023'])
+        ->assertOk()
+        ->assertJsonCount(2, 'results');
+
+    // 3. Con versión y ciudad: no descarta el EX en Guadalajara, pero prioriza el Touring en Monterrey primero
+    $ranked = $this->postJson('/api/external-search', [
+        'brand_id' => $brand->getKey(),
+        'model_id' => $model->getKey(),
+        'version_id' => $version->getKey(),
+        'year' => 2023,
+        'city' => 'Monterrey',
+    ])->assertOk();
+
+    expect($ranked->json('results'))->toHaveCount(2)
+        ->and($ranked->json('results.0.title'))->toBe('Honda Civic Touring 2023');
+});
+
+it('automatically refreshes partial cache with fewer than six results to gather more verified vehicles', function () {
+    Cache::flush();
+    config()->set('services.firecrawl.key', 'fc-test-key');
+    config()->set('services.openai.key', null);
+    config()->set('external_search.verify_live_cars', false);
+
+    $attempt = 0;
+
+    Http::fake(function (Request $request) use (&$attempt) {
+        if (! str_contains($request->url(), 'api.firecrawl.dev/v2/search')) {
+            return Http::response('', 200);
+        }
+
+        $domains = $request['includeDomains'] ?? [];
+
+        if (! in_array('seminuevos.com', $domains, true)) {
+            return Http::response(['data' => []]);
+        }
+
+        $attempt++;
+
+        if ($attempt === 1) {
+            return Http::response([
+                'data' => [[
+                    'url' => 'https://www.seminuevos.com/vehicle/autos-mazda-cx5-2023/8100001',
+                    'images' => ['https://images.latamautos.com/thumbs/8100001.jpg'],
+                    'json' => [
+                        'autos' => [[
+                            'title' => 'Mazda CX5 2023',
+                            'price' => 480000,
+                            'year' => 2023,
+                            'imageUrl' => 'https://images.latamautos.com/thumbs/8100001.jpg',
+                            'sourceUrl' => 'https://www.seminuevos.com/vehicle/autos-mazda-cx5-2023/8100001',
+                        ]],
+                    ],
+                ]],
+            ]);
+        }
+
+        $autos = [];
+        $links = [];
+        $images = [];
+
+        for ($i = 1; $i <= 6; $i++) {
+            $id = '810000'.$i;
+            $links[] = 'https://www.seminuevos.com/vehicle/autos-mazda-cx5-2023/'.$id;
+            $images[] = 'https://images.latamautos.com/thumbs/'.$id.'.jpg';
+            $autos[] = [
+                'title' => 'Mazda CX5 Grand Touring 2023',
+                'price' => 475000 + ($i * 5000),
+                'year' => 2023,
+                'imageUrl' => 'https://images.latamautos.com/thumbs/'.$id.'.jpg',
+                'sourceUrl' => 'https://www.seminuevos.com/vehicle/autos-mazda-cx5-2023/'.$id,
+            ];
+        }
+
+        return Http::response([
+            'data' => [[
+                'url' => 'https://www.seminuevos.com/usados/-/autos/-/mazda/-/cx5/-/2023',
+                'links' => $links,
+                'images' => $images,
+                'json' => ['autos' => $autos],
+            ]],
+        ]);
+    });
+
+    $criteria = externalCriteria('Mazda', 'CX5', 2023);
+
+    $first = $this->postJson('/api/external-search', $criteria)->assertOk();
+    expect($first->json('results'))->toHaveCount(1);
+
+    // Segunda búsqueda SIN refresh=true: al tener menos de 6 resultados en caché, consulta en vivo y sube a 6.
+    $second = $this->postJson('/api/external-search', $criteria)->assertOk();
+    expect($second->json('results'))->toHaveCount(6);
+
+    // Tercera búsqueda: ya con 6 resultados en caché, responde directo desde caché sin volver a llamar a Firecrawl.
+    $third = $this->postJson('/api/external-search', $criteria)->assertOk();
+    expect($third->json('results'))->toHaveCount(6)
+        ->and($attempt)->toBe(2);
+});
+
+it('parses real multiline markdown cards from kavak, seminuevos, mercadolibre and autocosmos without openai', function () {
+    Cache::flush();
+    config()->set('services.firecrawl.key', 'fc-test-key');
+    config()->set('services.openai.key', null);
+    config()->set('services.apify.facebook_enabled', false);
+    config()->set('external_search.verify_live_cars', false);
+
+    $normalizer = app(ExternalCarNormalizer::class);
+    $kavakPhoto = 'https://images.prd.kavak.io//'.rtrim(strtr(base64_encode('{"bucket":"kavak-images","key":"images/546053/EXTERIOR-front.jpeg"}'), '+/', '-_'), '=');
+
+    expect($normalizer->isDetailUrl('https://www.kavak.com/mx/usado/toyota-corolla-18_le_cvt-sedan-2022', 'kavak'))->toBeTrue()
+        ->and($normalizer->isDetailUrl('https://www.autocosmos.com.mx/Publications/Clasified?id=2976035', 'autocosmos'))->toBeTrue()
+        ->and($normalizer->cleanUrl('https://auto.mercadolibre.com.mx/MLM-6624800088-toyota-corolla-18-hybrid-cvt-_JM\\#polycard_client=search-desktop'))
+        ->toBe('https://auto.mercadolibre.com.mx/MLM-6624800088-toyota-corolla-18-hybrid-cvt-_JM');
+
+    Http::fake(function (Request $request) use ($kavakPhoto) {
+        if (! str_contains($request->url(), 'api.firecrawl.dev/v2/search')) {
+            return Http::response('', 200);
+        }
+
+        $domains = $request['includeDomains'] ?? [];
+
+        if (in_array('auto.mercadolibre.com.mx', $domains, true)) {
+            return Http::response([
+                'data' => [[
+                    'url' => 'https://autos.mercadolibre.com.mx/toyota/corolla/2022/',
+                    'markdown' => implode("\n", [
+                        '01. ![Toyota Corolla 2022 1.8 Hybrid Cvt](https://http2.mlstatic.com/D_Q_NP_2X_605846-MLM119501824035_102026-E.webp)',
+                        '',
+                        '    ### [Toyota Corolla 2022 1.8 Hybrid Cvt](https://auto.mercadolibre.com.mx/MLM-6624800088-toyota-corolla-18-hybrid-cvt-_JM\\#polycard_client=search-desktop)',
+                        '',
+                        '    $385,000',
+                        '    - 2022',
+                        '    - 98,300 Km',
+                        'Puebla - Puebla',
+                    ]),
+                ]],
+            ]);
+        }
+
+        if (in_array('seminuevos.com', $domains, true)) {
+            return Http::response([
+                'data' => [[
+                    'url' => 'https://www.seminuevos.com/usados/-/autos/-/toyota/corolla/2022',
+                    'markdown' => implode("\n", [
+                        '[![Toyota Corolla 2022](https://images.latamautos.com/thumbs/w/sm/4835359/photo.jpeg)](https://www.seminuevos.com/vehicle/autos-toyota-corolla-tlalpan-2022/4835359)',
+                        '',
+                        "[Tlalpan\\\n\\\n2022\\\n\\\n**Toyota · Corolla** \\\n\\\n17,534 kms.\\\n\\\n\$317,000](https://www.seminuevos.com/vehicle/autos-toyota-corolla-tlalpan-2022/4835359)",
+                    ]),
+                ]],
+            ]);
+        }
+
+        if (in_array('kavak.com', $domains, true)) {
+            return Http::response([
+                'data' => [[
+                    'url' => 'https://www.kavak.com/mx/seminuevos/toyota/corolla/2022',
+                    'markdown' => "[![Toyota • Corolla]({$kavakPhoto})\\\n\\\n**Toyota • Corolla** \\\n\\\n2022 • 58,027 km • 1.8 LE HYBRID AUTO\\\n\\\nPrecio desde\\\n\\\n\$293,999\\\n\\\n\$5,630 / mes\\*\\\n\\\nCiudad de México](https://www.kavak.com/mx/usado/toyota-corolla-18_le_hybrid_auto-sedan-2022)",
+                ]],
+            ]);
+        }
+
+        if (in_array('www.autocosmos.com.mx', $domains, true)) {
+            return Http::response([
+                'data' => [[
+                    'url' => 'https://www.autocosmos.com.mx/Publications/Clasified?id=2976035',
+                    'title' => 'Toyota Corolla 2022 LE Aut usado en venta en Querétaro - Autocosmos',
+                    'images' => ['https://acroadtrip.blob.core.windows.net/publicaciones-imagenes/Medium/toyota/corolla/mx/RT_PU_1.webp'],
+                    'markdown' => "![Toyota Corolla](https://acroadtrip.blob.core.windows.net/publicaciones-imagenes/Medium/toyota/corolla/mx/RT_PU_1.webp)\nPrecio \$345,000\n74,447 km",
+                ]],
+            ]);
+        }
+
+        return Http::response(['data' => []]);
+    });
+
+    $response = $this->postJson('/api/external-search', externalCriteria('Toyota', 'Corolla', 2022))
+        ->assertOk();
+
+    $results = collect($response->json('results'));
+
+    expect($results)->toHaveCount(4)
+        ->and($results->pluck('platformId')->all())->toEqualCanonicalizing(['mercadolibre', 'seminuevos', 'kavak', 'autocosmos'])
+        ->and($results->firstWhere('platformId', 'mercadolibre')['price'])->toBe(385000)
+        ->and($results->firstWhere('platformId', 'seminuevos')['km'])->toBe(17534)
+        ->and($results->firstWhere('platformId', 'kavak')['price'])->toBe(293999)
+        ->and($results->firstWhere('platformId', 'autocosmos')['title'])->toBe('Toyota Corolla 2022 LE Aut');
 });

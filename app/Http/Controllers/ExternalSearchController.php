@@ -25,26 +25,43 @@ class ExternalSearchController extends Controller
     public function search(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'brand_id' => ['required', 'uuid', 'exists:car_brands,id'],
-            'model_id' => ['required', 'uuid', 'exists:car_models,id'],
-            'year' => ['required', 'integer', 'min:1990', 'max:'.(date('Y') + 1)],
+            'q' => ['nullable', 'string', 'min:2', 'max:140', 'required_without:brand_id'],
+            'brand_id' => ['nullable', 'uuid', 'exists:car_brands,id', 'required_without:q'],
+            'model_id' => ['nullable', 'uuid', 'exists:car_models,id'],
+            'year' => ['nullable', 'integer', 'min:1990', 'max:'.(date('Y') + 1)],
             'version_id' => ['nullable', 'uuid', 'exists:car_versions,id'],
             'city' => ['nullable', 'string', 'max:80'],
             'refresh' => ['nullable', 'boolean'],
         ]);
 
-        $brand = CarBrand::query()->find($validated['brand_id']);
-        $model = CarModel::query()->find($validated['model_id']);
+        $brand = ! empty($validated['brand_id'])
+            ? CarBrand::query()->find($validated['brand_id'])
+            : null;
+        $model = ! empty($validated['model_id'])
+            ? CarModel::query()->find($validated['model_id'])
+            : null;
 
-        abort_unless(
-            $brand !== null && $model !== null && $model->brand_id === $brand->getKey(),
-            422,
-            'El modelo no pertenece a la marca seleccionada.',
-        );
+        if ($model !== null) {
+            if ($brand !== null) {
+                abort_unless(
+                    $model->brand_id === $brand->getKey(),
+                    422,
+                    'El modelo no pertenece a la marca seleccionada.',
+                );
+            } else {
+                $brand = CarBrand::query()->find($model->brand_id);
+            }
+        }
 
         $versionName = null;
 
         if (! empty($validated['version_id'])) {
+            abort_unless(
+                $model !== null,
+                422,
+                'Selecciona un modelo para filtrar por versión.',
+            );
+
             $version = CarVersion::query()
                 ->whereKey($validated['version_id'])
                 ->where('model_id', $model->getKey())
@@ -54,19 +71,37 @@ class ExternalSearchController extends Controller
             $versionName = $version->name;
         }
 
-        $query = trim(implode(' ', array_filter([
-            $brand->name,
-            $model->name,
-            (string) $validated['year'],
+        $year = isset($validated['year']) ? (int) $validated['year'] : null;
+        $city = isset($validated['city']) && trim($validated['city']) !== '' ? trim($validated['city']) : null;
+        $freeQuery = isset($validated['q']) && trim($validated['q']) !== '' ? trim($validated['q']) : null;
+
+        $structuredQuery = trim(implode(' ', array_filter([
+            $brand?->name,
+            $model?->name,
+            $year !== null ? (string) $year : null,
             $versionName,
-            isset($validated['city']) ? trim($validated['city']) : null,
+            $city,
         ])));
+
+        $query = $structuredQuery !== '' ? $structuredQuery : (string) $freeQuery;
+
+        abort_unless($query !== '', 422, 'Ingresa al menos una marca o texto de búsqueda.');
+
+        $specs = array_filter([
+            'brand' => $brand?->name,
+            'model' => $model?->name,
+            'year' => $year,
+            'version' => $versionName,
+            'city' => $city,
+            'q' => $structuredQuery === '' ? $freeQuery : null,
+        ], static fn (mixed $value): bool => $value !== null && $value !== '');
 
         $result = $this->external->search(
             $request->user(),
             $request->ip(),
             $query,
             (bool) ($validated['refresh'] ?? false),
+            $specs,
         );
 
         if (($result['error'] ?? null) === 'Búsqueda externa no disponible (API Key faltante).') {

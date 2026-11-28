@@ -27,6 +27,7 @@ compose up -d --remove-orphans --wait --wait-timeout 180
 
 echo "==> Migraciones"
 compose exec -T app php artisan migrate --force
+compose exec -T app php artisan db:seed --class=RolePermissionSeeder --force
 
 echo "==> Generando sitemap"
 compose exec -T app php artisan seo:generate-sitemap

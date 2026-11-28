@@ -37,9 +37,10 @@ export interface ExternalSearchStatus {
 }
 
 export interface ExternalSearchCriteria {
-    brand_id: string;
-    model_id: string;
-    year: number;
+    q?: string;
+    brand_id?: string;
+    model_id?: string;
+    year?: number;
     version_id?: string;
     city?: string;
 }

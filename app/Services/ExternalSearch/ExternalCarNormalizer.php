@@ -76,6 +76,13 @@ class ExternalCarNormalizer
         'googletagmanager.com', 'scorecardresearch.com', 'facebook.com',
     ];
 
+    /** @var array<int, string> */
+    private const TRUSTED_IMAGE_CDN_HOSTS = [
+        'mlstatic.com', 'kavak.io', 'kavak.services', 'latamautos.com',
+        'seminuevos.com', 'autocosmos.com', 'autocosmos.com.mx', 'fbcdn.net',
+        'cloudfront.net', 'amazonaws.com', 'cloudinary.com',
+    ];
+
     /** @var array<string, array<int, string>> */
     private const PLATFORM_ALLOWED_HOSTS = [
         'mercadolibre' => ['mercadolibre.com.mx'],
@@ -92,6 +99,14 @@ class ExternalCarNormalizer
         }
 
         $url = trim($rawUrl);
+        $url = str_replace('\#', '#', $url);
+        $hashPos = strpos($url, '#');
+
+        if ($hashPos !== false) {
+            $url = substr($url, 0, $hashPos);
+        }
+
+        $url = trim($url);
 
         if ($url === '' || str_starts_with($url, 'javascript:') || str_starts_with($url, 'mailto:')) {
             return null;
@@ -179,7 +194,7 @@ class ExternalCarNormalizer
 
         return match ($platformId) {
             'mercadolibre' => (
-                preg_match('/mlm-?\d{7,}/i', $full) === 1
+                preg_match('/mlm-?\d{6,}/i', $full) === 1
                 || str_contains($path, '/articulo')
                 || (
                     (str_contains($host, 'auto.mercadolibre') || str_contains($host, 'vehiculo.mercadolibre'))
@@ -188,6 +203,7 @@ class ExternalCarNormalizer
                     && ! $this->isCalendarYear($mlMatch[1])
                 )
             ) && ! str_contains($path, '/listado/')
+                && ! str_starts_with($host, 'listado.')
                 && ! str_contains($path, '/c/')
                 && ! str_contains($path, '/p/')
                 && ! str_contains($path, '_noindex')
@@ -206,11 +222,18 @@ class ExternalCarNormalizer
                 && ! str_contains($path, '/mx/financiamiento')
                 && ! str_contains($path, '/mx/blog')
                 && (
-                    (preg_match('/-id-(\d+)/i', $path, $kavakId) === 1 && ! $this->isCalendarYear($kavakId[1]))
+                    preg_match('#^/mx/usado/[a-z0-9][a-z0-9_-]{8,}/?$#i', $path) === 1
+                    || (preg_match('/-id-(\d+)/i', $path, $kavakId) === 1 && ! $this->isCalendarYear($kavakId[1]))
                     || (
                         preg_match('/(?:^|[\/_-])(\d{5,})\/?$/', $path, $kavakNum) === 1
                         && ! $this->isCalendarYear($kavakNum[1])
-                        && (str_contains($path, '/comprar-auto/') || str_contains($path, '/mx/venta/') || str_contains($path, '/mx/compra/') || str_contains($path, '/mx/seminuevos/'))
+                        && (
+                            str_contains($path, '/comprar-auto/')
+                            || str_contains($path, '/mx/venta/')
+                            || str_contains($path, '/mx/compra/')
+                            || str_contains($path, '/mx/seminuevos/')
+                            || str_contains($path, '/mx/auto/')
+                        )
                     )
                     || (preg_match('/(?:^|&)id=(\d{4,})(?:&|$)/i', $search, $kavakQuery) === 1 && ! $this->isCalendarYear($kavakQuery[1]))
                 )
@@ -229,16 +252,25 @@ class ExternalCarNormalizer
                 )
             ),
             'autocosmos' => (
-                str_contains($path, '/auto/usado/')
-                || str_contains($path, '/auto/nuevo/')
-                || str_contains($path, '/auto/detalle/')
-                || str_contains($path, '/usado/')
-                || str_contains($path, '/autos-usados/')
-            ) && count($segments) >= 4
-                && ! str_contains($path, '/auto/search')
+                (
+                    (str_contains($path, '/publications/clasified') || str_contains($path, '/publications/classified'))
+                    && preg_match('/(?:^|&)id=\d{4,}(?:&|$)/i', $search) === 1
+                )
+                || (
+                    (
+                        str_contains($path, '/auto/usado/')
+                        || str_contains($path, '/auto/nuevo/')
+                        || str_contains($path, '/auto/detalle/')
+                        || str_contains($path, '/usado/')
+                        || str_contains($path, '/autos-usados/')
+                    ) && count($segments) >= 4
+                )
+            ) && ! str_contains($path, '/auto/search')
+                && ! str_contains($path, '/auto/listado')
                 && ! str_contains($path, '/catalogo')
                 && ! str_contains($path, '/noticias')
-                && ! str_contains($path, '/reviews'),
+                && ! str_contains($path, '/reviews')
+                && ! str_starts_with($host, 'noticias.'),
             'facebook' => preg_match('/\/marketplace\/item\/\d+/i', $path) === 1,
             default => collect(self::BAD_KEYWORDS)->doesntContain(fn (string $word) => str_contains($full, $word))
                 && count($segments) >= 2,
@@ -382,7 +414,7 @@ class ExternalCarNormalizer
         $currentYear = (int) date('Y');
         $hasYear = is_numeric($year) && (int) $year >= 1995 && (int) $year <= $currentYear + 1;
 
-        if (! $hasPrice || ! $hasYear) {
+        if (! $hasPrice && ! $hasYear) {
             return false;
         }
 
@@ -475,7 +507,7 @@ class ExternalCarNormalizer
                 if ($imageUrl !== '' && $this->isSafeExternalUrl($imageUrl)) {
                     $requests[] = $pool->as('img_'.$index)
                         ->connectTimeout(2)
-                        ->timeout(4)
+                        ->timeout(3)
                         ->withHeaders(['User-Agent' => 'Mozilla/5.0 (compatible; WecarBot/1.0)'])
                         ->head($imageUrl);
                 }
@@ -485,10 +517,10 @@ class ExternalCarNormalizer
                 if ($sourceUrl !== '' && $this->isSafeExternalUrl($sourceUrl)) {
                     $requests[] = $pool->as('link_'.$index)
                         ->connectTimeout(2)
-                        ->timeout(4)
+                        ->timeout(3)
                         ->withHeaders([
                             'User-Agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-                            'Range' => 'bytes=0-16384',
+                            'Range' => 'bytes=0-8192',
                         ])
                         ->get($sourceUrl);
                 }
@@ -523,41 +555,57 @@ class ExternalCarNormalizer
     }
 
     /**
-     * Verifica que el anuncio coincida con la marca/modelo y el año especificados en la búsqueda.
+     * Verifica que el anuncio coincida con las especificaciones principales (marca, modelo y año) sin descartar falsos negativos por ciudad o versión larga.
      *
      * @param  array<string, mixed>  $car
+     * @param  array<string, mixed>  $specs
      */
-    public function matchesQuery(array $car, string $query): bool
+    public function matchesQuery(array $car, string $query, array $specs = []): bool
     {
         $trimmedQuery = trim($query);
+        $brandSpec = is_string($specs['brand'] ?? null) ? trim($specs['brand']) : '';
+        $modelSpec = is_string($specs['model'] ?? null) ? trim($specs['model']) : '';
+        $yearSpec = is_numeric($specs['year'] ?? null) ? (int) $specs['year'] : null;
 
-        if ($trimmedQuery === '') {
+        if ($trimmedQuery === '' && $brandSpec === '' && $modelSpec === '' && $yearSpec === null) {
             return true;
         }
 
         $title = (string) ($car['title'] ?? '');
         $sourceUrl = (string) ($car['sourceUrl'] ?? '');
+        $location = (string) ($car['location'] ?? '');
         $urlPath = (string) (parse_url($sourceUrl, PHP_URL_PATH) ?: '');
-        $haystack = Str::lower(Str::ascii($title.' '.$urlPath));
-        $haystackTokens = array_values(array_filter(preg_split('/[^a-z0-9]+/', $haystack) ?: []));
-        $haystackCompact = preg_replace('/[^a-z0-9]/', '', $haystack) ?? '';
+        $coreHaystack = Str::lower(Str::ascii($title.' '.$urlPath));
+        $fullHaystack = Str::lower(Str::ascii($title.' '.$urlPath.' '.$location));
+        $haystackTokens = array_values(array_filter(preg_split('/[^a-z0-9]+/', $coreHaystack) ?: []));
+        $haystackCompact = preg_replace('/[^a-z0-9]/', '', $coreHaystack) ?? '';
 
-        $queryYears = $this->extractYears($trimmedQuery);
+        $queryYears = $yearSpec !== null ? [$yearSpec] : $this->extractYears($trimmedQuery);
 
         if ($queryYears !== []) {
             $carYear = isset($car['year']) && is_numeric($car['year']) ? (int) $car['year'] : null;
-            $textYears = $this->extractYears($haystack);
+            $textYears = $this->extractYears($fullHaystack);
 
             if ($carYear !== null && ! in_array($carYear, $queryYears, true)) {
                 return false;
             }
 
-            if ($carYear === null && array_intersect($queryYears, $textYears) === []) {
+            if ($carYear === null && $textYears !== [] && array_intersect($queryYears, $textYears) === []) {
+                return false;
+            }
+
+            // En Facebook Marketplace los vendedores suelen omitir el año en el título; permitimos si marca y modelo coinciden.
+            if ($carYear === null && $textYears === [] && ($car['platformId'] ?? '') !== 'facebook') {
                 return false;
             }
         }
 
-        $queryTokens = $this->extractQueryTokens($trimmedQuery);
+        // Cuando llegan especificaciones estructuradas, marca y modelo son obligatorios; versión y ciudad priorizan el ranking sin matar resultados.
+        $requiredQuery = ($brandSpec !== '' || $modelSpec !== '')
+            ? trim($brandSpec.' '.$modelSpec)
+            : $trimmedQuery;
+
+        $queryTokens = $this->extractQueryTokens($requiredQuery);
 
         if ($queryTokens === []) {
             return true;
@@ -638,6 +686,9 @@ class ExternalCarNormalizer
             return null;
         }
 
+        $rawPrice = is_numeric($car['price'] ?? null) ? (int) round((float) $car['price']) : null;
+        $normalizedPrice = ($rawPrice !== null && $rawPrice >= 25_000 && $rawPrice <= 20_000_000) ? $rawPrice : null;
+
         return [
             'id' => $this->externalId($sourceUrl),
             'slug' => ExternalListingSlug::make(
@@ -646,7 +697,7 @@ class ExternalCarNormalizer
                 $this->externalId($sourceUrl),
             ),
             'title' => $title,
-            'price' => is_numeric($car['price'] ?? null) ? (int) round((float) $car['price']) : null,
+            'price' => $normalizedPrice,
             'year' => is_numeric($car['year'] ?? null) ? (int) $car['year'] : null,
             'km' => is_numeric($car['km'] ?? null) ? max(0, (int) round((float) $car['km'])) : null,
             'location' => isset($car['location']) && $car['location'] !== '' ? trim((string) $car['location']) : null,
@@ -711,14 +762,70 @@ class ExternalCarNormalizer
     }
 
     /**
+     * Ordena priorizando coincidencias con versión/ciudad opcionales, foto, precio y prioridad de plataforma.
+     *
+     * @param  array<int, array<string, mixed>>  $cars
+     * @param  array<string, mixed>  $specs
+     * @return array<int, array<string, mixed>>
+     */
+    public function rankBySpecs(array $cars, array $specs = []): array
+    {
+        if ($specs === []) {
+            return $this->sortByPlatform($cars);
+        }
+
+        $versionTokens = is_string($specs['version'] ?? null) && trim($specs['version']) !== ''
+            ? $this->extractQueryTokens($specs['version'])
+            : [];
+        $cityNeedle = is_string($specs['city'] ?? null) && trim($specs['city']) !== ''
+            ? Str::lower(Str::ascii(trim($specs['city'])))
+            : '';
+
+        return collect($cars)
+            ->sortBy(function (array $car) use ($versionTokens, $cityNeedle): string {
+                $haystack = Str::lower(Str::ascii(
+                    (string) ($car['title'] ?? '').' '.(string) ($car['sourceUrl'] ?? '').' '.(string) ($car['location'] ?? '')
+                ));
+
+                $versionMiss = 0;
+
+                if ($versionTokens !== []) {
+                    $matchedVersion = 0;
+
+                    foreach ($versionTokens as $token) {
+                        if (str_contains($haystack, $token)) {
+                            $matchedVersion++;
+                        }
+                    }
+
+                    $versionMiss = $matchedVersion > 0 ? 0 : 1;
+                }
+
+                $cityMiss = ($cityNeedle !== '' && ! str_contains($haystack, $cityNeedle)) ? 1 : 0;
+
+                return sprintf(
+                    '%d-%d-%d-%d-%02d',
+                    filled($car['imageUrl'] ?? null) ? 0 : 1,
+                    is_numeric($car['price'] ?? null) ? 0 : 1,
+                    $versionMiss,
+                    $cityMiss,
+                    $this->platformPriority((string) ($car['platformId'] ?? '')),
+                );
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
      * Intercala resultados por plataforma para entregar hasta $limit autos diversos con foto y precio verificados.
      *
      * @param  array<int, array<string, mixed>>  $cars
+     * @param  array<string, mixed>  $specs
      * @return array<int, array<string, mixed>>
      */
-    public function balanceByPlatform(array $cars, int $limit = 15): array
+    public function balanceByPlatform(array $cars, int $limit = 15, array $specs = []): array
     {
-        $sorted = $this->sortByPlatform($cars);
+        $sorted = $this->rankBySpecs($cars, $specs);
         $buckets = [];
 
         foreach ($sorted as $car) {
@@ -761,9 +868,10 @@ class ExternalCarNormalizer
      *
      * @param  array<int, array<string, mixed>>  $pages
      * @param  array<string, mixed>  $platform
+     * @param  array<string, mixed>  $specs
      * @return array<int, array<string, mixed>>
      */
-    public function fallbackFromPages(array $pages, array $platform, string $query): array
+    public function fallbackFromPages(array $pages, array $platform, string $query, array $specs = []): array
     {
         $cars = [];
         $seen = [];
@@ -816,7 +924,7 @@ class ExternalCarNormalizer
                     'sourceUrl' => $pageUrl,
                 ], $platform, true);
 
-                if ($candidate && $this->matchesQuery($candidate, $query)) {
+                if ($candidate && $this->matchesQuery($candidate, $query, $specs)) {
                     $seen[$pageUrl] = true;
                     $cars[] = $candidate;
                 }
@@ -826,40 +934,42 @@ class ExternalCarNormalizer
                 continue;
             }
 
-            $lines = preg_split('/\R+/', $content) ?: [];
-            $lineCount = count($lines);
+            // 2. Extraer tarjetas Markdown completas (incluyendo bloques multilínea con imagen anidada de Kavak/Seminuevos/Mercado Libre).
+            $processed = [];
+            $groupedCards = $this->extractMarkdownCardGroups($content, $pageHost, $platformId);
 
-            // 2. Extraer enlaces Markdown de fichas individuales junto con su tarjeta cercana.
-            foreach ($lines as $index => $line) {
-                if (! preg_match_all('/(?<!!)\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/', $line, $matches, PREG_SET_ORDER)) {
+            foreach ($groupedCards as $url => $card) {
+                if (isset($seen[$url])) {
                     continue;
                 }
 
-                $windowText = $this->lineWindow($lines, $index, $lineCount, 5);
+                $processed[$url] = true;
+                $anchorText = $card['anchor'];
+                $contextText = $card['context'];
+                $title = $this->extractCardTitle($anchorText, $contextText, $url);
+                $image = $card['image']
+                    ?? $this->imageFromMarkdown($anchorText."\n".$contextText, $platformId)
+                    ?? $this->matchImageForListing($url, $pageImages);
 
-                foreach ($matches as $match) {
-                    $url = $this->cleanUrl($match[2], $pageHost);
+                $candidate = $this->buildListingCandidateFromWindow(
+                    $url,
+                    $title,
+                    $anchorText."\n".$contextText,
+                    $pageImages,
+                    $platform,
+                    $query,
+                    $specs,
+                    $image,
+                );
 
-                    if (! $url || isset($seen[$url]) || ! $this->isDetailUrl($url, $platformId)) {
-                        continue;
-                    }
-
-                    $rawTitle = $this->sanitizeListingTitle((string) $match[1], (string) $url);
-                    $candidate = $this->buildListingCandidateFromWindow(
-                        $url,
-                        $rawTitle !== '' ? $rawTitle : $this->extractTitleFromWindow($windowText, $url),
-                        $windowText,
-                        $pageImages,
-                        $platform,
-                        $query,
-                    );
-
-                    if ($candidate) {
-                        $seen[$url] = true;
-                        $cars[] = $candidate;
-                    }
+                if ($candidate) {
+                    $seen[$url] = true;
+                    $cars[] = $candidate;
                 }
             }
+
+            $lines = preg_split('/\R+/', $content) ?: [];
+            $lineCount = count($lines);
 
             // 3. Rescatar links de detalle detectados en la página que tengan tarjeta/precio en Markdown y foto emparejada.
             foreach ($page['links'] ?? [] as $rawLink) {
@@ -869,7 +979,7 @@ class ExternalCarNormalizer
 
                 $url = $this->cleanUrl($rawLink, $pageHost);
 
-                if (! $url || isset($seen[$url]) || ! $this->isDetailUrl($url, $platformId)) {
+                if (! $url || isset($seen[$url]) || isset($processed[$url]) || ! $this->isDetailUrl($url, $platformId)) {
                     continue;
                 }
 
@@ -879,14 +989,15 @@ class ExternalCarNormalizer
                     continue;
                 }
 
-                $windowText = $this->lineWindow($lines, $matchIndex, $lineCount, 6);
+                $windowText = $this->cardWindow($lines, $matchIndex, $lineCount, 1, 4);
                 $candidate = $this->buildListingCandidateFromWindow(
                     $url,
-                    $this->extractTitleFromWindow($windowText, $url),
+                    $this->extractTitleFromWindow($windowText, $url, $lines[$matchIndex] ?? ''),
                     $windowText,
                     $pageImages,
                     $platform,
                     $query,
+                    $specs,
                 );
 
                 if ($candidate) {
@@ -1081,12 +1192,14 @@ class ExternalCarNormalizer
     }
 
     /**
+     * Construye una ventana acotada alrededor de la tarjeta actual (priorizando la propia línea y las siguientes).
+     *
      * @param  array<int, string>  $lines
      */
-    private function lineWindow(array $lines, int $index, int $lineCount, int $radius): string
+    private function cardWindow(array $lines, int $index, int $lineCount, int $before, int $after): string
     {
-        $start = max(0, $index - $radius);
-        $end = min($lineCount - 1, $index + $radius);
+        $start = max(0, $index - $before);
+        $end = min($lineCount - 1, $index + $after);
 
         return implode("\n", array_slice($lines, $start, ($end - $start) + 1));
     }
@@ -1116,9 +1229,13 @@ class ExternalCarNormalizer
         return null;
     }
 
-    private function extractTitleFromWindow(string $windowText, string $url): string
+    private function extractTitleFromWindow(string $windowText, string $url, string $preferredLine = ''): string
     {
         $lines = preg_split('/\R+/', $windowText) ?: [];
+
+        if ($preferredLine !== '') {
+            array_unshift($lines, $preferredLine);
+        }
 
         foreach ($lines as $line) {
             $plain = trim(strip_tags(preg_replace('/!\[[^\]]*\]\([^)]*\)|\[([^\]]*)\]\([^)]*\)/', '$1', $line) ?? $line));
@@ -1142,7 +1259,7 @@ class ExternalCarNormalizer
 
     private function cleanListingTitle(string $title, string $url): string
     {
-        $cleaned = trim(preg_replace('/\s*\|\s*(?:Seminuevos\.com|Kavak.*|Autocosmos.*|Mercado\s*Libre.*)$/iu', '', $title) ?? $title);
+        $cleaned = trim(preg_replace('/\s*(?:\|\s*(?:Seminuevos\.com|Kavak.*|Autocosmos.*|Mercado\s*Libre.*)|(?:usado\s+en\s+venta.*|-\s*Autocosmos.*))$/iu', '', $title) ?? $title);
 
         return $cleaned !== '' ? $cleaned : $this->titleFromUrlSlug($url);
     }
@@ -1161,7 +1278,7 @@ class ExternalCarNormalizer
         $value = (string) preg_replace('/!\[([^\]]*)\]\([^)]*\)/u', '$1', $value);
         $value = (string) preg_replace('/\[([^\]]*)\]\([^)]*\)/u', '$1', $value);
         $value = strip_tags($value);
-        $value = (string) preg_replace('/\s*\|\s*(?:Seminuevos\.com|Kavak.*|Autocosmos.*|Mercado\s*Libre.*)$/iu', ' ', $value);
+        $value = (string) preg_replace('/\s*(?:\|\s*(?:Seminuevos\.com|Kavak.*|Autocosmos.*|Mercado\s*Libre.*)|(?:usado\s+en\s+venta.*|-\s*Autocosmos.*))$/iu', ' ', $value);
         $value = str_replace(['\\', '!', '[', ']', "\u{00A0}"], ' ', $value);
         $value = (string) preg_replace('/\s+/u', ' ', $value);
         $value = trim($value, " \t\n\r\0\x0B-|");
@@ -1203,8 +1320,137 @@ class ExternalCarNormalizer
     }
 
     /**
+     * Agrupa enlaces Markdown de tarjetas (incluyendo bloques multilínea e imágenes anidadas) por URL de ficha individual.
+     *
+     * @return array<string, array{anchor: string, context: string, image: ?string}>
+     */
+    private function extractMarkdownCardGroups(string $content, string $pageHost, string $platformId): array
+    {
+        $pattern = '/(?<!!)\[((?:!\[[^\]]*\]\([^)]+\)|[^\[\]])+)\]\((https?:\/\/[^\s)]+)\)/su';
+
+        if (! preg_match_all($pattern, $content, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE)) {
+            return [];
+        }
+
+        $contentLength = strlen($content);
+        $groups = [];
+
+        foreach ($matches as $match) {
+            $rawInner = (string) $match[1][0];
+            $rawUrl = (string) $match[2][0];
+            $offset = (int) $match[0][1];
+            $matchLength = strlen((string) $match[0][0]);
+
+            $url = $this->cleanUrl($rawUrl, $pageHost);
+
+            if (! $url || ! $this->isDetailUrl($url, $platformId)) {
+                continue;
+            }
+
+            $innerImage = $this->imageFromMarkdown($rawInner, $platformId);
+            $beforeStart = max(0, $offset - 420);
+            $beforeSnippet = substr($content, $beforeStart, $offset - $beforeStart);
+            $afterSnippet = substr($content, $offset + $matchLength, 420);
+
+            // Para tarjetas como Mercado Libre donde la imagen viene justo antes de ### [Título](url) y precio/año/km justo después.
+            $beforeImage = null;
+
+            if ($innerImage === null && preg_match_all('/!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/', $beforeSnippet, $beforeImgs)) {
+                foreach (array_reverse($beforeImgs[1]) as $candidateImg) {
+                    if ($this->isValidImage($candidateImg, $platformId)) {
+                        $beforeImage = $this->cleanImageUrl($candidateImg);
+                        break;
+                    }
+                }
+            }
+
+            // Recortamos afterSnippet en la siguiente tarjeta para no mezclar precios/km de otro auto.
+            $afterTrimmed = preg_split('/\n\s*(?:\d+\.\s+!\[|\[!\[)/', $afterSnippet)[0] ?? $afterSnippet;
+
+            if (! isset($groups[$url])) {
+                $groups[$url] = [
+                    'anchor' => $rawInner,
+                    'context' => $afterTrimmed,
+                    'image' => $innerImage ?? $beforeImage,
+                ];
+            } else {
+                $groups[$url]['anchor'] .= "\n".$rawInner;
+
+                if ($groups[$url]['image'] === null) {
+                    $groups[$url]['image'] = $innerImage ?? $beforeImage;
+                }
+
+                if (strlen($afterTrimmed) > strlen($groups[$url]['context'])) {
+                    $groups[$url]['context'] = $afterTrimmed;
+                }
+            }
+        }
+
+        return $groups;
+    }
+
+    private function extractCardTitle(string $anchorText, string $contextText, string $url): string
+    {
+        $withoutImages = trim((string) preg_replace('/!\[([^\]]*)\]\([^)]+\)/u', ' ', $anchorText));
+        $cleanedLines = array_values(array_filter(array_map(
+            static fn (string $line): string => trim(str_replace(['**', '__', '\\'], '', $line), " \t\n\r\0\x0B#*-|"),
+            preg_split('/\R+/', $withoutImages) ?: [],
+        )));
+
+        $brandModelLine = null;
+        $versionYearLine = null;
+
+        foreach ($cleanedLines as $line) {
+            if (
+                $line === ''
+                || str_starts_with($line, '$')
+                || preg_match('/^(?:gold|precio desde|único dueño|unico dueno|enganche desde|envío|envio|\d{4})$/iu', $line) === 1
+                || preg_match('/^\d[\d,.]*\s*kms?\.?/i', $line) === 1
+                || str_contains($line, '/ mes')
+            ) {
+                continue;
+            }
+
+            if ($brandModelLine === null && mb_strlen($line) >= 5 && mb_strlen($line) <= 95) {
+                if (preg_match('/[·•]/u', $line) === 1 || $this->extractYears($line) !== []) {
+                    $brandModelLine = $line;
+
+                    continue;
+                }
+            }
+
+            if ($brandModelLine !== null && $versionYearLine === null && $this->extractYears($line) !== [] && mb_strlen($line) <= 95) {
+                $versionYearLine = $line;
+                break;
+            }
+        }
+
+        if ($brandModelLine !== null) {
+            $base = preg_replace('/\s*[·•]\s*/u', ' ', $brandModelLine) ?? $brandModelLine;
+            $years = $this->extractYears($base);
+
+            if ($years === []) {
+                $allYears = $this->extractYears($anchorText.' '.$contextText.' '.$url);
+
+                if ($allYears !== []) {
+                    $base .= ' '.$allYears[0];
+                }
+            }
+
+            return $this->sanitizeListingTitle($base, $url);
+        }
+
+        if ($cleanedLines !== [] && count($cleanedLines) === 1 && mb_strlen($cleanedLines[0]) >= 5) {
+            return $this->sanitizeListingTitle($cleanedLines[0], $url);
+        }
+
+        return $this->extractTitleFromWindow($anchorText."\n".$contextText, $url);
+    }
+
+    /**
      * @param  array<int, string>  $pageImages
      * @param  array<string, mixed>  $platform
+     * @param  array<string, mixed>  $specs
      * @return array<string, mixed>|null
      */
     private function buildListingCandidateFromWindow(
@@ -1214,6 +1460,8 @@ class ExternalCarNormalizer
         array $pageImages,
         array $platform,
         string $query,
+        array $specs = [],
+        ?string $preferredImage = null,
     ): ?array {
         $platformId = (string) ($platform['id'] ?? '');
         $currentYear = (int) date('Y');
@@ -1225,7 +1473,8 @@ class ExternalCarNormalizer
             $year = null;
         }
 
-        $image = $this->imageFromMarkdown($windowText, $platformId)
+        $image = $preferredImage
+            ?? $this->imageFromMarkdown($windowText, $platformId)
             ?? $this->matchImageForListing($url, $pageImages);
 
         $candidate = $this->normalize([
@@ -1233,12 +1482,12 @@ class ExternalCarNormalizer
             'price' => $price,
             'year' => $year,
             'km' => $this->extractKmFromText($windowText),
-            'location' => null,
+            'location' => $this->extractLocationFromText($windowText),
             'imageUrl' => $image,
             'sourceUrl' => $url,
         ], $platform, true);
 
-        return ($candidate && $this->matchesQuery($candidate, $query)) ? $candidate : null;
+        return ($candidate && $this->matchesQuery($candidate, $query, $specs)) ? $candidate : null;
     }
 
     private function checkImageResponse(mixed $response, string $imageUrl): bool
@@ -1256,11 +1505,19 @@ class ExternalCarNormalizer
             return true;
         }
 
-        // Algunos CDN responden 405 a HEAD o 403 a bots de nube: reintentamos un GET mínimo de rango antes de descartar.
+        // Algunos CDN responden 405 a HEAD o 403 a bots de nube: evitamos retries secuenciales lentos en CDNs confiables.
         if (in_array($response->status(), [403, 405], true)) {
+            $host = strtolower((string) parse_url($imageUrl, PHP_URL_HOST));
+
+            foreach (self::TRUSTED_IMAGE_CDN_HOSTS as $cdnHost) {
+                if ($host === $cdnHost || str_ends_with($host, '.'.$cdnHost)) {
+                    return true;
+                }
+            }
+
             try {
                 $retry = Http::connectTimeout(2)
-                    ->timeout(4)
+                    ->timeout(3)
                     ->withHeaders([
                         'User-Agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
                         'Range' => 'bytes=0-1024',
@@ -1306,14 +1563,14 @@ class ExternalCarNormalizer
      */
     private function findLiveGalleryPhoto(array $car): ?string
     {
-        foreach ($car['gallery'] ?? [] as $candidate) {
+        foreach (array_slice($car['gallery'] ?? [], 0, 2) as $candidate) {
             if (! is_string($candidate) || $candidate === '') {
                 continue;
             }
 
             try {
                 $response = Http::connectTimeout(2)
-                    ->timeout(3)
+                    ->timeout(2)
                     ->withHeaders(['User-Agent' => 'Mozilla/5.0 (compatible; WecarBot/1.0)'])
                     ->head($candidate);
 
@@ -1368,10 +1625,13 @@ class ExternalCarNormalizer
                 'publicacion pausada',
                 'publicacion finalizada',
                 'esta publicacion ya no esta disponible',
+                'esta publicacion no esta disponible',
                 'este vehiculo ya fue vendido',
                 'anuncio no encontrado',
                 'pagina no encontrada',
                 'no pudimos encontrar esta pagina',
+                'this listing isn\'t available',
+                'this content isn\'t available',
             ];
 
             foreach ($deadSignals as $signal) {
@@ -1456,11 +1716,34 @@ class ExternalCarNormalizer
 
     private function extractKmFromText(string $text): ?int
     {
-        if (preg_match('/(\d[\d.,]*)\s*km\b/i', $text, $match)) {
+        if (preg_match('/(\d[\d.,]*)\s*kms?\.?\b/i', $text, $match)) {
             $km = (int) str_replace([',', '.'], '', $match[1]);
 
             if ($km >= 0 && $km <= 999_999) {
                 return $km;
+            }
+        }
+
+        return null;
+    }
+
+    private function extractLocationFromText(string $text): ?string
+    {
+        $lines = preg_split('/\R+/', $text) ?: [];
+
+        foreach ($lines as $rawLine) {
+            $line = trim(str_replace(['**', '__', '\\'], '', $rawLine));
+
+            if ($line === '' || mb_strlen($line) > 60) {
+                continue;
+            }
+
+            if (preg_match('/^[A-ZÁÉÍÓÚÑ][a-zA-ZáéíóúñÁÉÍÓÚÑ\s]{2,28}\s-\s[A-ZÁÉÍÓÚÑ][a-zA-ZáéíóúñÁÉÍÓÚÑ\s]{2,28}$/u', $line) === 1) {
+                return $line;
+            }
+
+            if (preg_match('/^(Ciudad de M[eé]xico|CDMX|Monterrey|Guadalajara|Puebla|Quer[eé]taro|Tijuana|Le[oó]n|M[eé]rida|Canc[uú]n|Toluca|Chihuahua|Aguascalientes|Saltillo|San Luis Potos[ií]|Hermosillo|Veracruz|Morelia|Culiac[aá]n|Estado de M[eé]xico|Tlalpan|Corregidora|Iztacalco|Cuauht[eé]moc|Zapopan|Naucalpan)$/iu', $line) === 1) {
+                return $line;
             }
         }
 
