@@ -5,6 +5,7 @@ import { ArrowRight, Landmark, LoaderCircle, Search, Sparkles } from '@lucide/vu
 import PublicLayout from '@/layouts/PublicLayout.vue';
 import SeoHead from '@/components/site/SeoHead.vue';
 import CarCard, { type CarCardData } from '@/components/site/CarCard.vue';
+import ExternalCarCard from '@/components/external/ExternalCarCard.vue';
 import Button from '@/components/ui/Button.vue';
 import HomeSections, { type PublicationPlan } from '@/components/site/HomeSections.vue';
 import FinanciarAutoDialog from '@/components/credito/FinanciarAutoDialog.vue';
@@ -20,9 +21,14 @@ import type { ExternalCar } from '@/types/external';
 
 defineOptions({ layout: PublicLayout });
 
+type HomeCatalogItem =
+    | { kind: 'local'; key: string; car: CarCardData }
+    | { kind: 'external'; key: string; car: ExternalCar };
+
 const props = defineProps<{
     featuredCars: CarCardData[];
     externalCars: ExternalCar[];
+    homeCars?: HomeCatalogItem[];
     brands: { id: string; name: string; slug: string; logo: string | null }[];
     plans: PublicationPlan[];
     financieras: { id: string; slug: string; nombre: string; logo: string | null; color: string | null }[];
@@ -41,9 +47,19 @@ const financiarOpen = ref(false);
 const rewardOpen = ref(false);
 const externalSearch = useExternalSearch();
 const dialogBrands = computed(() => props.brands.map((brand) => ({ ...brand, models: [] })));
-const splitIndex = computed(() => Math.ceil(props.featuredCars.length / 2));
-const firstHalfCars = computed(() => props.featuredCars.slice(0, splitIndex.value));
-const secondHalfCars = computed(() => props.featuredCars.slice(splitIndex.value));
+const catalogItems = computed<HomeCatalogItem[]>(() => {
+    if (props.homeCars && props.homeCars.length > 0) {
+        return props.homeCars;
+    }
+
+    return [
+        ...props.featuredCars.map((car) => ({ kind: 'local' as const, key: `local-${car.id}`, car })),
+        ...props.externalCars.map((car) => ({ kind: 'external' as const, key: `external-${car.id}`, car })),
+    ].slice(0, 16);
+});
+const splitIndex = computed(() => Math.ceil(catalogItems.value.length / 2));
+const firstHalfCars = computed(() => catalogItems.value.slice(0, splitIndex.value));
+const secondHalfCars = computed(() => catalogItems.value.slice(splitIndex.value));
 
 onMounted(() => {
     void externalSearch.refreshStatus();
@@ -194,7 +210,10 @@ const jsonLd = [
                 los autos</Link>
         </div>
         <div class="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            <CarCard v-for="car in firstHalfCars" :key="car.id" :car="car" />
+            <template v-for="item in firstHalfCars" :key="item.key">
+                <CarCard v-if="item.kind === 'local'" :car="item.car" />
+                <ExternalCarCard v-else :car="item.car" @open="externalSearch.openExternal" />
+            </template>
         </div>
         <div v-if="!secondHalfCars.length" class="mt-8 flex justify-center sm:hidden">
             <Button as="a" href="/comprar" variant="outline" class="w-full rounded-full">Ver todos los autos</Button>
@@ -225,7 +244,10 @@ const jsonLd = [
     <!-- 3c. Catálogo destacado (Segunda mitad) -->
     <section v-if="secondHalfCars.length" class="mx-auto max-w-7xl px-4 pt-8 pb-14 sm:px-6">
         <div class="mt-2 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            <CarCard v-for="car in secondHalfCars" :key="car.id" :car="car" />
+            <template v-for="item in secondHalfCars" :key="item.key">
+                <CarCard v-if="item.kind === 'local'" :car="item.car" />
+                <ExternalCarCard v-else :car="item.car" @open="externalSearch.openExternal" />
+            </template>
         </div>
         <div class="mt-8 flex justify-center sm:hidden">
             <Button as="a" href="/comprar" variant="outline" class="w-full rounded-full">Ver todos los autos</Button>

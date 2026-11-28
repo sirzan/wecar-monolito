@@ -35,13 +35,24 @@ class PublicController extends Controller
 
     public function home(Request $request): Response
     {
+        $homeLimit = 16;
+
         $featured = Car::query()
             ->published()
             ->with(['brand', 'model', 'version', 'status', 'agency'])
-            ->orderByDesc('featured')
             ->orderByDesc('published_at')
-            ->limit(8)
+            ->orderByDesc('created_at')
+            ->limit($homeLimit)
             ->get();
+
+        $featuredPayload = CarResource::collection($featured)->resolve($request);
+        $externalPayload = $this->externalSearch->searchStored($request->user(), ['sort' => 'recent'], $homeLimit)['results'];
+
+        if ($externalPayload === []) {
+            $externalPayload = $this->externalSearch->cached($request->user(), $homeLimit)['results'];
+        }
+
+        $homeCars = $this->interleaveHomeCars($featuredPayload, $externalPayload, $homeLimit);
 
         $brands = CarBrand::query()
             ->withCount(['models'])
@@ -64,8 +75,9 @@ class PublicController extends Controller
             ->get(['id', 'key_name', 'name', 'price', 'duration', 'max_cars', 'highlight']);
 
         return Inertia::render('Public/Home', [
-            'featuredCars' => CarResource::collection($featured)->resolve(request()),
-            'externalCars' => $this->externalSearch->cached($request->user(), 8)['results'],
+            'featuredCars' => $featuredPayload,
+            'externalCars' => $externalPayload,
+            'homeCars' => $homeCars,
             'financieras' => $financieras,
             'brands' => $brands,
             'plans' => $plans,
@@ -75,6 +87,52 @@ class PublicController extends Controller
                 'canonical' => route('home'),
             ],
         ]);
+    }
+
+    /**
+     * Cruza los autos publicados más recientes con los autos externos más recientes hasta completar el límite.
+     *
+     * @param  array<int, array<string, mixed>>  $localCars
+     * @param  array<int, array<string, mixed>>  $externalCars
+     * @return array<int, array{kind: 'local'|'external', key: string, car: array<string, mixed>}>
+     */
+    private function interleaveHomeCars(array $localCars, array $externalCars, int $limit): array
+    {
+        $half = (int) ceil($limit / 2);
+        $localCount = count($localCars);
+        $externalCount = count($externalCars);
+
+        $takeLocal = min($localCount, max($half, $limit - $externalCount));
+        $takeExternal = min($externalCount, $limit - $takeLocal);
+
+        $locals = array_slice($localCars, 0, $takeLocal);
+        $externals = array_slice($externalCars, 0, $takeExternal);
+
+        $combined = [];
+        $localIndex = 0;
+        $externalIndex = 0;
+
+        while (count($combined) < $limit && ($localIndex < count($locals) || $externalIndex < count($externals))) {
+            if ($localIndex < count($locals)) {
+                $car = $locals[$localIndex++];
+                $combined[] = [
+                    'kind' => 'local',
+                    'key' => 'local-'.($car['id'] ?? $localIndex),
+                    'car' => $car,
+                ];
+            }
+
+            if (count($combined) < $limit && $externalIndex < count($externals)) {
+                $car = $externals[$externalIndex++];
+                $combined[] = [
+                    'kind' => 'external',
+                    'key' => 'external-'.($car['id'] ?? $externalIndex),
+                    'car' => $car,
+                ];
+            }
+        }
+
+        return $combined;
     }
 
     public function comprar(Request $request): Response
